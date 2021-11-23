@@ -15,15 +15,15 @@ with open(os.path.join(dirname, "README.md"), encoding="utf-8") as fle:
     long_description = fle.read()
 
 setup(
-    name=info.__name__,
-    version=info.__version__,
-    description="A Python ORM for Airtable.",
+    name=info.get("__name__", ""),
+    version=info.get("__version__", ""),
+    description="An API to perform gitarmony operation on Git repositories.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/douglaslassance/gitarmony-python",
-    author=info.__author__,
-    author_email=info.__email__,
-    license=info.__license__,
+    author=info.get("__author__", ""),
+    author_email=info.get("__email__", ""),
+    license=info.get("__license__", ""),
     packages=["gitarmony"],
     install_requires=["GitPython~=3.1"],
     extras_require={
