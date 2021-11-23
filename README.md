@@ -10,13 +10,12 @@ More about gitarmony in this [medium article]().
 ## Usage
 
 ```python
-from gitarmony import Gitarmony
-from gitarmony.exceptions import GitarmonyNotInstalled
+from gitarmony import Gitarmony, GitarmonyNotInstalled
 
 try:
     gitarmony = Gitarmony(managed_repository_path)
 except GitarmonyNotInstalled:
-    # Gitarmony stores its data in its own repository therefore we need to pass a repository URL.
+    # Gitarmony stores its data in its own repository therefore we need to pass that repository URL.
     gitarmony = Gitarmony.install(managed_repository_path, data_repository_url)
 
 change_list = gitarmony.change_list

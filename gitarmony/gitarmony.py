@@ -52,6 +52,7 @@ class Gitarmony:
         gitarmony.install_actions()
         return
 
+    @property
     def change_set(self) -> set:
         return ChangeSet(self._managed_repository, self._data_repository)
 

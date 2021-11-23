@@ -2,28 +2,28 @@
 """
 
 import os
-import sys
 
 from setuptools import setup
 
 dirname = os.path.dirname(__file__)
-sys.path.append(dirname)
-import gitarmony  # noqa: E402 pylint: disable=C0413
+info = {}
+with open(os.path.join(dirname, "gitarmony", "__info__.py"), mode="r") as f:
+    exec(f.read(), info)  # pylint: disable=W0122
 
 # Get the long description from the README file.
 with open(os.path.join(dirname, "README.md"), encoding="utf-8") as fle:
     long_description = fle.read()
 
 setup(
-    name=gitarmony.__name__,
-    version=gitarmony.__version__,
+    name=info.__name__,
+    version=info.__version__,
     description="A Python ORM for Airtable.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/douglaslassance/gitarmony-python",
-    author=gitarmony.__author__,
-    author_email=gitarmony.__email__,
-    license=gitarmony.__license__,
+    author=info.__author__,
+    author_email=info.__email__,
+    license=info.__license__,
     packages=["gitarmony"],
     install_requires=["GitPython~=3.1"],
     extras_require={
