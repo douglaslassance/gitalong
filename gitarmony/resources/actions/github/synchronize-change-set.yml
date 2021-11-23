@@ -1,0 +1,36 @@
+name: Synchronize change set
+
+on:
+  - push
+  - delete
+
+jobs:
+  synchronize-change-set:
+    env:
+      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    name: Synchronize change set
+    runs-on: windows-latest
+    steps:
+      - name: Sparse checkout
+        uses: snow-actions/sparse-checkout@v1.1.0
+
+      - name: Checkout locks
+        uses: actions/checkout@v2
+        with:
+          repository: playsthetic/locks
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: .\.locks
+
+      - name: Download psst
+        run: |
+          $repo = "playsthetic/psst"
+          $api_url = "https://api.github.com/repos/$repo/releases/latest"
+          $header = "Authorization: token $env:PERSONAL_ACCESS_TOKEN"
+          $asset_id = curl --header "$header" "$api_url" | jq -r '.assets[0].id'
+          echo "ASSET_ID: $asset_id"
+          $url = "https://$env:PERSONAL_ACCESS_TOKEN@api.github.com/repos/$repo/releases/assets/$asset_id"
+          curl -O -J -L -H "Accept: application/octet-stream" $url
+
+      - name: Update locks
+        run: |
+          ./psst.exe update-locks
