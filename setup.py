@@ -15,7 +15,7 @@ with open(os.path.join(dirname, "README.md"), encoding="utf-8") as fle:
     long_description = fle.read()
 
 setup(
-    name=info.get("__name__", ""),
+    name="gitarmony",
     version=info.get("__version__", ""),
     description="An API to perform gitarmony operation on Git repositories.",
     long_description=long_description,
@@ -25,7 +25,7 @@ setup(
     author_email=info.get("__email__", ""),
     license=info.get("__license__", ""),
     packages=["gitarmony"],
-    install_requires=["GitPython~=3.1"],
+    install_requires=["GitPython~=3.1", "configparser~=5.1", "dictdiffer~=0.9"],
     extras_require={
         "ci": [
             "flake8-print~=3.1",

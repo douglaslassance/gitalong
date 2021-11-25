@@ -1,0 +1,38 @@
+name: Run Gitarmony sync
+
+on:
+  - push
+  - delete
+
+jobs:
+  run-gitarmony-sync:
+    name: Run Gitarmony sync
+    runs-on: windows-latest
+    steps:
+      - name: Sparse checkout
+        uses: snow-actions/sparse-checkout@v1.1.0
+
+      - name: Download Gitarmony CLI
+        run: |
+          $repo = "douglaslassance/gitarmony-cli"
+          $api_url = "https://api.github.com/repos/$repo/releases/latest"
+          $asset_id = curl "$api_url" | jq -r '.assets[0].id'
+          echo "ASSET_ID: $asset_id"
+          $url = "https://api.github.com/repos/$repo/releases/assets/$asset_id"
+          curl -O -J -L -H "Accept: application/octet-stream" $url
+
+      - name: Load Gitarmony configuration
+        run: |
+          $env:GITARMONY_ORIGIN < (./gitarmony config origin)
+          $env:GITARMONY_SECRET < (./gitarmony config secret)
+
+      - name: Clone gitarmony
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ env.GITARMONY_ORIGIN }}
+          token: ${{ secrets.{{ $env:GITARMONY_SECRET }} }}
+          path: .\.gitarmony
+
+      - name: Run Gitarmony sync
+        run: |
+          ./gitarmony sync

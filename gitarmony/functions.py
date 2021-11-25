@@ -25,6 +25,7 @@ def set_file_read_only(filename, read_only=True):
 
 
 def find_repository_root(path):
+    path = os.path.abspath(path)
     if os.path.isfile(path):
         path = os.path.dirname(path)
     path = os.path.normpath(path)
@@ -58,6 +59,21 @@ def get_default_branch(repository: git.Repo) -> str:
         str: The default branch name.
     """
     return "main"
+
+
+def get_real_path(filename: str) -> str:
+    """TODO: See how this behaves on other operating system than windows.
+
+    Args:
+        filename (str): The filemame for which we want the real path.
+
+    Returns:
+        str: Real path in case this path goes through Windows subst.
+    """
+    if os.path.exists(filename):
+        real_path = os.path._getfinalepathname(self._managed_repository.working_dir)
+        return real_path.replace("\\\\?\\", "")
+    return ""
 
 
 def get_remote_branches(repository: git.Repo, remote="origin") -> list:
