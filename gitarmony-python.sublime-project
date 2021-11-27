@@ -8,7 +8,7 @@
 				".[ci]"
 			],
 			"name": "Install requirements with PyPI",
-			"path": "$WORKON_HOME/gitarmony-python/Scripts",
+			"path": "$USERPROFILE/Venvs/gitarmony-python/Scripts:$HOME/.virtualenvs/gitarmony-python/bin:$PATH",
 			"working_dir": "$project_path"
 		},
 		{
@@ -18,7 +18,7 @@
 				"--cov=gitarmony"
 			],
 			"name": "Test with pytest",
-			"path": "$WORKON_HOME/gitarmony-python/Scripts",
+			"path": "$USERPROFILE/Venvs/gitarmony-python/Scripts:$HOME/.virtualenvs/gitarmony-python/bin:$PATH",
 			"working_dir": "$project_path"
 		},
 		{
@@ -28,7 +28,7 @@
 				"./docs/build"
 			],
 			"name": "Document with Sphinx",
-			"path": "$WORKON_HOME/gitarmony-python/Scripts",
+			"path": "$USERPROFILE/Venvs/gitarmony-python/Scripts:$HOME/.virtualenvs/gitarmony-python/bin:$PATH",
 			"working_dir": "$project_path"
 		}
 	],
@@ -47,5 +47,5 @@
 			"path": "."
 		}
 	],
-	"virtualenv": "$WORKON_HOME/gitarmony-python"
+	"virtualenv": "$HOME/.virtualenvs/gitarmony-python"
 }

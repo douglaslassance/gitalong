@@ -29,8 +29,8 @@ def find_repository_root(path):
     if os.path.isfile(path):
         path = os.path.dirname(path)
     path = os.path.normpath(path)
-    cmd = f"git -C {path} rev-parse --show-toplevel"
-    logging.debug(cmd)
+    cmd = ["git", "-C", path, "rev-parse", "--show-toplevel"]
+    logging.debug(" ".join(cmd))
     output = subprocess.run(cmd, capture_output=True)
     path = output.stdout.decode("utf-8").replace("\n", "")
     path = os.path.normpath(path)
@@ -62,18 +62,21 @@ def get_default_branch(repository: git.Repo) -> str:
 
 
 def get_real_path(filename: str) -> str:
-    """TODO: See how this behaves on other operating system than windows.
-
+    """
     Args:
         filename (str): The filemame for which we want the real path.
 
     Returns:
         str: Real path in case this path goes through Windows subst.
     """
-    if os.path.exists(filename):
-        real_path = os.path._getfinalepathname(self._managed_repository.working_dir)
-        return real_path.replace("\\\\?\\", "")
-    return ""
+    if not os.path.exists(filename):
+        return ""
+    # On Windows, this private function is available and will return the real path
+    # for a subst location.
+    if hasattr(os.path, "_getfinalepathname"):
+        filename = os.path._getfinalepathname(filename)
+        filename.replace("\\\\?\\", "")
+    return filename
 
 
 def get_remote_branches(repository: git.Repo, remote="origin") -> list:
