@@ -31,6 +31,7 @@ setup(
             "flake8-print~=3.1",
             "flake8~=3.8",
             "pep8-naming~=0.11",
+            "Pillow~=8.4",
             "pytest-cov~=2.10.1",
             "pytest-html~=2.1.1",
             "pytest-pep8~=1.0.6",
