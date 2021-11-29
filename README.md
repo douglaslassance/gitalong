@@ -22,4 +22,13 @@ change_list = gitarmony.change_list
 change_list.synchronize()
 ```
 
-## Development
+# Development
+
+This projects requires the following:
+
+-   [Python >=3.7.9](https://www.python.org/downloads/release/python-379/)
+-   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (macOS/Linux)
+-   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
+
+Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitarmony-python` virtual environment with `mkvirtualenv`.
+Build systems for installing requirements and running tests are on board of the SublimeText project.
