@@ -10,7 +10,7 @@
 			"name": "Install requirements with PyPI",
 			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
 			"windows": {
-				"path": "$WORKON_HOME/gitarmony-python/Scripts",
+				"path": "$WORKON_HOME/gitarmony-python/Scripts;$PATH",
 			},
 			"working_dir": "$project_path",
 		},
@@ -23,7 +23,7 @@
 			"name": "Test with pytest",
 			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
 			"windows": {
-				"path": "$WORKON_HOME/gitarmony-python/Scripts",
+				"path": "$WORKON_HOME/gitarmony-python/Scripts;$PATH",
 			},
 			"working_dir": "$project_path",
 		},
@@ -36,7 +36,7 @@
 			"name": "Document with Sphinx",
 			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
 			"windows": {
-				"path": "$WORKON_HOME/gitarmony-python/Scripts",
+				"path": "$WORKON_HOME/gitarmony-python/Scripts;$PATH",
 			},
 			"working_dir": "$project_path",
 		}
