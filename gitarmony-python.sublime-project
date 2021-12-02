@@ -55,6 +55,9 @@
 			],
 			"path": ".",
 		},
+		{
+			"path": "C:\\Users\\Douglas\\Envs\\gitarmony-python\\Lib\\site-packages\\git"
+		},
 	],
 	"virtualenv": "$WORKON_HOME/gitarmony-python",
 }

@@ -4,7 +4,9 @@ import logging
 import typing
 import json
 import socket
+import datetime
 
+import dictdiffer
 import configparser
 import git
 
@@ -112,7 +114,7 @@ class Gitarmony:
         Returns:
             TYPE: The path the config file stored in the managed repository.
         """
-        return os.path.join(self._gitarmony_repository.working_dir, ".gitarmony")
+        return os.path.join(self._gitarmony_repository.working_dir, ".gitarmony.cfg")
 
     @property
     def config(self) -> dict:
@@ -179,20 +181,35 @@ class Gitarmony:
                 for filename in filenames:
                     shutil.copyfile(filename, destination)
 
-    def last_file_commit(self, filename: str) -> git.objects.Commit:
+    def last_file_commit(self, filename: str, fetch: bool = True) -> dict:
         """
         Args:
             filename (str): The absolute or relative filename to get the last commit for.
 
         Returns:
-            git.objects.Commit:
+            dict:
                 The last commit for the provided filename across all branches local or
                 remote.
         """
-        self._managed_repository.remotes.origin.fetch(prune=True)
+        if fetch:
+            self._managed_repository.remotes.origin.fetch(prune=True)
 
-        # TODO: git log --all --first-parent --remotes --reflog --author-date-order --oneline -- gitarmony/change_set.py
-        file_commits = []
+        args = [
+            "--all",
+            "--remotes",
+            '--pretty=format:"%H"',
+            "--",
+            "gitarmony/exceptions.py",
+        ]
+        # TODO: Maybe there is a way to get this information using pure Python.
+        file_commits = self._managed_repository.git.log(*args)
+        file_commits = file_commits.replace('"', "").split("\n")
+        file_commits = [
+            self.get_commit_dict(
+                git.objects.Commit(self._managed_repository, git.utils.hex_to_bin(c))
+            )
+            for c in file_commits
+        ]
 
         real_path = get_real_path(filename)
         tracked_commits = self.get_tracked_commits()
@@ -220,12 +237,41 @@ class Gitarmony:
     def has_commit(self, commit: git.objects.Commit) -> bool:
         """
         Args:
-            commit (TYPE): The commit to check for.
+            commit (git.objects.Commit): The commit to check for.
 
         Returns:
             bool: Whether the active branch has a specific commit.
         """
         return commit in self.active_branch_commits
+
+    def accumulate_local_commits(self, start: git.objects.Commit, local_commits: list):
+        """Accumulates a list of local commit starting from the provided commit.
+
+        Args:
+            local_commits (list): The accumulated local commits.
+            start (git.objects.Commit):
+                The commit that we start peeling from last commit.
+        """
+        # TODO: Maybe there is a way to get this information using pure Python.
+        if self._managed_repository.git.branch("--remotes", "--contains", start.hexsha):
+            return
+        commit_dict = self.get_commit_dict(start)
+        commit_dict.update(self.context_dict)
+        local_commits.append(commit_dict)
+        for parent in start.parents:
+            self.accumulate_local_commits(parent, local_commits)
+
+    @property
+    def context_dict(self) -> dict:
+        """
+        Returns:
+            dict: A dict of contextual values that we attached to tracked commits.
+        """
+        return {
+            "host": socket.gethostname(),
+            "user": os.getusername(),
+            "clone": get_real_path(self._managed_repository.working_dir),
+        }
 
     @property
     def local_commits(self) -> list:
@@ -233,46 +279,78 @@ class Gitarmony:
         Returns:
             list: Commits that are not on remote branches.
         """
-        # TODO: Get local commits and create a fake commit for uncommitted changes.
-        return []
+        local_commits = []
+        for branch in self._managed_repository.branches:
+            self.accumulate_local_commits(branch.commit, local_commits)
+        uncommited_changes = {
+            "origin": self._managed_repository.remotes.origin.url,
+            "changes": self.uncommitted_changes,
+            "date": str(datetime.datetime.now()),
+        }
+        uncommited_changes.update(self.context_dict)
+        local_commits.append(uncommited_changes)
+        return local_commits
+
+    @property
+    def uncommitted_changes(self) -> list:
+        """
+        Returns:
+            list: A list of unique relative filename that are changed locally.
+        """
+        # TODO: Maybe there is a way to get this information using pure Python.
+        git_cmd = self._managed_repository.git
+        directory_changes = git_cmd.diff("--name-only").split("\n")
+        staged_changes = git_cmd.diff("--cached", "--name-only").split("\n")
+        # A file can be in both in directory and staged changes. The set fixes that.
+        return list(set(directory_changes + staged_changes))
 
     def get_commit_dict(self, commit: git.objects.Commit) -> dict:
         """
         Args:
-            commit (TYPE): Description
+            commit (git.objects.Commit): The commit to get as a dict.
 
         Returns:
-            dict: Description
+            dict: A simplified JSON serializable dict that represents the commit.
         """
         return {
-            "sha": commit.binsha,
+            "sha": commit.hexsha,
             "origin": self._managed_repository.remotes.origin.url,
-            "host": socket.gethostname(),
-            "user": os.getusername(),
-            "clone": get_real_path(self._managed_repository.working_dir),
             "changes": [diff.b_path for diff in commit.diff()],
-            "date": commit.date,
+            "date": str(commit.committed_datetime),
+            "author": commit.author.name,
         }
 
     @property
-    def json_path(self):
+    def tracked_commits_json_path(self):
         """
         Returns:
-            TYPE: The path to the JSON file that tracks the commits.
+            TYPE: The path to the JSON file that tracks the local commits.
         """
         return os.path.join(self._gitarmony_repository.working_dir, "commits.json")
 
     def update_tracked_commits(self, push=True):
-        """Updates the JSON that tracks commits with latest local commits.
+        """Updates the JSON that tracks commits with everyone's local commits and
+        uncommitted changes.
 
         Args:
             push (bool, optional):
                 Whether we should push the changes immediately to origin.
         """
-        tracked_commits = set(self.get_tracked_commits())
+        # Removing any matching contextual commits from tracked commits.
+        # We are re-evaluating those.
+        tracked_commits = []
+        context_dict = self.context_dict
+        context_keys = set(context_dict.key())
+        for commit in self.get_tracked_commits():
+            diff_keys = {diff[1] for diff in dictdiffer.diff(commit, context_dict)}
+            if context_keys.intersection(diff_keys):
+                tracked_commits.append(commit)
+                continue
+        # Adding all local commit to the list of tracked commits.
+        # Will include uncommitted changes as a "fake" commit.
         for commit in self.local_commits:
-            tracked_commits.add(commit)
-        json_path = self.json_path
+            tracked_commits.append(commit)
+        json_path = self.tracked_commits_json_path
         with open(json_path, "w") as _file:
             _file.write(json.dumps(tracked_commits))
         if push:
@@ -284,7 +362,8 @@ class Gitarmony:
     def get_tracked_commits(self, pull=True) -> typing.List[dict]:
         """
         Args:
-            pull (bool, optional): Whether or not we want to pull the latest tracked commits.
+            pull (bool, optional):
+                Whether or not we want to pull the latest tracked commits.
 
         Returns:
             typing.List[dict]: The list of commits that are tracked.
@@ -293,7 +372,7 @@ class Gitarmony:
             self._gitarmony_repository.remotes.origin.pull(fast_forward=True)
         serializable_commits = []
         origin = self._managed_repository.remotes.origin.url
-        with open(self.json_path, "r") as _file:
+        with open(self.tracked_commits_json_path, "r") as _file:
             serializable_commits = json.loads(_file.read())
         relevant_commits = []
         for commit in serializable_commits:
