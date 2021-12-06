@@ -1,6 +1,5 @@
 import os
 import stat
-import logging
 import pathlib
 
 
@@ -11,16 +10,33 @@ def is_binary_file(filename):
         return is_binary_string(fle.read(1024))
 
 
-def set_file_read_only(filename, read_only=True):
-    if not os.path.exists(filename):
-        logging.info("{} does not exist!".format(filename))
+def is_read_only(filename) -> bool:
+    """TODO: Make sure this works on other operating system than Windows.
+
+    Args:
+        filename (TYPE): The absolute filename of the file to check.
+
+    Returns:
+        bool: Whether the file is read only.
+    """
+    _stat = os.stat(filename)
+    return not bool(_stat.st_mode & stat.S_IWRITE)
+
+
+def set_read_only(filename, read_only=True, check_exists=True):
+    """Sets the file read-only state.
+
+    Args:
+        filename (TYPE): The absolute filename of the file we want to set.
+        read_only (bool, optional): Whether read-only should be true of false.
+        check_exists (bool, optional): Whether we are guarding from non existing files.
+    """
+    if check_exists and not os.path.exists(filename):
         return
     if read_only:
         os.chmod(filename, stat.S_IREAD)
-        logging.info("{} was made read-only".format(filename))
         return
     os.chmod(filename, stat.S_IWRITE)
-    logging.info("{} was made writable.".format(filename))
 
 
 def is_ci_runner_host() -> bool:
@@ -42,7 +58,7 @@ def get_real_path(filename: str) -> str:
     """
     # On Windows, this private function is available and will return the real path
     # for a subst location.
-    if hasattr(os.path, "_getfinalepathname"):
-        filename = os.path._getfinalepathname(filename)
-        filename = pathlib.Path(filename).resolve()
+    if hasattr(os.path, "_getfinalpathname"):
+        filename = os.path._getfinalpathname(filename)
+        filename = str(pathlib.Path(filename).resolve())
     return filename

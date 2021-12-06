@@ -18,7 +18,7 @@ from gitdb.util import hex_to_bin
 from .functions import get_real_path, is_binary_file
 from .exceptions import GitarmonyNotInstalled
 
-from .functions import set_file_read_only
+from .functions import set_read_only
 
 
 class Gitarmony:
@@ -57,10 +57,8 @@ class Gitarmony:
         cls,
         gitarmony_repository: str,
         managed_repository: str = "",
-        platform: str = "",
-        secret_name: str = "",
         hooks: bool = True,
-        update_binary_permissions=True,
+        set_binary_permissions=True,
     ):
         """
         Args:
@@ -69,16 +67,10 @@ class Gitarmony:
             managed_repository (str, optional):
                 The repository in which we install Gitarmony. Defaults to current
                 working directory. Current working directory if not passed.
-            platform (str, optional):
-                The platform where origin is stored. This will setup CI actions. Only
-                supports `github`.
-            secret_name (str, optional):
-                The name of the secret (not the value) that will hold the personal
-                access token that grants access to your Gitarmony repository.
             hooks (bool, optional):
                 Whether hooks should be installed.
-            update_binary_permissions (bool, optional):
-                Whether Gitarmony should managed permissions of files.
+            set_binary_permissions (bool, optional):
+                Whether Gitarmony should managed permissions of binary files.
 
         Deleted Parameters:
             Returns: Gitarmony:
@@ -96,14 +88,12 @@ class Gitarmony:
         gitarmony.update_gitignore()
         if hooks:
             gitarmony.install_hooks()
-        gitarmony.install_actions(platform=platform)
 
         config = gitarmony.config
         origin = gitarmony_repository.remotes.origin.url
         config["settings"] = {
             "origin": origin,
-            "secret_name": secret_name,
-            "update_binary_permissions": int(update_binary_permissions),
+            "set_binary_permissions": int(set_binary_permissions),
         }
         with open(gitarmony.config_path, "w") as _file:
             config.write(_file)
@@ -134,7 +124,7 @@ class Gitarmony:
     def config_path(self):
         """
         Returns:
-            TYPE: The path the config file stored in the managed repository.
+            TYPE: The absolute path to the config file stored in the managed repository.
         """
         return os.path.join(self._managed_repository.working_dir, ".gitarmony.cfg")
 
@@ -178,46 +168,15 @@ class Gitarmony:
                 logging.info("Copying hook from {} to {}".format(filename, destination))
                 shutil.copyfile(filename, destination)
 
-    def install_actions(self, platform: str = ""):
-        """Install CI actions.
-
-        TODO: Add GitLab support.
-
-        Args: platform (str, optional):
-            The platform to install actions for. Will not install any actions if not
-            passed.
-        """
-        source = os.path.join(
-            os.path.dirname(__file__), "resources", "actions", platform
-        )
-        if not os.path.isdir(source):
-            logging.error("Could not install actions for platform {}".format(platform))
-        if platform.lower() == "github":
-            destination_dir = os.path.join(
-                self._managed_repository.working_dir, ".github", "workflows"
-            )
-            if not os.path.isdir(destination_dir):
-                os.makedirs(destination_dir)
-            for (root, _, basenames) in os.walk(source):
-                for basename in basenames:
-                    destination = os.path.join(destination_dir, basename)
-                    filename = os.path.join(root, basename)
-                    shutil.copyfile(filename, destination)
-
     def get_relative_path(self, filename: str) -> str:
         if os.path.exists(filename):
-            filename = os.path.relpath(
-                self._managed_repository.working_dir,
-                self._managed_repository.working_dir,
-            )
+            filename = os.path.relpath(filename, self._managed_repository.working_dir)
         return filename
 
     def get_absolute_path(self, filename: str) -> str:
         if os.path.exists(filename):
             return filename
-        return os.path.relpath(
-            self._managed_repository.working_dir, self._managed_repository.working_dir
-        )
+        return os.path.join(self._managed_repository.working_dir, filename)
 
     def last_file_commit(self, filename: str, fetch: bool = True) -> dict:
         """
@@ -347,7 +306,7 @@ class Gitarmony:
     def local_commits(self) -> list:
         """
         Returns:
-            list: Commits and uncommitted changes that are not on remote branches.
+            list: Commits and pending changes that are not on remote branches.
         """
         local_commits = []
         for branch in self._managed_repository.branches:
@@ -407,16 +366,33 @@ class Gitarmony:
             self.make_binary_files_read_only()
 
     def is_ignored(self, filename: str) -> bool:
-        return True
+        """
+        Args:
+            filename (str): The filename to check for.
+
+        Returns:
+            bool: Whether if a file is ignored by the managed repository .gitignore file.
+        """
+        filename = self.get_relative_path(filename)
+        try:
+            self._managed_repository.git.check_ignore(filename)
+            return True
+        except git.exc.GitCommandError:
+            return False
 
     def make_binary_files_read_only(self):
-        """Make binary files that aren't ignored read-only."""
-        root = os.path.join(self._managed_repository, "**", "*")
-        filenames = [f for f in glob.iglob(root, recursive=True) if os.path.isfile(f)]
+        """Make binary files that aren't ignored read-only.
+
+        TODO NOW: This needs to be optimized because we are looping through more files than we need.
+        """
+        root = os.path.join(self._managed_repository.working_dir, "**", "*")
+        filenames = [
+            f
+            for f in glob.iglob(root, recursive=True)
+            if os.path.isfile(f) and not self.is_ignored(f) and is_binary_file(f)
+        ]
         for filename in filenames:
-            if not self.is_ignored(filename):
-                if is_binary_file(filename):
-                    set_file_read_only(filename, True)
+            set_read_only(filename, read_only=True, check_exists=False)
 
     def update_tracked_commits(self, push=True):
         """Updates the JSON that tracks local commits from everyone working on the
@@ -429,8 +405,6 @@ class Gitarmony:
         # Removing any matching contextual commits from tracked commits.
         # We are re-evaluating those.
         tracked_commits = []
-        context_dict = self.context_dict
-        context_keys = set(context_dict.key())
         for commit in self.get_tracked_commits(pull=True):
             if not self.is_issued_commit(commit):
                 tracked_commits.append(commit)
@@ -441,9 +415,10 @@ class Gitarmony:
             tracked_commits.append(commit)
         json_path = self.tracked_commits_json_path
         with open(json_path, "w") as _file:
-            _file.write(json.dumps(tracked_commits))
+            dump = json.dumps(tracked_commits, indent=4, sort_keys=True)
+            _file.write(dump)
         if push:
-            self._gitarmony_repository.add(json_path)
+            self._gitarmony_repository.index.add(json_path)
             basename = os.path.basename(json_path)
             self._gitarmony_repository.index.commit(message=f":lock: Update {basename}")
             self._gitarmony_repository.remote().push()
@@ -512,7 +487,7 @@ class Gitarmony:
         conflicting_commit = self.get_conflicting_commit(filename)
         if force or not conflicting_commit:
             if os.path.exists(filename):
-                set_file_read_only(filename, False)
+                set_read_only(filename, False)
         update_binary_permisions = self.config["settings"].get(
             "update_binary_permisions", False
         )
@@ -520,5 +495,5 @@ class Gitarmony:
         # here in case it was not locked.
         if update_binary_permisions:
             if os.path.exists(filename):
-                set_file_read_only(filename, True)
+                set_read_only(filename, True)
         return conflicting_commit
