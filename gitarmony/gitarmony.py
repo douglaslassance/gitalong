@@ -161,9 +161,9 @@ class Gitarmony:
         """Installs Gitarmony hooks in managed repository."""
         hooks = os.path.join(os.path.dirname(__file__), "resources", "hooks")
         destination_dir = self.hooks_path
-        for (root, _, basenames) in os.walk(hooks):
+        for (dirname, _, basenames) in os.walk(hooks):
             for basename in basenames:
-                filename = os.path.join(root, basename)
+                filename = os.path.join(dirname, basename)
                 destination = os.path.join(destination_dir, basename)
                 logging.info("Copying hook from {} to {}".format(filename, destination))
                 shutil.copyfile(filename, destination)
@@ -363,7 +363,7 @@ class Gitarmony:
             "update_binary_permisions", False
         )
         if update_binary_permisions:
-            self.make_binary_files_read_only()
+            self.make_binary_files_read_only(self._managed_repository.working_dir)
 
     def is_ignored(self, filename: str) -> bool:
         """
@@ -380,19 +380,18 @@ class Gitarmony:
         except git.exc.GitCommandError:
             return False
 
-    def make_binary_files_read_only(self):
-        """Make binary files that aren't ignored read-only.
-
-        TODO NOW: This needs to be optimized because we are looping through more files than we need.
-        """
-        root = os.path.join(self._managed_repository.working_dir, "**", "*")
-        filenames = [
-            f
-            for f in glob.iglob(root, recursive=True)
-            if os.path.isfile(f) and not self.is_ignored(f) and is_binary_file(f)
-        ]
-        for filename in filenames:
-            set_read_only(filename, read_only=True, check_exists=False)
+    def make_binary_files_read_only(self, dirname):
+        """Make binary files that aren't ignored read-only."""
+        for basename in os.listdir(dirname):
+            filename = os.path.join(dirname, basename)
+            if os.path.isdir(filename):
+                if basename == '.git' or self.is_ignored(filename):
+                    continue
+                self.make_binary_files_read_only(filename)
+            else:
+                if self.is_ignored(filename) or not is_binary_file(filename):
+                    continue
+                set_read_only(filename, read_only=True, check_exists=False)
 
     def update_tracked_commits(self, push=True):
         """Updates the JSON that tracks local commits from everyone working on the

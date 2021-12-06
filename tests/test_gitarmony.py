@@ -91,7 +91,7 @@ class GitarmonyTestCase(unittest.TestCase):
 
         self.assertEqual(False, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.gitarmony.config_path))
-        self.gitarmony.make_binary_files_read_only()
+        self.gitarmony.make_binary_files_read_only(self.managed_clone.working_dir)
         self.assertEqual(True, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.gitarmony.config_path))
 
