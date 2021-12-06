@@ -40,8 +40,6 @@ def get_real_path(filename: str) -> str:
     Returns:
         str: Real path in case this path goes through Windows subst.
     """
-    if not os.path.exists(filename):
-        return ""
     # On Windows, this private function is available and will return the real path
     # for a subst location.
     if hasattr(os.path, "_getfinalepathname"):

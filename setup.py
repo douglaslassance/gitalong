@@ -25,9 +25,15 @@ setup(
     author_email=info.get("__email__", ""),
     license=info.get("__license__", ""),
     packages=["gitarmony"],
-    install_requires=["GitPython~=3.1", "configparser~=5.1", "dictdiffer~=0.9"],
+    install_requires=[
+        "GitPython~=3.1",
+        "configparser~=5.1",
+        "dictdiffer~=0.9",
+        "python-dotenv~=0.19",
+    ],
     extras_require={
         "ci": [
+            "black",
             "flake8-print~=3.1",
             "flake8~=3.8",
             "pep8-naming~=0.11",

@@ -134,3 +134,9 @@ dmypy.json
 
 # macOS
 .DS_Store
+
+# VS Code
+.vscode/
+
+# IntelliJ IDEA
+.idea/
