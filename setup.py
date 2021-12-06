@@ -41,6 +41,7 @@ setup(
             "pytest-cov~=2.10.1",
             "pytest-html~=2.1.1",
             "pytest-pep8~=1.0.6",
+            "pytest-profiling~=1.7",
             "pytest~=6.1.1",
             "requests-mock~=1.8",
             "sphinx-markdown-tables~=0.0",

@@ -140,3 +140,6 @@ dmypy.json
 
 # IntelliJ IDEA
 .idea/
+
+# pytest-profiling
+/prof/

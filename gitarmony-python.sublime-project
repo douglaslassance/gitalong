@@ -18,7 +18,8 @@
 			"cmd": [
 				"pytest",
 				"--cov-report=html",
-				"--cov=gitarmony"
+				"--cov=gitarmony",
+				"--profile-svg"
 			],
 			"name": "Test with pytest",
 			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
