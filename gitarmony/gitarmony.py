@@ -2,15 +2,14 @@ import os
 import shutil
 import logging
 import typing
-import glob
 import json
 import socket
 import datetime
 import getpass
 import itertools
+import configparser
 
 import dictdiffer
-import configparser
 import git
 
 from gitdb.util import hex_to_bin
@@ -24,11 +23,15 @@ from .functions import set_read_only
 class Gitarmony:
     """The Gitarmony class aggregates all the Gitarmony actions that can happen on a
     repository.
+
+    Attributes:
+        config_basename (str): The basename of the Gitarmony configuration file.
     """
 
-    def __init__(self, managed_repository: str = ""):
-        """Summary
+    config_basename = ".gitarmony.cfg"
 
+    def __init__(self, managed_repository: str = ""):
+        """
         Args:
             managed_repository (str, optional):
                 The managed repository. Current working directory if not passed.
@@ -42,61 +45,87 @@ class Gitarmony:
         self._managed_repository = git.Repo(
             managed_repository, search_parent_directories=True
         )
-        self._change_set = None
-        try:
-            self._gitarmony_repository = git.Repo(
-                os.path.join(managed_repository, ".gitarmony")
-            )
-        except git.exc.InvalidGitRepositoryError as error:
+        self._config = configparser.ConfigParser()
+        self._config_path = os.path.join(
+            self._managed_repository.working_dir, self.config_basename
+        )
+        if not os.path.exists(self._config_path):
             raise GitarmonyNotInstalled(
                 "Gitarmony is not installed on this repository."
-            ) from error
+            )
+        self._config.read(self.config_path)
+
+    def _clone_gitarmony_repository(self):
+        """
+        Returns:
+            git.Repo: Clones the gitarmony repository if not done already.
+        """
+        try:
+            return git.Repo(
+                os.path.join(self._managed_repository.working_dir, ".gitarmony")
+            )
+        except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
+            origin = self._config["settings"]["origin"]
+            return git.Repo.clone_from(
+                origin,
+                os.path.join(self._managed_repository.working_dir, ".gitarmony"),
+            )
+
+    @property
+    def gitarmony_repository(self) -> git.Repo:
+        """
+        Returns:
+            git.Repo: The gitarmony repository that keeps track of all commits.
+        """
+        return self._clone_gitarmony_repository()
 
     @classmethod
     def install(
         cls,
         gitarmony_repository: str,
         managed_repository: str = "",
-        hooks: bool = True,
+        update_hooks: bool = True,
+        update_gitignore: bool = True,
         set_binary_permissions=True,
     ):
-        """
+        """Install Gitarmony on a repository.
+
         Args:
             gitarmony_repository (str):
                 The URL of the repository that will store gitarmony data.
             managed_repository (str, optional):
                 The repository in which we install Gitarmony. Defaults to current
                 working directory. Current working directory if not passed.
-            hooks (bool, optional):
+            update_hooks (bool, optional):
                 Whether hooks should be installed.
             set_binary_permissions (bool, optional):
                 Whether Gitarmony should managed permissions of binary files.
 
         Deleted Parameters:
-            Returns: Gitarmony:
-                The gitarmony management class corresponding to the repository in which
-                we just installed.
+            Returns:
+                Gitarmony:
+                    The gitarmony management class corresponding to the repository in
+                    which we just installed.
         """
         managed_repository = git.Repo(
             managed_repository, search_parent_directories=True
         )
-        gitarmony_repository = git.Repo.clone_from(
-            gitarmony_repository,
-            os.path.join(managed_repository.working_dir, ".gitarmony"),
-        )
-        gitarmony = cls(managed_repository.working_dir)
-        gitarmony.update_gitignore()
-        if hooks:
-            gitarmony.install_hooks()
-
-        config = gitarmony.config
-        origin = gitarmony_repository.remotes.origin.url
+        config = configparser.ConfigParser()
+        origin = gitarmony_repository
         config["settings"] = {
             "origin": origin,
             "set_binary_permissions": int(set_binary_permissions),
         }
-        with open(gitarmony.config_path, "w") as _file:
+        config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
+        with open(config_path, "w") as _file:
             config.write(_file)
+
+        gitarmony = cls(managed_repository.working_dir)
+        gitarmony._clone_gitarmony_repository()
+        if update_gitignore:
+            gitarmony.update_gitignore()
+        if update_hooks:
+            gitarmony.install_hooks()
         return gitarmony
 
     def update_gitignore(self):
@@ -121,12 +150,20 @@ class Gitarmony:
                 gitignore.write(content + patch_content)
 
     @property
-    def config_path(self):
+    def managed_repository(self) -> git.Repo:
         """
         Returns:
-            TYPE: The absolute path to the config file stored in the managed repository.
+            git.Repo: The repository we are managing with Gitarmony.
         """
-        return os.path.join(self._managed_repository.working_dir, ".gitarmony.cfg")
+        return self._managed_repository
+
+    @property
+    def config_path(self) -> configparser.ConfigParser:
+        """
+        Returns:
+            dict: The content of `.gitarmony.cfg` as a dictionary.
+        """
+        return self._config_path
 
     @property
     def config(self) -> configparser.ConfigParser:
@@ -134,18 +171,13 @@ class Gitarmony:
         Returns:
             dict: The content of `.gitarmony.cfg` as a dictionary.
         """
-        config = configparser.ConfigParser()
-        config_path = self.config_path
-        if os.path.exists(config_path):
-            config.read(config_path)
-        return config
+        return self._config
 
     @property
-    def hooks_path(self):
-        """The hook path of the managed repository.
-
+    def hooks_path(self) -> str:
+        """
         Returns:
-            TYPE: Description
+            str: The hook path of the managed repository.
         """
         try:
             basename = self._managed_repository.config_reader().get_value(
@@ -158,7 +190,11 @@ class Gitarmony:
         )
 
     def install_hooks(self):
-        """Installs Gitarmony hooks in managed repository."""
+        """Installs Gitarmony hooks in managed repository.
+
+        TODO: Implement non-destructive version of these hooks. Currently we don't have
+        any consideration for preexisting content.
+        """
         hooks = os.path.join(os.path.dirname(__file__), "resources", "hooks")
         destination_dir = self.hooks_path
         for (dirname, _, basenames) in os.walk(hooks):
@@ -169,16 +205,32 @@ class Gitarmony:
                 shutil.copyfile(filename, destination)
 
     def get_relative_path(self, filename: str) -> str:
+        """
+        Args:
+            filename (str): The absolute path.
+
+        Returns:
+            str: The path relative to the managed repository.
+        """
         if os.path.exists(filename):
             filename = os.path.relpath(filename, self._managed_repository.working_dir)
         return filename
 
     def get_absolute_path(self, filename: str) -> str:
+        """
+        Args:
+            filename (str): The path relative to the managed repository.
+
+        Returns:
+            str: The absolute path.
+        """
         if os.path.exists(filename):
             return filename
         return os.path.join(self._managed_repository.working_dir, filename)
 
-    def last_file_commit(self, filename: str, fetch: bool = True) -> dict:
+    def last_file_commit(
+        self, filename: str, pull: bool = True, fetch: bool = True, prune: bool = True
+    ) -> dict:
         """
         Args:
             filename (str): The absolute or relative filename to get the last commit for.
@@ -189,7 +241,7 @@ class Gitarmony:
                 remote.
         """
         if fetch:
-            self._managed_repository.remotes.origin.fetch(prune=True)
+            self._managed_repository.remotes.origin.fetch(prune=prune)
         filename = self.get_relative_path(filename)
         args = [
             "--all",
@@ -207,14 +259,14 @@ class Gitarmony:
             )
             for c in file_commits
         ]
-        tracked_commits = self.get_tracked_commits(pull=True)
+        tracked_commits = self.get_tracked_commits(pull=pull)
         relevant_tracked_commits = []
         for tracked_commit in tracked_commits:
             for change in tracked_commit.get("changes", []):
                 if os.path.normpath(change) == os.path.normpath(filename):
                     relevant_tracked_commits.append(tracked_commit)
         file_commits += relevant_tracked_commits
-        file_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
+        file_commits.sort(key=lambda commit: commit.get("date"), reverse=False)
         return file_commits[-1] if file_commits else None
 
     @property
@@ -228,7 +280,7 @@ class Gitarmony:
             git.objects.Commit.iter_items(self._managed_repository, active_branch)
         )
 
-    def has_commit(self, commit: dict) -> bool:
+    def is_contextual_commit(self, commit: dict) -> bool:
         """
         Args:
             commit (dict): The commit to check for.
@@ -242,11 +294,23 @@ class Gitarmony:
         commit = git.objects.Commit(self._managed_repository, hex_to_bin(hexsha))
         return commit in self.active_branch_commits
 
-    def is_pending_changes_commit(self, commit: dict) -> bool:
+    @staticmethod
+    def is_pending_changes_commit(commit: dict) -> bool:
+        """
+        Args:
+            commit (dict): The commit dictionary.
+
+        Returns:
+            bool: Whether the "commit" dictionary is for uncommitted changes.
+        """
         return "user" in commit.keys()
 
     @property
     def pending_changes_commit(self) -> dict:
+        """
+        Returns:
+            dict: returns a commit dictionary for uncommitted changes.
+        """
         pending_changes = self.pending_changes
         if not pending_changes:
             return {}
@@ -259,14 +323,33 @@ class Gitarmony:
         return pending_changes_commit
 
     def is_issued_commit(self, commit: dict) -> bool:
+        """
+        Args:
+            commit (dict): The commit dictionary to check for.
+
+        Returns:
+            bool: Whether the commit was issued by the current context.
+        """
         context_dict = self.context_dict
-        diff_types = [diff[-1] for diff in dictdiffer.diff(context_dict, commit)]
-        diffs = list(itertools.chain.from_iterable(diff_types))
-        diff_keys = {diff[0] for diff in diffs}
+        diff_keys = set()
+        for diff in dictdiffer.diff(context_dict, commit):
+            if diff[0] == "change":
+                diff_keys.add(diff[1])
+            elif diff[0] in ("add", "remove"):
+                diff_keys = diff_keys.union([key[0] for key in diff[2]])
         intersection = set(context_dict.keys()).intersection(diff_keys)
         return not intersection
 
     def is_issued_pending_changes_commit(self, commit: dict) -> bool:
+        """
+        Args:
+            commit (dict): Description
+
+        Returns:
+            bool:
+                Whether the commit is for uncommitted changes and issued by the current
+                context.
+        """
         if not self.is_pending_changes_commit(commit):
             return False
         return self.is_issued_commit(commit)
@@ -354,16 +437,15 @@ class Gitarmony:
         Returns:
             TYPE: The path to the JSON file that tracks the local commits.
         """
-        return os.path.join(self._gitarmony_repository.working_dir, "commits.json")
+        return os.path.join(self.gitarmony_repository.working_dir, "commits.json")
 
-    def sync(self):
-        """Convenience method to get Gitarmony in sync on the local clone."""
-        self.update_tracked_commits(push=True)
-        update_binary_permisions = self.config["settings"].get(
+    def update_binary_permisions(self, force=False):
+        """Updates binary permissions taking preferences into account."""
+        update_binary_permisions = self._config["settings"].get(
             "update_binary_permisions", False
         )
-        if update_binary_permisions:
-            self.make_binary_files_read_only(self._managed_repository.working_dir)
+        if force and update_binary_permisions:
+            self.make_binary_files_read_only()
 
     def is_ignored(self, filename: str) -> bool:
         """
@@ -380,12 +462,13 @@ class Gitarmony:
         except git.exc.GitCommandError:
             return False
 
-    def make_binary_files_read_only(self, dirname):
+    def make_binary_files_read_only(self, dirname=""):
         """Make binary files that aren't ignored read-only."""
+        dirname = dirname or self._managed_repository.working_dir
         for basename in os.listdir(dirname):
             filename = os.path.join(dirname, basename)
             if os.path.isdir(filename):
-                if basename == '.git' or self.is_ignored(filename):
+                if basename == ".git" or self.is_ignored(filename):
                     continue
                 self.make_binary_files_read_only(filename)
             else:
@@ -417,10 +500,10 @@ class Gitarmony:
             dump = json.dumps(tracked_commits, indent=4, sort_keys=True)
             _file.write(dump)
         if push:
-            self._gitarmony_repository.index.add(json_path)
+            self.gitarmony_repository.index.add(json_path)
             basename = os.path.basename(json_path)
-            self._gitarmony_repository.index.commit(message=f":lock: Update {basename}")
-            self._gitarmony_repository.remote().push()
+            self.gitarmony_repository.index.commit(message=f"Update {basename}")
+            self.gitarmony_repository.remote().push()
 
     def get_tracked_commits(self, pull=True) -> typing.List[dict]:
         """
@@ -433,7 +516,7 @@ class Gitarmony:
                 A list of tracked commits combining local commits and pending
                 uncommitted changes.
         """
-        origin = self._gitarmony_repository.remote()
+        origin = self.gitarmony_repository.remote()
         if pull and origin.refs:
             origin.pull(ff=True)
         serializable_commits = []
@@ -448,27 +531,36 @@ class Gitarmony:
                 relevant_commits.append(commit)
         return relevant_commits
 
-    def get_conflicting_commit(self, filename: str) -> dict:
+    def get_file_missing_commit(
+        self, filename: str, pull: bool = True, fetch: bool = True, prune: bool = True
+    ) -> dict:
         """
         Args:
             filename (str):
-                The file to make writable. Takes a path that's absolute or relative to
-                the managed repository.
-        Returns:
-            dict:
-                The latest conflicting commit that we are missing.
+                The file to check for missing commits. Takes a path that's absolute or
+                relative to the managed repository. Returns: dict: The latest missing
+                commit that we are missing.
         """
-        last_file_commit = self.last_file_commit(filename)
+        last_file_commit = self.last_file_commit(
+            filename, pull=pull, fetch=fetch, prune=prune
+        )
         if (
             not last_file_commit
-            or self.has_commit(last_file_commit)
+            or self.is_contextual_commit(last_file_commit)
             or self.is_issued_commit(last_file_commit)
         ):
             return None
         return last_file_commit
 
-    def make_writable(self, filename: str, force=False) -> dict:
-        """Make a file writable if it's not conflicting with other tracked commits that
+    def make_file_writable(
+        self,
+        filename: str,
+        pull: bool = True,
+        fetch: bool = True,
+        prune: bool = True,
+        force=False,
+    ) -> dict:
+        """Make a file writable if it's not missing with other tracked commits that
         aren't present locally.
 
         Args:
@@ -481,10 +573,12 @@ class Gitarmony:
                 convenience.
 
         Returns:
-            dict: The conflicting commit that we are missing.
+            dict: The missing commit that we are missing.
         """
-        conflicting_commit = self.get_conflicting_commit(filename)
-        if force or not conflicting_commit:
+        missing_commit = self.get_file_missing_commit(
+            filename, pull=pull, fetch=fetch, prune=prune
+        )
+        if force or not missing_commit:
             if os.path.exists(filename):
                 set_read_only(filename, False)
         update_binary_permisions = self.config["settings"].get(
@@ -495,4 +589,4 @@ class Gitarmony:
         if update_binary_permisions:
             if os.path.exists(filename):
                 set_read_only(filename, True)
-        return conflicting_commit
+        return missing_commit

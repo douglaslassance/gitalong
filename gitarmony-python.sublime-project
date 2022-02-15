@@ -57,7 +57,13 @@
 			"path": ".",
 		},
 		{
-			"path": "C:\\Users\\Douglas\\Envs\\gitarmony-python\\Lib\\site-packages\\git"
+			"path": "C:\\Users\\Douglas\\Envs\\gitarmony-python\\Lib\\site-packages\\git",
+		},
+		{
+			"path": "P:\\Punch\\Game\\Plugins\\Gitarmony",
+		},
+		{
+			"path": "P:\\Punch\\.git"
 		},
 	],
 	"virtualenv": "$WORKON_HOME/gitarmony-python",

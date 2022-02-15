@@ -1,8 +1,10 @@
 import os
+import shutil
 import tempfile
 import unittest
 import logging
 
+from pprint import pprint
 from git import Repo
 
 from gitarmony.gitarmony import Gitarmony
@@ -28,12 +30,15 @@ class GitarmonyTestCase(unittest.TestCase):
         self.gitarmony = Gitarmony.install(
             self.gitarmony_origin_url,
             self.managed_clone.working_dir,
-            hooks=True,
+            # Hooks are turned off because we would have to install Gitarmony CLI as
+            # part of that test. Instead we are simulating the hooks operations below.
+            update_hooks=False,
+            update_gitignore=True,
         )
 
     def tearDown(self):
         try:
-            # shutil.rmtree(self.temp_dir)
+            shutil.rmtree(self.temp_dir)
             pass
         except PermissionError as error:
             logging.error(error)
@@ -73,21 +78,39 @@ class GitarmonyTestCase(unittest.TestCase):
 
         image_path = os.path.join(working_dir, "staged_image_02.jpg")
         save_image(image_path)
+        # Simulating the application syncing when saving the file.
+        self.gitarmony.update_tracked_commits()
+        print("POST-SAVE TRACKED COMMITS")
+        pprint(self.gitarmony.get_tracked_commits(pull=False))
+
         self.managed_clone.index.add(image_path)
         self.managed_clone.index.commit(message="Add staged_image_02.jpg")
+        # Simulating the post-commit hook.
+        self.gitarmony.update_tracked_commits()
+        print("POST-COMMIT TRACKED COMMITS")
+        pprint(self.gitarmony.get_tracked_commits(pull=False))
+
         self.managed_clone.remote().push()
-        conflicting_commit = self.gitarmony.get_conflicting_commit(
-            "staged_image_02.jpg"
-        )
-        self.assertEqual(None, conflicting_commit)
+        # Simulating a post-push hook.
+        # It could only be implemented server-side as it's not an actual Git hook.
+        self.gitarmony.update_tracked_commits()
+        print("POST-PUSH TRACKED COMMITS")
+        pprint(self.gitarmony.get_tracked_commits(pull=False))
+
+        missing_commit = self.gitarmony.get_file_missing_commit("staged_image_02.jpg")
+        # We just pushed the changes therefore there should be no missing commit.
+        self.assertEqual(None, missing_commit)
 
         # We are dropping the last commit locally.
         self.managed_clone.git.reset("--hard", commit.hexsha)
-        # As a result it should now be a conflicting commit for the given file.
-        conflicting_commit = self.gitarmony.get_conflicting_commit(
-            "staged_image_02.jpg"
-        )
-        self.assertIsInstance(conflicting_commit, dict)
+        # Simulating the post-checkout hook.
+        self.gitarmony.update_tracked_commits()
+        print("POST-CHECKOUT TRACKED COMMITS")
+        pprint(self.gitarmony.get_tracked_commits(pull=False))
+
+        # As a result it should now be a missing commit for the given file.
+        missing_commit = self.gitarmony.get_file_missing_commit("staged_image_02.jpg")
+        self.assertIsInstance(missing_commit, dict)
 
         self.assertEqual(False, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.gitarmony.config_path))
@@ -97,7 +120,7 @@ class GitarmonyTestCase(unittest.TestCase):
 
         self.gitarmony.update_tracked_commits()
 
-        conflicting_commit = self.gitarmony.make_writable(staged_image_01_path)
-        self.assertIsInstance(conflicting_commit, type(None))
-        conflicting_commit = self.gitarmony.make_writable(image_path)
-        self.assertIsInstance(conflicting_commit, dict)
+        missing_commit = self.gitarmony.make_file_writable(staged_image_01_path)
+        self.assertIsInstance(missing_commit, type(None))
+        missing_commit = self.gitarmony.make_file_writable(image_path)
+        self.assertIsInstance(missing_commit, dict)
