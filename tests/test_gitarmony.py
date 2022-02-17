@@ -50,11 +50,11 @@ class GitarmonyTestCase(unittest.TestCase):
             os.path.normpath(config["settings"]["origin"]),
         )
 
-    def test_local_commits(self):
-        local_commits = self.gitarmony.local_commits
+    def test_local_only_commits(self):
+        local_only_commits = self.gitarmony.local_only_commits
         working_dir = self.managed_clone.working_dir
-        self.assertEqual(1, len(local_commits))
-        self.assertEqual(2, len(local_commits[0]["changes"]))
+        self.assertEqual(1, len(local_only_commits))
+        self.assertEqual(2, len(local_only_commits[0]["changes"]))
 
         # Testing detecting un-tracked files.
         save_image(os.path.join(working_dir, "untracked_image_01.jpg"))
@@ -63,18 +63,18 @@ class GitarmonyTestCase(unittest.TestCase):
         staged_image_01_path = os.path.join(working_dir, "staged_image_01.jpg")
         save_image(staged_image_01_path)
         self.managed_clone.index.add(staged_image_01_path)
-        self.assertEqual(4, len(self.gitarmony.local_commits[0]["changes"]))
+        self.assertEqual(4, len(self.gitarmony.local_only_commits[0]["changes"]))
 
         commit = self.managed_clone.index.commit(message="Add staged_image.jpg")
-        local_commits = self.gitarmony.local_commits
-        self.assertEqual(2, len(local_commits))
-        self.assertEqual(3, len(local_commits[0]["changes"]))
-        self.assertEqual(1, len(local_commits[1]["changes"]))
+        local_only_commits = self.gitarmony.local_only_commits
+        self.assertEqual(2, len(local_only_commits))
+        self.assertEqual(3, len(local_only_commits[0]["changes"]))
+        self.assertEqual(1, len(local_only_commits[1]["changes"]))
 
         self.managed_clone.remote().push()
-        local_commits = self.gitarmony.local_commits
-        self.assertEqual(1, len(local_commits))
-        self.assertEqual(3, len(local_commits[0]["changes"]))
+        local_only_commits = self.gitarmony.local_only_commits
+        self.assertEqual(1, len(local_only_commits))
+        self.assertEqual(3, len(local_only_commits[0]["changes"]))
 
         image_path = os.path.join(working_dir, "staged_image_02.jpg")
         save_image(image_path)
@@ -97,9 +97,11 @@ class GitarmonyTestCase(unittest.TestCase):
         print("POST-PUSH TRACKED COMMITS")
         pprint(self.gitarmony.get_tracked_commits(pull=False))
 
-        missing_commit = self.gitarmony.get_file_missing_commit("staged_image_02.jpg")
+        last_commit = self.gitarmony.get_file_last_commit(
+            "staged_image_02.jpg", pull=False, fetch=False, prune=False
+        )
         # We just pushed the changes therefore there should be no missing commit.
-        self.assertEqual(None, missing_commit)
+        self.assertEqual(True, self.gitarmony.is_local_commit(last_commit))
 
         # We are dropping the last commit locally.
         self.managed_clone.git.reset("--hard", commit.hexsha)
@@ -108,9 +110,11 @@ class GitarmonyTestCase(unittest.TestCase):
         print("POST-CHECKOUT TRACKED COMMITS")
         pprint(self.gitarmony.get_tracked_commits(pull=False))
 
-        # As a result it should now be a missing commit for the given file.
-        missing_commit = self.gitarmony.get_file_missing_commit("staged_image_02.jpg")
-        self.assertIsInstance(missing_commit, dict)
+        # As a result it should be a commit we do no have locally.
+        last_commit = self.gitarmony.get_file_last_commit(
+            "staged_image_02.jpg", pull=False, fetch=False, prune=False
+        )
+        self.assertEqual(False, self.gitarmony.is_local_commit(last_commit))
 
         self.assertEqual(False, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.gitarmony.config_path))

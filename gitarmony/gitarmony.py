@@ -228,7 +228,7 @@ class Gitarmony:
             return filename
         return os.path.join(self._managed_repository.working_dir, filename)
 
-    def last_file_commit(
+    def get_file_last_commit(
         self, filename: str, pull: bool = True, fetch: bool = True, prune: bool = True
     ) -> dict:
         """
@@ -280,19 +280,50 @@ class Gitarmony:
             git.objects.Commit.iter_items(self._managed_repository, active_branch)
         )
 
-    def is_contextual_commit(self, commit: dict) -> bool:
+    def is_local_commit(self, commit: dict) -> bool:
         """
         Args:
             commit (dict): The commit to check for.
 
         Returns:
-            bool: Whether the active branch has a specific commit.
+            bool: Whether we have this commit locally.
         """
-        hexsha = commit.get("sha", "")
-        if not hexsha:
-            return False
-        commit = git.objects.Commit(self._managed_repository, hex_to_bin(hexsha))
-        return commit in self.active_branch_commits
+        if self.is_tracked_commit(commit):
+            return self.is_issued_commit(commit)
+        else:
+            hexsha = commit.get("sha", "")
+            commit = git.objects.Commit(self._managed_repository, hex_to_bin(hexsha))
+            return commit in self.active_branch_commits
+
+    def is_remote_commit(self, commit: dict) -> bool:
+        """
+        Args:
+            commit (dict): The commit to check for.
+
+        Returns:
+            bool: Whether this commit lives on a remote branch.
+        """
+        return not self.is_tracked_commit(commit)
+
+    def is_other_commit(self, commit: dict) -> bool:
+        """
+        Args:
+            commit (dict): The commit to check for.
+
+        Returns:
+            bool: Whether this commit lives on another clone.
+        """
+        return self.is_tracked_commit(commit) and not self.is_issued_commit(commit)
+
+    def is_tracked_commit(self, commit: dict) -> bool:
+        """
+        Args:
+            commit (dict): The commit to check for.
+
+        Returns:
+            bool: Whether the commit does not exist on on origin.
+        """
+        return "user" in commit
 
     @staticmethod
     def is_pending_changes_commit(commit: dict) -> bool:
@@ -309,7 +340,7 @@ class Gitarmony:
     def pending_changes_commit(self) -> dict:
         """
         Returns:
-            dict: returns a commit dictionary for uncommitted changes.
+            dict: Returns a commit dictionary for uncommitted changes.
         """
         pending_changes = self.pending_changes
         if not pending_changes:
@@ -354,8 +385,10 @@ class Gitarmony:
             return False
         return self.is_issued_commit(commit)
 
-    def accumulate_local_commits(self, start: git.objects.Commit, local_commits: list):
-        """Accumulates a list of local commit starting from the provided commit.
+    def accumulate_local_only_commits(
+        self, start: git.objects.Commit, local_commits: list
+    ):
+        """Accumulates a list of local only commit starting from the provided commit.
 
         Args:
             local_commits (list): The accumulated local commits.
@@ -371,7 +404,7 @@ class Gitarmony:
         if commit_dict not in local_commits:
             local_commits.append(commit_dict)
         for parent in start.parents:
-            self.accumulate_local_commits(parent, local_commits)
+            self.accumulate_local_only_commits(parent, local_commits)
 
     @property
     def context_dict(self) -> dict:
@@ -386,14 +419,14 @@ class Gitarmony:
         }
 
     @property
-    def local_commits(self) -> list:
+    def local_only_commits(self) -> list:
         """
         Returns:
-            list: Commits and pending changes that are not on remote branches.
+            list: Commits that are not on remote branches. Includes uncommitted changes.
         """
         local_commits = []
         for branch in self._managed_repository.branches:
-            self.accumulate_local_commits(branch.commit, local_commits)
+            self.accumulate_local_only_commits(branch.commit, local_commits)
         pending_changes_commit = self.pending_changes_commit
         if pending_changes_commit:
             local_commits.insert(0, pending_changes_commit)
@@ -493,7 +526,7 @@ class Gitarmony:
                 continue
         # Adding all local commit to the list of tracked commits.
         # Will include uncommitted changes as a "fake" commit.
-        for commit in self.local_commits:
+        for commit in self.local_only_commits:
             tracked_commits.append(commit)
         json_path = self.tracked_commits_json_path
         with open(json_path, "w") as _file:
@@ -513,8 +546,8 @@ class Gitarmony:
 
         Returns:
             typing.List[dict]:
-                A list of tracked commits combining local commits and pending
-                uncommitted changes.
+                A list of commits including uncommitted pending changes that haven't
+                been pushed to origin.
         """
         origin = self.gitarmony_repository.remote()
         if pull and origin.refs:
@@ -530,27 +563,6 @@ class Gitarmony:
             if commit.get("origin") == origin:
                 relevant_commits.append(commit)
         return relevant_commits
-
-    def get_file_missing_commit(
-        self, filename: str, pull: bool = True, fetch: bool = True, prune: bool = True
-    ) -> dict:
-        """
-        Args:
-            filename (str):
-                The file to check for missing commits. Takes a path that's absolute or
-                relative to the managed repository. Returns: dict: The latest missing
-                commit that we are missing.
-        """
-        last_file_commit = self.last_file_commit(
-            filename, pull=pull, fetch=fetch, prune=prune
-        )
-        if (
-            not last_file_commit
-            or self.is_contextual_commit(last_file_commit)
-            or self.is_issued_commit(last_file_commit)
-        ):
-            return None
-        return last_file_commit
 
     def make_file_writable(
         self,
@@ -575,9 +587,10 @@ class Gitarmony:
         Returns:
             dict: The missing commit that we are missing.
         """
-        missing_commit = self.get_file_missing_commit(
+        last_commit = self.get_file_last_commit(
             filename, pull=pull, fetch=fetch, prune=prune
         )
+        missing_commit = None if self.is_local_commit(last_commit) else last_commit
         if force or not missing_commit:
             if os.path.exists(filename):
                 set_read_only(filename, False)
