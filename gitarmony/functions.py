@@ -1,6 +1,9 @@
 import os
+import time
 import stat
 import pathlib
+
+import git
 
 
 def is_binary_file(filename):
@@ -59,6 +62,25 @@ def get_real_path(filename: str) -> str:
     # On Windows, this private function is available and will return the real path
     # for a subst location.
     if hasattr(os.path, "_getfinalpathname"):
-        filename = os.path._getfinalpathname(filename)
+        filename = os.path._getfinalpathname(  # pylint: disable=protected-access
+            filename
+        )
         filename = str(pathlib.Path(filename).resolve())
     return filename
+
+
+def pulled_within(repository: git.Repo, seconds: float) -> bool:
+    """Summary
+
+    Args:
+        repository (git.Repo): The repository to check for.
+        seconds (float): Time in seconds since last push.
+
+    Returns:
+        TYPE: Whether the repository pulled within the time provided.
+    """
+    fetch_head = os.path.join(repository.git_dir, "FETCH_HEAD")
+    if not os.path.exists(fetch_head):
+        return False
+    since_last = time.time() - os.path.getmtime(fetch_head)
+    return seconds > since_last

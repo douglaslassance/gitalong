@@ -6,7 +6,6 @@ import json
 import socket
 import datetime
 import getpass
-import itertools
 import configparser
 
 import dictdiffer
@@ -14,10 +13,10 @@ import git
 
 from gitdb.util import hex_to_bin
 
+from .spread import Spread
 from .functions import get_real_path, is_binary_file
 from .exceptions import GitarmonyNotInstalled
-
-from .functions import set_read_only
+from .functions import set_read_only, pulled_within
 
 
 class Gitarmony:
@@ -54,6 +53,13 @@ class Gitarmony:
                 "Gitarmony is not installed on this repository."
             )
         self._config.read(self.config_path)
+        settings = self._config["settings"]
+        self._tracked_extensions = (
+            settings.get("tracked_extensions", "").replace(" ", "").split(",")
+        )
+        self._track_binaries = settings.get("track_binaries", False)
+        self._modify_permissions = settings.get("modify_permissions", False)
+        self._pull_treshold = float(settings.get("pull_treshold", 10.0))
 
     def _clone_gitarmony_repository(self):
         """
@@ -65,9 +71,9 @@ class Gitarmony:
                 os.path.join(self._managed_repository.working_dir, ".gitarmony")
             )
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
-            origin = self._config["settings"]["origin"]
+            remote = self._config["settings"]["remote"]
             return git.Repo.clone_from(
-                origin,
+                remote,
                 os.path.join(self._managed_repository.working_dir, ".gitarmony"),
             )
 
@@ -77,6 +83,10 @@ class Gitarmony:
         Returns:
             git.Repo: The gitarmony repository that keeps track of all commits.
         """
+        # TODO: Seems that this is a good place for this as we never want permissions
+        # changes to be seen as changes.
+        if self._modify_permissions:
+            self._managed_repository.git.config("core.fileMode", "false")
         return self._clone_gitarmony_repository()
 
     @classmethod
@@ -84,9 +94,12 @@ class Gitarmony:
         cls,
         gitarmony_repository: str,
         managed_repository: str = "",
+        modify_permissions=True,
+        track_binaries=True,
+        tracked_extensions=[],
         update_hooks: bool = True,
         update_gitignore: bool = True,
-        set_binary_permissions=True,
+        pull_treshold: float = 10.0,
     ):
         """Install Gitarmony on a repository.
 
@@ -98,8 +111,16 @@ class Gitarmony:
                 working directory. Current working directory if not passed.
             update_hooks (bool, optional):
                 Whether hooks should be installed.
-            set_binary_permissions (bool, optional):
+            modify_permissions (bool, optional):
                 Whether Gitarmony should managed permissions of binary files.
+            track_binaries (bool, optional):
+                Track all binary files by automatically detecting them.
+            tracked_extensions (list, optional):
+                List of extensions to track.
+            pull_treshold (list, optional):
+                Time in seconds that need to pass before Gitarmony pulls. Defaults to 10
+                seconds. This is for optimization sake as pull and fetch operation are
+                expensive.
 
         Deleted Parameters:
             Returns:
@@ -111,10 +132,12 @@ class Gitarmony:
             managed_repository, search_parent_directories=True
         )
         config = configparser.ConfigParser()
-        origin = gitarmony_repository
         config["settings"] = {
-            "origin": origin,
-            "set_binary_permissions": int(set_binary_permissions),
+            "remote_url": gitarmony_repository,
+            "modify_permissions": int(modify_permissions),
+            "track_binaries": int(track_binaries),
+            "tracked_extensions": ",".join(tracked_extensions),
+            "pull_treshold": int(pull_treshold),
         }
         config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
         with open(config_path, "w") as _file:
@@ -228,29 +251,34 @@ class Gitarmony:
             return filename
         return os.path.join(self._managed_repository.working_dir, filename)
 
-    def get_file_last_commit(
-        self, filename: str, pull: bool = True, fetch: bool = True, prune: bool = True
-    ) -> dict:
+    def get_file_last_commit(self, filename: str, prune: bool = True) -> dict:
         """
         Args:
             filename (str): The absolute or relative filename to get the last commit for.
+            prune (bool, optional): Prune branches if a fetch is necessary.
 
         Returns:
-            dict:
-                The last commit for the provided filename across all branches local or
+            dict: The last commit for the provided filename across all branches local or
                 remote.
         """
-        if fetch:
-            self._managed_repository.remotes.origin.fetch(prune=prune)
+        # We are checking the tacked commit first as they represented local changes.
+        # They are in nature always more recent. If we find a relevant commit here we
+        # can skip looking elsewhere.
+        tracked_commits = self.get_tracked_commits()
+        relevant_tracked_commits = []
+        for tracked_commit in tracked_commits:
+            for change in tracked_commit.get("changes", []):
+                if os.path.normpath(change) == os.path.normpath(filename):
+                    relevant_tracked_commits.append(tracked_commit)
+        if relevant_tracked_commits:
+            relevant_tracked_commits.sort(key=lambda commit: commit.get("date"))
+            return relevant_tracked_commits[-1]
+        if not pulled_within(self._managed_repository, self._pull_treshold):
+            self._managed_repository.remote().fetch(prune=prune)
         filename = self.get_relative_path(filename)
-        args = [
-            "--all",
-            "--remotes",
-            '--pretty=format:"%H"',
-            "--",
-            filename,
-        ]
+
         # TODO: Maybe there is a way to get this information using pure Python.
+        args = ["--all", "--remotes", '--pretty=format:"%H"', "--", filename]
         output = self._managed_repository.git.log(*args)
         file_commits = output.replace('"', "").split("\n") if output else []
         file_commits = [
@@ -259,14 +287,7 @@ class Gitarmony:
             )
             for c in file_commits
         ]
-        tracked_commits = self.get_tracked_commits(pull=pull)
-        relevant_tracked_commits = []
-        for tracked_commit in tracked_commits:
-            for change in tracked_commit.get("changes", []):
-                if os.path.normpath(change) == os.path.normpath(filename):
-                    relevant_tracked_commits.append(tracked_commit)
-        file_commits += relevant_tracked_commits
-        file_commits.sort(key=lambda commit: commit.get("date"), reverse=False)
+        file_commits.sort(key=lambda commit: commit.get("date"))
         return file_commits[-1] if file_commits else None
 
     @property
@@ -280,50 +301,49 @@ class Gitarmony:
             git.objects.Commit.iter_items(self._managed_repository, active_branch)
         )
 
-    def is_local_commit(self, commit: dict) -> bool:
+    def get_commit_spread(self, commit: dict) -> dict:
         """
         Args:
             commit (dict): The commit to check for.
 
         Returns:
-            bool: Whether we have this commit locally.
+            dict:
+                A dictionary of commit spread information containing all
+                information about where this commit lives across branches and clones.
         """
-        if self.is_tracked_commit(commit):
-            return self.is_issued_commit(commit)
+
+        spread = 0
+        active_branch = self._managed_repository.active_branch.name
+        if commit.get("user", ""):
+            is_issued = self.is_issued_commit(commit)
+            if "sha" in commit:
+                if active_branch in commit.get("branches", {}).get("local", []):
+                    spread |= (
+                        Spread.LOCAL_ACTIVE_BRANCH
+                        if is_issued
+                        else Spread.CLONE_MATCHING_BRANCH
+                    )
+                else:
+                    spread |= (
+                        Spread.LOCAL_OTHER_BRANCH
+                        if is_issued
+                        else Spread.CLONE_OTHER_BRANCH
+                    )
+            else:
+                spread |= (
+                    Spread.LOCAL_UNCOMMITTED if is_issued else Spread.CLONE_UNCOMMITTED
+                )
         else:
-            hexsha = commit.get("sha", "")
-            commit = git.objects.Commit(self._managed_repository, hex_to_bin(hexsha))
-            return commit in self.active_branch_commits
-
-    def is_remote_commit(self, commit: dict) -> bool:
-        """
-        Args:
-            commit (dict): The commit to check for.
-
-        Returns:
-            bool: Whether this commit lives on a remote branch.
-        """
-        return not self.is_tracked_commit(commit)
-
-    def is_other_commit(self, commit: dict) -> bool:
-        """
-        Args:
-            commit (dict): The commit to check for.
-
-        Returns:
-            bool: Whether this commit lives on another clone.
-        """
-        return self.is_tracked_commit(commit) and not self.is_issued_commit(commit)
-
-    def is_tracked_commit(self, commit: dict) -> bool:
-        """
-        Args:
-            commit (dict): The commit to check for.
-
-        Returns:
-            bool: Whether the commit does not exist on on origin.
-        """
-        return "user" in commit
+            remote_branches = commit.get("branches", {}).get("remote", [])
+            if active_branch in remote_branches:
+                spread |= Spread.REMOTE_MATCHING_BRANCH
+            if active_branch in commit.get("branches", {}).get("local", []):
+                spread |= Spread.LOCAL_ACTIVE_BRANCH
+            if active_branch in remote_branches:
+                remote_branches.remove(active_branch)
+            if remote_branches:
+                spread |= Spread.REMOTE_OTHER_BRANCH
+        return spread
 
     @staticmethod
     def is_pending_changes_commit(commit: dict) -> bool:
@@ -346,7 +366,7 @@ class Gitarmony:
         if not pending_changes:
             return {}
         pending_changes_commit = {
-            "origin": self._managed_repository.remotes.origin.url,
+            "remote": self._managed_repository.remote().url,
             "changes": self.pending_changes,
             "date": str(datetime.datetime.now()),
         }
@@ -400,6 +420,9 @@ class Gitarmony:
             return
         commit_dict = self.get_commit_dict(start)
         commit_dict.update(self.context_dict)
+        commit_dict.setdefault("branches", {})["local"] = self.get_commit_branches(
+            start.hexsha
+        )
         # TODO: Maybe we should compare the SHA here.
         if commit_dict not in local_commits:
             local_commits.append(commit_dict)
@@ -425,6 +448,7 @@ class Gitarmony:
             list: Commits that are not on remote branches. Includes uncommitted changes.
         """
         local_commits = []
+        # We are collecting local commit for all local branches.
         for branch in self._managed_repository.branches:
             self.accumulate_local_only_commits(branch.commit, local_commits)
         pending_changes_commit = self.pending_changes_commit
@@ -458,11 +482,35 @@ class Gitarmony:
         """
         return {
             "sha": commit.hexsha,
-            "origin": self._managed_repository.remotes.origin.url,
+            "remote": self._managed_repository.remote().url,
             "changes": list(commit.stats.files.keys()),
             "date": str(commit.committed_datetime),
             "author": commit.author.name,
+            "branches": {
+                "local": self.get_commit_branches(commit.hexsha),
+                "remote": self.get_commit_branches(commit.hexsha, remote=True),
+            },
         }
+
+    def get_commit_branches(self, hexsha: str, remote: bool = False) -> list:
+        """
+        Args:
+            hexsha (str): The hexsha of the commit to check for.
+            remote (bool, optional): Whether we should return local or remote branches.
+
+        Returns:
+            list: A list of branch names that this commit is living on.
+        """
+        args = ["--remote" if remote else []]
+        args += ["--contains", hexsha]
+        branches = self._managed_repository.git.branch(*args)
+        branches = branches.replace("*", "")
+        branches = branches.replace(" ", "")
+        branches = branches.split("\n")
+        branch_names = set()
+        for branch in branches:
+            branch_names.add(branch.split("/")[-1])
+        return list(branch_names)
 
     @property
     def tracked_commits_json_path(self):
@@ -472,13 +520,10 @@ class Gitarmony:
         """
         return os.path.join(self.gitarmony_repository.working_dir, "commits.json")
 
-    def update_binary_permisions(self, force=False):
+    def update_tracked_files_permissions(self, force=False):
         """Updates binary permissions taking preferences into account."""
-        update_binary_permisions = self._config["settings"].get(
-            "update_binary_permisions", False
-        )
-        if force and update_binary_permisions:
-            self.make_binary_files_read_only()
+        if force and self._modify_permissions:
+            self.make_tracked_files_read_only()
 
     def is_ignored(self, filename: str) -> bool:
         """
@@ -495,19 +540,37 @@ class Gitarmony:
         except git.exc.GitCommandError:
             return False
 
-    def make_binary_files_read_only(self, dirname=""):
-        """Make binary files that aren't ignored read-only."""
+    def make_tracked_files_read_only(self, dirname=""):
+        """Make binary files that aren't ignored read-only.
+
+        Args:
+            dirname (str, optional):
+                The directory recurse into. Defaults to the managed repository root.
+        """
         dirname = dirname or self._managed_repository.working_dir
         for basename in os.listdir(dirname):
-            filename = os.path.join(dirname, basename)
-            if os.path.isdir(filename):
-                if basename == ".git" or self.is_ignored(filename):
+            path = os.path.join(dirname, basename)
+            if os.path.isdir(path):
+                if basename == ".git" or self.is_ignored(path):
                     continue
-                self.make_binary_files_read_only(filename)
+                self.make_tracked_files_read_only(path)
             else:
-                if self.is_ignored(filename) or not is_binary_file(filename):
-                    continue
-                set_read_only(filename, read_only=True, check_exists=False)
+                if self.is_file_tracked(path):
+                    set_read_only(path, read_only=True, check_exists=False)
+
+    def is_file_tracked(self, filename: str) -> bool:
+        """
+        Args:
+            filename (str): The file path to check for.
+
+        Returns:
+            bool: Whether the file is tracked by Gitarmony.
+        """
+        if self.is_ignored(filename):
+            return False
+        elif self._track_binaries and is_binary_file(filename):
+            return True
+        return os.path.splitext(filename)[-1] in self._tracked_extensions
 
     def update_tracked_commits(self, push=True):
         """Updates the JSON that tracks local commits from everyone working on the
@@ -515,12 +578,12 @@ class Gitarmony:
 
         Args:
             push (bool, optional):
-                Whether we should push the changes immediately to origin.
+                Whether we should push the changes immediately to remote.
         """
         # Removing any matching contextual commits from tracked commits.
         # We are re-evaluating those.
         tracked_commits = []
-        for commit in self.get_tracked_commits(pull=True):
+        for commit in self.get_tracked_commits():
             if not self.is_issued_commit(commit):
                 tracked_commits.append(commit)
                 continue
@@ -538,37 +601,37 @@ class Gitarmony:
             self.gitarmony_repository.index.commit(message=f"Update {basename}")
             self.gitarmony_repository.remote().push()
 
-    def get_tracked_commits(self, pull=True) -> typing.List[dict]:
+    def get_tracked_commits(self) -> typing.List[dict]:
         """
-        Args:
-            pull (bool, optional):
-                Whether or not we want to pull the latest tracked commits.
-
         Returns:
             typing.List[dict]:
                 A list of commits including uncommitted pending changes that haven't
-                been pushed to origin.
+                been pushed to remote.
         """
-        origin = self.gitarmony_repository.remote()
-        if pull and origin.refs:
-            origin.pull(ff=True)
-        serializable_commits = []
-        origin = self._managed_repository.remotes.origin.url
+        gitarmony_repository = self.gitarmony_repository
+        remote = gitarmony_repository.remote()
+        if not pulled_within(gitarmony_repository, self._pull_treshold) and remote.refs:
+            remote.pull(
+                ff=True,
+                quiet=True,
+                rebase=True,
+                autostash=True,
+                verify=False,
+                summary=False,
+            )
         serializable_commits = []
         if os.path.exists(self.tracked_commits_json_path):
             with open(self.tracked_commits_json_path, "r") as _file:
                 serializable_commits = json.loads(_file.read())
         relevant_commits = []
         for commit in serializable_commits:
-            if commit.get("origin") == origin:
+            if commit.get("remote") == self._managed_repository.remote().url:
                 relevant_commits.append(commit)
         return relevant_commits
 
     def make_file_writable(
         self,
         filename: str,
-        pull: bool = True,
-        fetch: bool = True,
         prune: bool = True,
         force=False,
     ) -> dict:
@@ -587,19 +650,20 @@ class Gitarmony:
         Returns:
             dict: The missing commit that we are missing.
         """
-        last_commit = self.get_file_last_commit(
-            filename, pull=pull, fetch=fetch, prune=prune
+        last_commit = self.get_file_last_commit(filename, prune=prune)
+        spread = self.get_commit_spread(last_commit)
+        is_local_commit = (
+            spread & Spread.LOCAL_ACTIVE_BRANCH == Spread.LOCAL_ACTIVE_BRANCH
         )
-        missing_commit = None if self.is_local_commit(last_commit) else last_commit
+        is_local_pending = spread & Spread.LOCAL_UNCOMMITTED == Spread.LOCAL_UNCOMMITTED
+
+        missing_commit = None if is_local_commit or is_local_pending else last_commit
         if force or not missing_commit:
             if os.path.exists(filename):
                 set_read_only(filename, False)
-        update_binary_permisions = self.config["settings"].get(
-            "update_binary_permisions", False
-        )
         # Since we figured out this file should not be touched,we'll also lock the file
         # here in case it was not locked.
-        if update_binary_permisions:
+        if self._modify_permissions:
             if os.path.exists(filename):
                 set_read_only(filename, True)
         return missing_commit
