@@ -27,7 +27,7 @@ class Gitarmony:
         config_basename (str): The basename of the Gitarmony configuration file.
     """
 
-    config_basename = ".gitarmony.cfg"
+    config_basename = ".gitarmony.json"
 
     def __init__(self, managed_repository: str = ""):
         """
@@ -44,22 +44,13 @@ class Gitarmony:
         self._managed_repository = git.Repo(
             managed_repository, search_parent_directories=True
         )
-        self._config = configparser.ConfigParser()
-        self._config_path = os.path.join(
-            self._managed_repository.working_dir, self.config_basename
-        )
-        if not os.path.exists(self._config_path):
+        try:
+            with open(self.config_path) as _config_file:
+                self._config = json.loads(_config_file.read())
+        except FileNotFoundError as error:
             raise GitarmonyNotInstalled(
                 "Gitarmony is not installed on this repository."
-            )
-        self._config.read(self.config_path)
-        settings = self._config["settings"]
-        self._tracked_extensions = (
-            settings.get("tracked_extensions", "").replace(" ", "").split(",")
-        )
-        self._track_binaries = settings.get("track_binaries", False)
-        self._modify_permissions = settings.get("modify_permissions", False)
-        self._pull_treshold = float(settings.get("pull_treshold", 10.0))
+            ) from error
 
     def _clone_gitarmony_repository(self):
         """
@@ -71,7 +62,7 @@ class Gitarmony:
                 os.path.join(self._managed_repository.working_dir, ".gitarmony")
             )
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
-            remote = self._config["settings"]["remote"]
+            remote = self._config.get("remote_url")
             return git.Repo.clone_from(
                 remote,
                 os.path.join(self._managed_repository.working_dir, ".gitarmony"),
@@ -85,7 +76,7 @@ class Gitarmony:
         """
         # TODO: Seems that this is a good place for this as we never want permissions
         # changes to be seen as changes.
-        if self._modify_permissions:
+        if self._config.get("modify_permissions", False):
             self._managed_repository.git.config("core.fileMode", "false")
         return self._clone_gitarmony_repository()
 
@@ -131,18 +122,17 @@ class Gitarmony:
         managed_repository = git.Repo(
             managed_repository, search_parent_directories=True
         )
-        config = configparser.ConfigParser()
-        config["settings"] = {
-            "remote_url": gitarmony_repository,
-            "modify_permissions": int(modify_permissions),
-            "track_binaries": int(track_binaries),
-            "tracked_extensions": ",".join(tracked_extensions),
-            "pull_treshold": int(pull_treshold),
-        }
         config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
-        with open(config_path, "w") as _file:
-            config.write(_file)
-
+        with open(config_path, "w") as _config_file:
+            config_settings = {
+                "remote_url": gitarmony_repository,
+                "modify_permissions": int(modify_permissions),
+                "track_binaries": int(track_binaries),
+                "tracked_extensions": ",".join(tracked_extensions),
+                "pull_treshold": int(pull_treshold),
+            }
+            dump = json.dumps(config_settings, indent=4, sort_keys=True)
+            _config_file.write(dump)
         gitarmony = cls(managed_repository.working_dir)
         gitarmony._clone_gitarmony_repository()
         if update_gitignore:
@@ -181,18 +171,18 @@ class Gitarmony:
         return self._managed_repository
 
     @property
-    def config_path(self) -> configparser.ConfigParser:
+    def config_path(self) -> str:
         """
         Returns:
-            dict: The content of `.gitarmony.cfg` as a dictionary.
+            dict: The content of `.gitarmony.json` as a dictionary.
         """
-        return self._config_path
+        return os.path.join(self._managed_repository.working_dir, self.config_basename)
 
     @property
-    def config(self) -> configparser.ConfigParser:
+    def config(self) -> dict:
         """
         Returns:
-            dict: The content of `.gitarmony.cfg` as a dictionary.
+            dict: The content of `.gitarmony.json` as a dictionary.
         """
         return self._config
 
@@ -273,7 +263,8 @@ class Gitarmony:
         if relevant_tracked_commits:
             relevant_tracked_commits.sort(key=lambda commit: commit.get("date"))
             return relevant_tracked_commits[-1]
-        if not pulled_within(self._managed_repository, self._pull_treshold):
+        pull_treshold = self._config.get("pull_treshold", 10)
+        if not pulled_within(self._managed_repository, pull_treshold):
             self._managed_repository.remote().fetch(prune=prune)
         filename = self.get_relative_path(filename)
 
@@ -522,7 +513,7 @@ class Gitarmony:
 
     def update_tracked_files_permissions(self, force=False):
         """Updates binary permissions taking preferences into account."""
-        if force and self._modify_permissions:
+        if force and self._config.get("modify_permissions", False):
             self.make_tracked_files_read_only()
 
     def is_ignored(self, filename: str) -> bool:
@@ -568,9 +559,10 @@ class Gitarmony:
         """
         if self.is_ignored(filename):
             return False
-        elif self._track_binaries and is_binary_file(filename):
+        elif self._config.get("track_binaries", False) and is_binary_file(filename):
             return True
-        return os.path.splitext(filename)[-1] in self._tracked_extensions
+        tracked_extensions = self._config.get("tracked_extensions", [])
+        return os.path.splitext(filename)[-1] in tracked_extensions
 
     def update_tracked_commits(self, push=True):
         """Updates the JSON that tracks local commits from everyone working on the
@@ -610,7 +602,8 @@ class Gitarmony:
         """
         gitarmony_repository = self.gitarmony_repository
         remote = gitarmony_repository.remote()
-        if not pulled_within(gitarmony_repository, self._pull_treshold) and remote.refs:
+        pull_treshold = self._config.get("pull_treshold", 10)
+        if not pulled_within(gitarmony_repository, pull_treshold) and remote.refs:
             remote.pull(
                 ff=True,
                 quiet=True,
@@ -663,7 +656,7 @@ class Gitarmony:
                 set_read_only(filename, False)
         # Since we figured out this file should not be touched,we'll also lock the file
         # here in case it was not locked.
-        if self._modify_permissions:
+        if self._config.get("modify_permissions", False):
             if os.path.exists(filename):
                 set_read_only(filename, True)
         return missing_commit
