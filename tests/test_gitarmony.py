@@ -7,7 +7,7 @@ import logging
 from pprint import pprint
 from git import Repo
 
-from gitarmony.gitarmony import Gitarmony, Spread
+from gitarmony.gitarmony import Gitarmony, CommitSpread
 from gitarmony.functions import is_read_only
 
 from .functions import save_image
@@ -110,7 +110,8 @@ class GitarmonyTestCase(unittest.TestCase):
         last_commit = self.gitarmony.get_file_last_commit("staged_image_02.jpg")
         spread = self.gitarmony.get_commit_spread(last_commit)
         self.assertEqual(
-            Spread.LOCAL_ACTIVE_BRANCH | Spread.REMOTE_MATCHING_BRANCH, spread
+            CommitSpread.LOCAL_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH,
+            spread,
         )
 
         # We are dropping the last commit locally.
@@ -123,7 +124,7 @@ class GitarmonyTestCase(unittest.TestCase):
         # As a result it should be a commit we do no have locally.
         last_commit = self.gitarmony.get_file_last_commit("staged_image_02.jpg")
         spread = self.gitarmony.get_commit_spread(last_commit)
-        self.assertEqual(Spread.REMOTE_MATCHING_BRANCH, spread)
+        self.assertEqual(CommitSpread.REMOTE_MATCHING_BRANCH, spread)
 
         self.assertEqual(False, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.gitarmony.config_path))

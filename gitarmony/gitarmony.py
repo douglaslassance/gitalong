@@ -13,7 +13,7 @@ import git
 
 from gitdb.util import hex_to_bin
 
-from .spread import Spread
+from .enums import CommitSpread
 from .functions import get_real_path, is_binary_file
 from .exceptions import GitarmonyNotInstalled
 from .functions import set_read_only, pulled_within
@@ -303,38 +303,40 @@ class Gitarmony:
                 information about where this commit lives across branches and clones.
         """
 
-        spread = 0
+        commit_spread = 0
         active_branch = self._managed_repository.active_branch.name
         if commit.get("user", ""):
             is_issued = self.is_issued_commit(commit)
             if "sha" in commit:
                 if active_branch in commit.get("branches", {}).get("local", []):
-                    spread |= (
-                        Spread.LOCAL_ACTIVE_BRANCH
+                    commit_spread |= (
+                        CommitSpread.LOCAL_ACTIVE_BRANCH
                         if is_issued
-                        else Spread.CLONE_MATCHING_BRANCH
+                        else CommitSpread.CLONE_MATCHING_BRANCH
                     )
                 else:
-                    spread |= (
-                        Spread.LOCAL_OTHER_BRANCH
+                    commit_spread |= (
+                        CommitSpread.LOCAL_OTHER_BRANCH
                         if is_issued
-                        else Spread.CLONE_OTHER_BRANCH
+                        else CommitSpread.CLONE_OTHER_BRANCH
                     )
             else:
-                spread |= (
-                    Spread.LOCAL_UNCOMMITTED if is_issued else Spread.CLONE_UNCOMMITTED
+                commit_spread |= (
+                    CommitSpread.LOCAL_UNCOMMITTED
+                    if is_issued
+                    else CommitSpread.CLONE_UNCOMMITTED
                 )
         else:
             remote_branches = commit.get("branches", {}).get("remote", [])
             if active_branch in remote_branches:
-                spread |= Spread.REMOTE_MATCHING_BRANCH
+                commit_spread |= CommitSpread.REMOTE_MATCHING_BRANCH
             if active_branch in commit.get("branches", {}).get("local", []):
-                spread |= Spread.LOCAL_ACTIVE_BRANCH
+                commit_spread |= CommitSpread.LOCAL_ACTIVE_BRANCH
             if active_branch in remote_branches:
                 remote_branches.remove(active_branch)
             if remote_branches:
-                spread |= Spread.REMOTE_OTHER_BRANCH
-        return spread
+                commit_spread |= CommitSpread.REMOTE_OTHER_BRANCH
+        return commit_spread
 
     @staticmethod
     def is_pending_changes_commit(commit: dict) -> bool:
@@ -646,9 +648,12 @@ class Gitarmony:
         last_commit = self.get_file_last_commit(filename, prune=prune)
         spread = self.get_commit_spread(last_commit)
         is_local_commit = (
-            spread & Spread.LOCAL_ACTIVE_BRANCH == Spread.LOCAL_ACTIVE_BRANCH
+            spread & CommitSpread.LOCAL_ACTIVE_BRANCH
+            == CommitSpread.LOCAL_ACTIVE_BRANCH
         )
-        is_local_pending = spread & Spread.LOCAL_UNCOMMITTED == Spread.LOCAL_UNCOMMITTED
+        is_local_pending = (
+            spread & CommitSpread.LOCAL_UNCOMMITTED == CommitSpread.LOCAL_UNCOMMITTED
+        )
 
         missing_commit = None if is_local_commit or is_local_pending else last_commit
         if force or not missing_commit:

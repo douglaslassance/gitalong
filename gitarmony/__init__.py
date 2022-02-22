@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from .__info__ import __version__, __copyright__, __email__, __author__
 from .gitarmony import Gitarmony
-from .spread import Spread
+from .enums import CommitSpread
 from .exceptions import GitarmonyNotInstalled
 
 
