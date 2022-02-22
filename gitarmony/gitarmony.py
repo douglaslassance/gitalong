@@ -52,6 +52,10 @@ class Gitarmony:
                 "Gitarmony is not installed on this repository."
             ) from error
 
+        if self._config.get("modify_permissions", False):
+            self._managed_repository.git.config("core.fileMode", "false")
+        self._gitarmony_repository = self._clone_gitarmony_repository()
+
     def _clone_gitarmony_repository(self):
         """
         Returns:
@@ -67,18 +71,6 @@ class Gitarmony:
                 remote,
                 os.path.join(self._managed_repository.working_dir, ".gitarmony"),
             )
-
-    @property
-    def gitarmony_repository(self) -> git.Repo:
-        """
-        Returns:
-            git.Repo: The gitarmony repository that keeps track of all commits.
-        """
-        # TODO: Seems that this is a good place for this as we never want permissions
-        # changes to be seen as changes.
-        if self._config.get("modify_permissions", False):
-            self._managed_repository.git.config("core.fileMode", "false")
-        return self._clone_gitarmony_repository()
 
     @classmethod
     def install(
@@ -465,7 +457,7 @@ class Gitarmony:
         untracked_changes = output.split("\n") if output else []
         output = git_cmd.diff("--cached", "--name-only")
         staged_changes = output.split("\n") if output else []
-        # A file can be in both in un-tracked and staged changes. The set fixes that.
+        # A file can be in both in untracked and staged changes. The set fixes that.
         return list(set(untracked_changes + staged_changes))
 
     def get_commit_dict(self, commit: git.objects.Commit) -> dict:
@@ -514,7 +506,7 @@ class Gitarmony:
         Returns:
             TYPE: The path to the JSON file that tracks the local commits.
         """
-        return os.path.join(self.gitarmony_repository.working_dir, "commits.json")
+        return os.path.join(self._gitarmony_repository.working_dir, "commits.json")
 
     def update_tracked_files_permissions(self, force=False):
         """Updates binary permissions taking preferences into account."""
@@ -593,10 +585,10 @@ class Gitarmony:
             dump = json.dumps(tracked_commits, indent=4, sort_keys=True)
             _file.write(dump)
         if push:
-            self.gitarmony_repository.index.add(json_path)
+            self._gitarmony_repository.index.add(json_path)
             basename = os.path.basename(json_path)
-            self.gitarmony_repository.index.commit(message=f"Update {basename}")
-            self.gitarmony_repository.remote().push()
+            self._gitarmony_repository.index.commit(message=f"Update {basename}")
+            self._gitarmony_repository.remote().push()
 
     def get_tracked_commits(self) -> typing.List[dict]:
         """
@@ -605,7 +597,7 @@ class Gitarmony:
                 A list of commits including uncommitted pending changes that haven't
                 been pushed to remote.
         """
-        gitarmony_repository = self.gitarmony_repository
+        gitarmony_repository = self._gitarmony_repository
         remote = gitarmony_repository.remote()
         pull_treshold = self._config.get("pull_treshold", 10)
         if not pulled_within(gitarmony_repository, pull_treshold) and remote.refs:
