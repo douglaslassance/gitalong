@@ -502,7 +502,7 @@ class Gitarmony:
         branches = self._managed_repository.git.branch(*args)
         branches = branches.replace("*", "")
         branches = branches.replace(" ", "")
-        branches = branches.split("\n")
+        branches = branches.split("\n") if branches else []
         branch_names = set()
         for branch in branches:
             branch_names.add(branch.split("/")[-1])
