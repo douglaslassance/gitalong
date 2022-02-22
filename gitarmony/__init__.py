@@ -1,14 +1,12 @@
 import os
 import logging
 
-import coloredlogs
-
 from dotenv import load_dotenv
 
-from .__info__ import __version__, __copyright__, __email__, __author__
-from .gitarmony import Gitarmony
-from .enums import CommitSpread
-from .exceptions import GitarmonyNotInstalled
+from .__info__ import __version__, __copyright__, __email__, __author__  # noqa: F401
+from .gitarmony import Gitarmony  # noqa: F401
+from .enums import CommitSpread  # noqa: F401
+from .exceptions import GitarmonyNotInstalled  # noqa: F401
 
 
 # Performing global setup.
