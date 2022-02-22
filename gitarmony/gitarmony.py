@@ -45,7 +45,7 @@ class Gitarmony:
             managed_repository, search_parent_directories=True
         )
         try:
-            with open(self.config_path) as _config_file:
+            with open(self.config_path, encoding="utf8") as _config_file:
                 self._config = json.loads(_config_file.read())
         except FileNotFoundError as error:
             raise GitarmonyNotInstalled(
@@ -87,7 +87,7 @@ class Gitarmony:
         managed_repository: str = "",
         modify_permissions=True,
         track_binaries=True,
-        tracked_extensions=[],
+        tracked_extensions=None,
         update_hooks: bool = True,
         update_gitignore: bool = True,
         pull_treshold: float = 10.0,
@@ -119,11 +119,12 @@ class Gitarmony:
                     The gitarmony management class corresponding to the repository in
                     which we just installed.
         """
+        tracked_extensions = tracked_extensions or []
         managed_repository = git.Repo(
             managed_repository, search_parent_directories=True
         )
         config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
-        with open(config_path, "w") as _config_file:
+        with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
                 "remote_url": gitarmony_repository,
                 "modify_permissions": int(modify_permissions),
@@ -151,12 +152,13 @@ class Gitarmony:
         )
         content = ""
         if os.path.exists(gitignore_path):
-            with open(gitignore_path) as gitignore:
+            with open(gitignore_path, encoding="utf8") as gitignore:
                 content = gitignore.read()
-        with open(gitignore_path, "w") as gitignore:
+        with open(gitignore_path, "w", encoding="utf8") as gitignore:
             with open(
                 # Reading our .gitignore template.
-                os.path.join(os.path.dirname(__file__), "resources", "gitignore")
+                os.path.join(os.path.dirname(__file__), "resources", "gitignore"),
+                encoding="utf8",
             ) as patch:
                 patch_content = patch.read()
             if patch_content not in content:
@@ -214,7 +216,8 @@ class Gitarmony:
             for basename in basenames:
                 filename = os.path.join(dirname, basename)
                 destination = os.path.join(destination_dir, basename)
-                logging.info("Copying hook from {} to {}".format(filename, destination))
+                msg = f"Copying hook from {filename} to {destination}"
+                logging.info(msg)
                 shutil.copyfile(filename, destination)
 
     def get_relative_path(self, filename: str) -> str:
@@ -244,7 +247,7 @@ class Gitarmony:
     def get_file_last_commit(self, filename: str, prune: bool = True) -> dict:
         """
         Args:
-            filename (str): The absolute or relative filename to get the last commit for.
+            filename (str): Absolute or relative filename to get the last commit for.
             prune (bool, optional): Prune branches if a fetch is necessary.
 
         Returns:
@@ -524,7 +527,7 @@ class Gitarmony:
             filename (str): The filename to check for.
 
         Returns:
-            bool: Whether if a file is ignored by the managed repository .gitignore file.
+            bool: Whether a file is ignored by the managed repository .gitignore file.
         """
         filename = self.get_relative_path(filename)
         try:
@@ -561,7 +564,7 @@ class Gitarmony:
         """
         if self.is_ignored(filename):
             return False
-        elif self._config.get("track_binaries", False) and is_binary_file(filename):
+        if self._config.get("track_binaries", False) and is_binary_file(filename):
             return True
         tracked_extensions = self._config.get("tracked_extensions", [])
         return os.path.splitext(filename)[-1] in tracked_extensions

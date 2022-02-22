@@ -6,7 +6,6 @@ import logging
 
 from gitarmony.functions import (
     is_binary_file,
-    is_ci_runner_host,
     set_read_only,
     is_read_only,
 )
@@ -31,12 +30,6 @@ class FunctionsTestCase(unittest.TestCase):
         image_path = os.path.join(self.temp_dir, "image.jpg")
         save_image(image_path)
         self.assertEqual(True, is_binary_file(image_path))
-
-    def test_is_runner_host(self):
-        os.environ["CI"] = "1"
-        self.assertEqual(True, is_ci_runner_host())
-        del os.environ["CI"]
-        self.assertEqual(False, is_ci_runner_host())
 
     def test_set_read_only(self):
         image_path = os.path.join(self.temp_dir, "set_read_only.jpg")
