@@ -7,6 +7,16 @@
 A Python API allowing to interact with Gitarmony features on a Git repository.
 More about Gitarmony in this [medium article]().
 
+## Pre-requisites
+
+-   [Git >=2.35.1](https://git-scm.com/downloads)
+
+## Installation
+
+```
+pip install gitarmony
+```
+
 ## Usage
 
 ```python
