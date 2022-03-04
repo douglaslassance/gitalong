@@ -1,3 +1,5 @@
+"""API to perform Gitarmony operations on a Git repository."""
+
 import os
 import logging
 

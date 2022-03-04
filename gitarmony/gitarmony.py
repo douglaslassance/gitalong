@@ -11,6 +11,7 @@ import configparser
 import dictdiffer
 import git
 
+from git import Repo
 from gitdb.util import hex_to_bin
 
 from .enums import CommitSpread
@@ -29,19 +30,24 @@ class Gitarmony:
 
     config_basename = ".gitarmony.json"
 
-    def __init__(self, managed_repository: str = ""):
+    def __init__(self, managed_repository: str = "", git_binary: str = ""):
         """
         Args:
             managed_repository (str, optional):
                 The managed repository. Current working directory if not passed.
+            git_binary (str, optional):
+                Path to specific Git binary. Will find the one in PATH by default.
 
         Raises:
-            gitarmony.exceptions.GitarmonyNotInstalled: Description
+            GitarmonyNotInstalled: Description
 
         No Longer Raises:
             git.exc.GitarmonyNotInstalled: Description
+            gitarmony.exceptions.GitarmonyNotInstalled: Description
         """
-        self._managed_repository = git.Repo(
+        if git_binary:
+            git.refresh(git_binary)
+        self._managed_repository = Repo(
             managed_repository, search_parent_directories=True
         )
         try:
@@ -52,8 +58,14 @@ class Gitarmony:
                 "Gitarmony is not installed on this repository."
             ) from error
 
-        if self._config.get("modify_permissions", False):
-            self._managed_repository.git.config("core.fileMode", "false")
+        if self._config.get(
+            "modify_permissions", False
+        ) and self._managed_repository.config_reader().get_value(
+            "core", "fileMode", True
+        ):
+            config_writer = self._managed_repository.config_writer()
+            config_writer.set_value("core", "fileMode", "false")
+            config_writer.release()
         self._gitarmony_repository = self._clone_gitarmony_repository()
 
     def _clone_gitarmony_repository(self):
@@ -62,12 +74,12 @@ class Gitarmony:
             git.Repo: Clones the gitarmony repository if not done already.
         """
         try:
-            return git.Repo(
+            return Repo(
                 os.path.join(self._managed_repository.working_dir, ".gitarmony")
             )
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
             remote = self._config.get("remote_url")
-            return git.Repo.clone_from(
+            return Repo.clone_from(
                 remote,
                 os.path.join(self._managed_repository.working_dir, ".gitarmony"),
             )
@@ -83,6 +95,7 @@ class Gitarmony:
         update_hooks: bool = True,
         update_gitignore: bool = True,
         pull_treshold: float = 10.0,
+        git_binary="",
     ):
         """Install Gitarmony on a repository.
 
@@ -104,6 +117,8 @@ class Gitarmony:
                 Time in seconds that need to pass before Gitarmony pulls. Defaults to 10
                 seconds. This is for optimization sake as pull and fetch operation are
                 expensive.
+            git_binary (str, optional):
+                Path to specific Git binary. Will find the one in PATH by default.
 
         Deleted Parameters:
             Returns:
@@ -112,9 +127,7 @@ class Gitarmony:
                     which we just installed.
         """
         tracked_extensions = tracked_extensions or []
-        managed_repository = git.Repo(
-            managed_repository, search_parent_directories=True
-        )
+        managed_repository = Repo(managed_repository, search_parent_directories=True)
         config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
         with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
@@ -126,7 +139,9 @@ class Gitarmony:
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
-        gitarmony = cls(managed_repository.working_dir)
+        gitarmony = cls(
+            managed_repository=managed_repository.working_dir, git_binary=git_binary
+        )
         gitarmony._clone_gitarmony_repository()
         if update_gitignore:
             gitarmony.update_gitignore()
@@ -157,7 +172,7 @@ class Gitarmony:
                 gitignore.write(content + patch_content)
 
     @property
-    def managed_repository(self) -> git.Repo:
+    def managed_repository(self) -> Repo:
         """
         Returns:
             git.Repo: The repository we are managing with Gitarmony.
@@ -251,6 +266,7 @@ class Gitarmony:
         # can skip looking elsewhere.
         tracked_commits = self.get_tracked_commits()
         relevant_tracked_commits = []
+        filename = self.get_relative_path(filename)
         for tracked_commit in tracked_commits:
             for change in tracked_commit.get("changes", []):
                 if os.path.normpath(change) == os.path.normpath(filename):
@@ -260,8 +276,10 @@ class Gitarmony:
             return relevant_tracked_commits[-1]
         pull_treshold = self._config.get("pull_treshold", 10)
         if not pulled_within(self._managed_repository, pull_treshold):
-            self._managed_repository.remote().fetch(prune=prune)
-        filename = self.get_relative_path(filename)
+            try:
+                self._managed_repository.remote().fetch(prune=prune)
+            except git.exc.GitCommandError:
+                pass
 
         # TODO: Maybe there is a way to get this information using pure Python.
         args = ["--all", "--remotes", '--pretty=format:"%H"', "--", filename]
@@ -274,7 +292,14 @@ class Gitarmony:
             for c in file_commits
         ]
         file_commits.sort(key=lambda commit: commit.get("date"))
-        return file_commits[-1] if file_commits else None
+        last_commit = file_commits[-1] if file_commits else None
+        if last_commit and "sha" in last_commit:
+            # We are only evaluating branch information here because it's expensive.
+            last_commit["branches"] = {
+                "local": self.get_commit_branches(last_commit["sha"]),
+                "remote": self.get_commit_branches(last_commit["sha"], remote=True),
+            }
+        return last_commit
 
     @property
     def active_branch_commits(self) -> list:
@@ -297,7 +322,6 @@ class Gitarmony:
                 A dictionary of commit spread information containing all
                 information about where this commit lives across branches and clones.
         """
-
         commit_spread = 0
         active_branch = self._managed_repository.active_branch.name
         if commit.get("user", ""):
@@ -408,9 +432,6 @@ class Gitarmony:
             return
         commit_dict = self.get_commit_dict(start)
         commit_dict.update(self.context_dict)
-        commit_dict.setdefault("branches", {})["local"] = self.get_commit_branches(
-            start.hexsha
-        )
         # TODO: Maybe we should compare the SHA here.
         if commit_dict not in local_commits:
             local_commits.append(commit_dict)
@@ -474,10 +495,6 @@ class Gitarmony:
             "changes": list(commit.stats.files.keys()),
             "date": str(commit.committed_datetime),
             "author": commit.author.name,
-            "branches": {
-                "local": self.get_commit_branches(commit.hexsha),
-                "remote": self.get_commit_branches(commit.hexsha, remote=True),
-            },
         }
 
     def get_commit_branches(self, hexsha: str, remote: bool = False) -> list:
@@ -556,10 +573,11 @@ class Gitarmony:
         """
         if self.is_ignored(filename):
             return False
-        if self._config.get("track_binaries", False) and is_binary_file(filename):
-            return True
         tracked_extensions = self._config.get("tracked_extensions", [])
-        return os.path.splitext(filename)[-1] in tracked_extensions
+        if os.path.splitext(filename)[-1] in tracked_extensions:
+            return True
+        # The binary check is expensive so we are doing it last.
+        return self._config.get("track_binaries", False) and is_binary_file(filename)
 
     def update_tracked_commits(self, push=True):
         """Updates the JSON that tracks local commits from everyone working on the
@@ -601,14 +619,19 @@ class Gitarmony:
         remote = gitarmony_repository.remote()
         pull_treshold = self._config.get("pull_treshold", 10)
         if not pulled_within(gitarmony_repository, pull_treshold) and remote.refs:
-            remote.pull(
-                ff=True,
-                quiet=True,
-                rebase=True,
-                autostash=True,
-                verify=False,
-                summary=False,
-            )
+            # TODO: If we could check that a pull is already happening then we could
+            # avoid this try except and save time.
+            try:
+                remote.pull(
+                    ff=True,
+                    quiet=True,
+                    rebase=True,
+                    autostash=True,
+                    verify=False,
+                    summary=False,
+                )
+            except git.exc.GitCommandError:
+                pass
         serializable_commits = []
         if os.path.exists(self.tracked_commits_json_path):
             with open(self.tracked_commits_json_path, "r") as _file:
