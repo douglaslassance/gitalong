@@ -1,0 +1,6 @@
+#!/bin/sh
+if (where gitarmony) then
+	gitarmony sync
+else
+	echo "Gitarmony CLI is not installed on this system."
+fi

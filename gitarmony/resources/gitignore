@@ -1,0 +1,4 @@
+# Gitarmony
+/.gitarmony/
+!/.gitarmony.cfg
+!run-gitarmony-sync.yml

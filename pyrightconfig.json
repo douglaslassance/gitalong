@@ -1,0 +1,5 @@
+{
+    "venvPath": "$WORKON_HOME",
+    "venv": "gitarmony",
+    "reportGeneralTypeIssues": false
+}
