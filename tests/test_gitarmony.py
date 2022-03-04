@@ -4,7 +4,6 @@ import tempfile
 import unittest
 import logging
 
-from pprint import pprint
 from git import Repo
 
 from gitarmony.gitarmony import Gitarmony, CommitSpread
@@ -89,22 +88,22 @@ class GitarmonyTestCase(unittest.TestCase):
         save_image(image_path)
         # Simulating the application syncing when saving the file.
         self.gitarmony.update_tracked_commits()
-        print("POST-SAVE TRACKED COMMITS")
-        pprint(self.gitarmony.get_tracked_commits())
+        # print("POST-SAVE TRACKED COMMITS")
+        # pprint(self.gitarmony.get_tracked_commits())
 
         self.managed_clone.index.add(image_path)
         self.managed_clone.index.commit(message="Add staged_image_02.jpg")
         # Simulating the post-commit hook.
         self.gitarmony.update_tracked_commits()
-        print("POST-COMMIT TRACKED COMMITS")
-        pprint(self.gitarmony.get_tracked_commits())
+        # print("POST-COMMIT TRACKED COMMITS")
+        # pprint(self.gitarmony.get_tracked_commits())
 
         self.managed_clone.remote().push()
         # Simulating a post-push hook.
         # It could only be implemented server-side as it's not an actual Git hook.
         self.gitarmony.update_tracked_commits()
-        print("POST-PUSH TRACKED COMMITS")
-        pprint(self.gitarmony.get_tracked_commits())
+        # print("POST-PUSH TRACKED COMMITS")
+        # pprint(self.gitarmony.get_tracked_commits())
 
         # We just pushed the changes therefore there should be no missing commit.
         last_commit = self.gitarmony.get_file_last_commit("staged_image_02.jpg")
@@ -118,8 +117,8 @@ class GitarmonyTestCase(unittest.TestCase):
         self.managed_clone.git.reset("--hard", commit.hexsha)
         # Simulating the post-checkout hook.
         self.gitarmony.update_tracked_commits()
-        print("POST-CHECKOUT TRACKED COMMITS")
-        pprint(self.gitarmony.get_tracked_commits())
+        # print("POST-CHECKOUT TRACKED COMMITS")
+        # pprint(self.gitarmony.get_tracked_commits())
 
         # As a result it should be a commit we do no have locally.
         last_commit = self.gitarmony.get_file_last_commit("staged_image_02.jpg")
