@@ -34,7 +34,6 @@ setup(
         "ci": [
             "black",
             "flake8-print~=3.1",
-            "flake8-todo~=0.7",
             "flake8~=3.9",
             "pep8-naming~=0.11",
             "Pillow~=8.4",
