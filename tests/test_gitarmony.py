@@ -29,10 +29,13 @@ class GitarmonyTestCase(unittest.TestCase):
         self.gitarmony = Gitarmony.install(
             self.gitarmony_remote_url,
             self.managed_clone.working_dir,
+            modify_permissions=True,
+            track_binaries=True,
+            track_uncomitted=True,
+            update_gitignore=True,
             # Hooks are turned off because we would have to install Gitarmony CLI as
             # part of that test. Instead we are simulating the hooks operations below.
             update_hooks=False,
-            update_gitignore=True,
         )
 
     def tearDown(self):

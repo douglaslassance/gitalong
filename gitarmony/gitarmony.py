@@ -13,7 +13,6 @@ import git
 
 from git.repo import Repo
 from gitdb.util import hex_to_bin
-from gitdb.exc import BadName
 
 from .enums import CommitSpread
 from .functions import get_real_path, is_binary_file
@@ -75,14 +74,12 @@ class Gitarmony:
             git.Repo: Clones the gitarmony repository if not done already.
         """
         try:
-            return Repo(
-                os.path.join(self._managed_repository.working_dir, ".gitarmony")
-            )
+            return Repo(os.path.join(self.managed_repository_root, ".gitarmony"))
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
             remote = self._config.get("remote_url")
             return Repo.clone_from(
                 remote,
-                os.path.join(self._managed_repository.working_dir, ".gitarmony"),
+                os.path.join(self.managed_repository_root, ".gitarmony"),
             )
 
     @classmethod
@@ -90,12 +87,13 @@ class Gitarmony:
         cls,
         gitarmony_repository: str,
         managed_repository: str = "",
-        modify_permissions=True,
-        track_binaries=True,
+        modify_permissions=False,
+        pull_treshold: float = 60.0,
+        track_binaries=False,
+        track_uncomitted=False,
         tracked_extensions=None,
-        update_hooks: bool = True,
-        update_gitignore: bool = True,
-        pull_treshold: float = 10.0,
+        update_gitignore: bool = False,
+        update_hooks: bool = False,
         git_binary="",
     ):
         """Install Gitarmony on a repository.
@@ -106,18 +104,24 @@ class Gitarmony:
             managed_repository (str, optional):
                 The repository in which we install Gitarmony. Defaults to current
                 working directory. Current working directory if not passed.
-            update_hooks (bool, optional):
-                Whether hooks should be installed.
             modify_permissions (bool, optional):
                 Whether Gitarmony should managed permissions of binary files.
             track_binaries (bool, optional):
                 Track all binary files by automatically detecting them.
+            track_uncomitted (bool, optional):
+                Track uncommitted changes. Better for collaboration but requires to push
+                tracked commits after each file system operation.
             tracked_extensions (list, optional):
                 List of extensions to track.
             pull_treshold (list, optional):
-                Time in seconds that need to pass before Gitarmony pulls. Defaults to 10
-                seconds. This is for optimization sake as pull and fetch operation are
-                expensive.
+                Time in seconds that need to pass before Gitarmony pulls again. Defaults
+                to 10 seconds. This is for optimization sake as pull and fetch operation
+                are expensive. Defaults to 60 seconds.
+            update_gitignore (bool, optional):
+                Whether .gitignore should be modified in the managed repository to
+                ignore Gitarmony files.
+            update_hooks (bool, optional):
+                Whether hooks should be updated with Gitarmony logic.
             git_binary (str, optional):
                 Path to specific Git binary. Will find the one in PATH by default.
 
@@ -133,10 +137,11 @@ class Gitarmony:
         with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
                 "remote_url": gitarmony_repository,
-                "modify_permissions": int(modify_permissions),
-                "track_binaries": int(track_binaries),
+                "modify_permissions": modify_permissions,
+                "track_binaries": track_binaries,
                 "tracked_extensions": ",".join(tracked_extensions),
-                "pull_treshold": int(pull_treshold),
+                "pull_treshold": pull_treshold,
+                "track_uncomitted": track_uncomitted,
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
@@ -155,9 +160,7 @@ class Gitarmony:
 
         TODO: Improve update by considering what is already ignored.
         """
-        gitignore_path = os.path.join(
-            self._managed_repository.working_dir, ".gitignore"
-        )
+        gitignore_path = os.path.join(self.managed_repository_root, ".gitignore")
         content = ""
         if os.path.exists(gitignore_path):
             with open(gitignore_path, encoding="utf8") as gitignore:
@@ -186,7 +189,7 @@ class Gitarmony:
         Returns:
             dict: The content of `.gitarmony.json` as a dictionary.
         """
-        return os.path.join(self._managed_repository.working_dir, self.config_basename)
+        return os.path.join(self.managed_repository_root, self.config_basename)
 
     @property
     def config(self) -> dict:
@@ -208,9 +211,7 @@ class Gitarmony:
             )
         except configparser.NoOptionError:
             basename = os.path.join(".git", "hooks")
-        return os.path.normpath(
-            os.path.join(self._managed_repository.working_dir, basename)
-        )
+        return os.path.normpath(os.path.join(self.managed_repository_root, basename))
 
     def install_hooks(self):
         """Installs Gitarmony hooks in managed repository.
@@ -237,7 +238,7 @@ class Gitarmony:
             str: The path relative to the managed repository.
         """
         if os.path.exists(filename):
-            filename = os.path.relpath(filename, self._managed_repository.working_dir)
+            filename = os.path.relpath(filename, self.managed_repository_root)
         return filename
 
     def get_absolute_path(self, filename: str) -> str:
@@ -250,7 +251,7 @@ class Gitarmony:
         """
         if os.path.exists(filename):
             return filename
-        return os.path.join(self._managed_repository.working_dir, filename)
+        return os.path.join(self.managed_repository_root, filename)
 
     def get_file_last_commit(self, filename: str, prune: bool = True) -> dict:
         """
@@ -268,13 +269,21 @@ class Gitarmony:
         tracked_commits = self.tracked_commits
         relevant_tracked_commits = []
         filename = self.get_relative_path(filename)
+        remote = self._managed_repository.remote().url
         last_commit = None
+        track_uncomitted = self.config.get("track_uncomitted", False)
         for tracked_commit in tracked_commits:
-            if tracked_commit.get("remote") != self._managed_repository.remote().url:
+            if (
+                # We ignore uncommitted tracked commits if configuration says so.
+                (not track_uncomitted and "sha" not in tracked_commit)
+                # We ignore commits from other remotes.
+                or tracked_commit.get("remote") != remote
+            ):
                 continue
             for change in tracked_commit.get("changes", []):
                 if os.path.normpath(change) == os.path.normpath(filename):
                     relevant_tracked_commits.append(tracked_commit)
+                    continue
         if relevant_tracked_commits:
             relevant_tracked_commits.sort(key=lambda commit: commit.get("date"))
             last_commit = relevant_tracked_commits[-1]
@@ -465,7 +474,7 @@ class Gitarmony:
         return {
             "host": socket.gethostname(),
             "user": getpass.getuser(),
-            "clone": get_real_path(self._managed_repository.working_dir),
+            "clone": get_real_path(self.managed_repository_root),
         }
 
     @property
@@ -480,9 +489,10 @@ class Gitarmony:
         # We are collecting local commit for all local branches.
         for branch in self._managed_repository.branches:
             self.accumulate_local_only_commits(branch.commit, local_commits)
-        uncommitted_changes_commit = self.uncommitted_changes_commit
-        if uncommitted_changes_commit:
-            local_commits.insert(0, uncommitted_changes_commit)
+        if self.config.get("track_uncomitted"):
+            uncommitted_changes_commit = self.uncommitted_changes_commit
+            if uncommitted_changes_commit:
+                local_commits.insert(0, uncommitted_changes_commit)
         local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
         return local_commits
 
@@ -579,7 +589,7 @@ class Gitarmony:
         abs_local_changes = []
         for change in rel_local_changes:
             abs_local_changes.append(self.get_absolute_path(change))
-        dirname = dirname or self._managed_repository.working_dir
+        dirname = dirname or self.managed_repository_root
         for basename in os.listdir(dirname):
             path = os.path.join(dirname, basename)
             if os.path.isdir(path):
@@ -593,7 +603,7 @@ class Gitarmony:
     def is_file_tracked(self, filename: str) -> bool:
         """
         Args:
-            filename (str): The file path to check for.
+            filename (str): The absolute or relative file or folder path to check for.
 
         Returns:
             bool: Whether the file is tracked by Gitarmony.
@@ -604,7 +614,9 @@ class Gitarmony:
         if os.path.splitext(filename)[-1] in tracked_extensions:
             return True
         # The binary check is expensive so we are doing it last.
-        return self._config.get("track_binaries", False) and is_binary_file(filename)
+        return self._config.get("track_binaries", False) and is_binary_file(
+            self.get_absolute_path(filename)
+        )
 
     @property
     def updated_tracked_commits(self) -> list:
@@ -723,3 +735,11 @@ class Gitarmony:
             if os.path.exists(filename):
                 set_read_only(filename, True)
         return missing_commit
+
+    @property
+    def managed_repository_root(self) -> str:
+        """
+        Returns:
+            str: The managed repository dirname.
+        """
+        return self._managed_repository.working_dir
