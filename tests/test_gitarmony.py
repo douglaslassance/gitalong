@@ -137,6 +137,6 @@ class GitarmonyTestCase(unittest.TestCase):
         self.gitarmony.update_tracked_commits()
 
         missing_commit = self.gitarmony.make_file_writable(staged_image_01_path)
-        self.assertIsInstance(missing_commit, type(None))
+        self.assertEqual(False, bool(missing_commit))
         missing_commit = self.gitarmony.make_file_writable(image_path)
-        self.assertIsInstance(missing_commit, dict)
+        self.assertEqual(True, bool(missing_commit))

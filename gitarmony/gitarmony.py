@@ -89,12 +89,12 @@ class Gitarmony:
         managed_repository: str = "",
         modify_permissions=False,
         pull_treshold: float = 60.0,
-        track_binaries=False,
-        track_uncomitted=False,
-        tracked_extensions=None,
+        track_binaries: bool = False,
+        track_uncomitted: bool = False,
+        tracked_extensions: dict = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
-        git_binary="",
+        git_binary: str = "",
     ):
         """Install Gitarmony on a repository.
 
@@ -270,7 +270,7 @@ class Gitarmony:
         relevant_tracked_commits = []
         filename = self.get_relative_path(filename)
         remote = self._managed_repository.remote().url
-        last_commit = None
+        last_commit = {}
         track_uncomitted = self.config.get("track_uncomitted", False)
         for tracked_commit in tracked_commits:
             if (
@@ -318,7 +318,7 @@ class Gitarmony:
                 for c in file_commits
             ]
             file_commits.sort(key=lambda commit: commit.get("date"))
-            last_commit = file_commits[-1] if file_commits else None
+            last_commit = file_commits[-1] if file_commits else {}
 
             if last_commit and "sha" in last_commit:
                 # We are only evaluating branch information here because it's expensive.
@@ -725,7 +725,7 @@ class Gitarmony:
         is_uncommitted = (
             spread & CommitSpread.LOCAL_UNCOMMITTED == CommitSpread.LOCAL_UNCOMMITTED
         )
-        missing_commit = None if is_local_commit or is_uncommitted else last_commit
+        missing_commit = {} if is_local_commit or is_uncommitted else last_commit
         if force or not missing_commit:
             if os.path.exists(filename):
                 set_read_only(filename, False)
