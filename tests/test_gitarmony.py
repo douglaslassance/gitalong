@@ -29,10 +29,13 @@ class GitarmonyTestCase(unittest.TestCase):
         self.gitarmony = Gitarmony.install(
             self.gitarmony_remote_url,
             self.managed_clone.working_dir,
+            modify_permissions=True,
+            track_binaries=True,
+            track_uncomitted=True,
+            update_gitignore=True,
             # Hooks are turned off because we would have to install Gitarmony CLI as
             # part of that test. Instead we are simulating the hooks operations below.
             update_hooks=False,
-            update_gitignore=True,
         )
 
     def tearDown(self):
@@ -134,6 +137,6 @@ class GitarmonyTestCase(unittest.TestCase):
         self.gitarmony.update_tracked_commits()
 
         missing_commit = self.gitarmony.make_file_writable(staged_image_01_path)
-        self.assertIsInstance(missing_commit, type(None))
+        self.assertEqual(False, bool(missing_commit))
         missing_commit = self.gitarmony.make_file_writable(image_path)
-        self.assertIsInstance(missing_commit, dict)
+        self.assertEqual(True, bool(missing_commit))
