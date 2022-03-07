@@ -17,7 +17,7 @@ from gitdb.util import hex_to_bin
 from .enums import CommitSpread
 from .functions import get_real_path, is_binary_file
 from .exceptions import GitarmonyNotInstalled
-from .functions import set_read_only, pulled_within
+from .functions import set_read_only, pulled_within, get_filenames_from_move_string
 
 
 class Gitarmony:
@@ -519,10 +519,13 @@ class Gitarmony:
         Returns:
             dict: A simplified JSON serializable dict that represents the commit.
         """
+        changes = []
+        for change in list(commit.stats.files.keys()):
+            changes += get_filenames_from_move_string(change)
         return {
             "sha": commit.hexsha,
             "remote": self._managed_repository.remote().url,
-            "changes": list(commit.stats.files.keys()),
+            "changes": changes,
             "date": str(commit.committed_datetime),
             "author": commit.author.name,
         }

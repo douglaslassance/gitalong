@@ -8,6 +8,7 @@ from gitarmony.functions import (
     is_binary_file,
     set_read_only,
     is_read_only,
+    get_filenames_from_move_string,
 )
 
 from .functions import save_image
@@ -41,3 +42,16 @@ class FunctionsTestCase(unittest.TestCase):
         self.assertEqual(False, is_read_only(image_path))
         # This one is for coverage of non-existing files.
         set_read_only(os.path.join(self.temp_dir, "non_existing.jpg"), True)
+
+    def test_get_filenames_from_move_string(self):
+        move_string = get_filenames_from_move_string("A/B/C.abc")
+        self.assertEqual(("A/B/C.abc",), move_string)
+
+        move_string = get_filenames_from_move_string("A/B/{C.abc => D.abc}")
+        self.assertEqual(("A/B/C.abc", "A/B/D.abc"), move_string)
+
+        move_string = get_filenames_from_move_string("A/B/{C..abc => C.abc}")
+        self.assertEqual(("A/B/C..abc", "A/B/C.abc"), move_string)
+
+        move_string = get_filenames_from_move_string("A/B/{C/D.abc => E/F.abc}")
+        self.assertEqual(("A/B/C/D.abc", "A/B/E/F.abc"), move_string)

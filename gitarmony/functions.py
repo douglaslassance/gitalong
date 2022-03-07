@@ -2,8 +2,12 @@ import os
 import time
 import stat
 import pathlib
+import re
 
 import git
+
+
+MOVE_STRING_REGEX = re.compile("{(.*)}")
 
 
 def is_binary_file(filename: str) -> bool:
@@ -93,3 +97,17 @@ def pulled_within(repository: git.Repo, seconds: float) -> bool:
         return False
     since_last = time.time() - os.path.getmtime(fetch_head)
     return seconds > since_last
+
+
+def get_filenames_from_move_string(move_string: str) -> tuple:
+    lefts = []
+    rights = []
+    match = MOVE_STRING_REGEX.search(move_string)
+    if match:
+        for group in match.groups():
+            move_string = move_string.replace(group, "")
+            splits = group.split(" => ")
+            lefts.append(splits[0])
+            rights.append(splits[-1])
+    pair = {move_string.format(*lefts), move_string.format(*rights)}
+    return tuple(sorted(pair))
