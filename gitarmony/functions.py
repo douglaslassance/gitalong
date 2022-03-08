@@ -48,20 +48,26 @@ def is_read_only(filename: str) -> bool:
     return not bool(_stat.st_mode & stat.S_IWRITE)
 
 
-def set_read_only(filename: str, read_only: bool = True, check_exists: bool = True):
+def set_read_only(
+    filename: str, read_only: bool = True, check_exists: bool = True
+) -> bool:
     """Sets the file read-only state.
 
     Args:
         filename (str): The absolute filename of the file we want to set.
         read_only (bool, optional): Whether read-only should be true of false.
         check_exists (bool, optional): Whether we are guarding from non existing files.
+
+        Returns:
+            str: Whether the file was set to the provided permission.
     """
     if check_exists and not os.path.exists(filename):
-        return
+        return False
     if read_only:
         os.chmod(filename, stat.S_IREAD)
-        return
+        return True
     os.chmod(filename, stat.S_IWRITE)
+    return True
 
 
 def get_real_path(filename: str) -> str:

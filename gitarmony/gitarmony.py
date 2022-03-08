@@ -702,7 +702,6 @@ class Gitarmony:
         self,
         filename: str,
         prune: bool = True,
-        force=False,
     ) -> dict:
         """Make a file writable if it's not missing with other tracked commits that
         aren't present locally.
@@ -711,10 +710,6 @@ class Gitarmony:
             filename (str):
                 The file to make writable. Takes a path that's absolute or relative to
                 the managed repository.
-            force (bool, optional):
-                Will make the file writable regardless of the status of the file. Kind
-                of defeating the entire purpose of Gitarmony but provided for
-                convenience.
 
         Returns:
             dict: The missing commit that we are missing.
@@ -729,7 +724,7 @@ class Gitarmony:
             spread & CommitSpread.LOCAL_UNCOMMITTED == CommitSpread.LOCAL_UNCOMMITTED
         )
         missing_commit = {} if is_local_commit or is_uncommitted else last_commit
-        if force or not missing_commit:
+        if not missing_commit:
             if os.path.exists(filename):
                 set_read_only(filename, False)
         # Since we figured out this file should not be touched,we'll also lock the file
