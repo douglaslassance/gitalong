@@ -8,9 +8,9 @@
 				".[ci]"
 			],
 			"name": "Install requirements with PyPI",
-			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
+			"path": "$WORKON_HOME/gitalong-python/bin:$PATH",
 			"windows": {
-				"path": "$WORKON_HOME/gitarmony-python/Scripts;$PATH",
+				"path": "$WORKON_HOME/gitalong-python/Scripts;$PATH",
 			},
 			"working_dir": "$project_path",
 		},
@@ -18,13 +18,13 @@
 			"cmd": [
 				"pytest",
 				"--cov-report=html",
-				"--cov=gitarmony",
+				"--cov=gitalong",
 				"--profile-svg"
 			],
 			"name": "Test with pytest",
-			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
+			"path": "$WORKON_HOME/gitalong-python/bin:$PATH",
 			"windows": {
-				"path": "$WORKON_HOME/gitarmony-python/Scripts;$PATH",
+				"path": "$WORKON_HOME/gitalong-python/Scripts;$PATH",
 			},
 			"working_dir": "$project_path",
 		},
@@ -35,9 +35,9 @@
 				"./docs/build"
 			],
 			"name": "Document with Sphinx",
-			"path": "$WORKON_HOME/gitarmony-python/bin:$PATH",
+			"path": "$WORKON_HOME/gitalong-python/bin:$PATH",
 			"windows": {
-				"path": "$WORKON_HOME/gitarmony-python/Scripts;$PATH",
+				"path": "$WORKON_HOME/gitalong-python/Scripts;$PATH",
 			},
 			"working_dir": "$project_path",
 		}
@@ -57,5 +57,5 @@
 			"path": ".",
 		},
 	],
-	"virtualenv": "$WORKON_HOME/gitarmony-python",
+	"virtualenv": "$WORKON_HOME/gitalong-python",
 }

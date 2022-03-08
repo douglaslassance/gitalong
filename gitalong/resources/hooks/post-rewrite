@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# Gitarmony
-if (where gitarmony) then
-	gitarmony sync
+# Gitalong
+if (where gitalong) then
+	gitalong sync
 else
-	echo "Gitarmony CLI is not installed on this system."
+	echo "Gitalong CLI is not installed on this system."
 fi

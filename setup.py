@@ -1,4 +1,4 @@
-"""Setup for gitarmony.
+"""Setup for gitalong.
 """
 
 import os
@@ -7,7 +7,7 @@ from setuptools import setup
 
 dirname = os.path.dirname(__file__)
 info = {}
-with open(os.path.join(dirname, "gitarmony", "__info__.py"), mode="r") as f:
+with open(os.path.join(dirname, "gitalong", "__info__.py"), mode="r") as f:
     exec(f.read(), info)  # pylint: disable=W0122
 
 # Get the long description from the README file.
@@ -15,16 +15,16 @@ with open(os.path.join(dirname, "README.md"), encoding="utf-8") as fle:
     long_description = fle.read()
 
 setup(
-    name="gitarmony",
+    name="gitalong",
     version=info.get("__version__", ""),
-    description="An API to perform gitarmony operation on Git repositories.",
+    description="An API to perform gitalong operation on Git repositories.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/douglaslassance/gitarmony-python",
+    url="https://github.com/douglaslassance/gitalong-python",
     author=info.get("__author__", ""),
     author_email=info.get("__email__", ""),
     license=info.get("__license__", ""),
-    packages=["gitarmony"],
+    packages=["gitalong"],
     install_requires=[
         "GitPython~=3.1",
         "dictdiffer~=0.9",

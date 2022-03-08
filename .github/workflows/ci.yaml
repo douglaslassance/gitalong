@@ -28,7 +28,7 @@ jobs:
           flake8 . --count --show-source --statistics
       - name: Test with pytest
         run: |
-          pytest --cov=gitarmony
+          pytest --cov=gitalong
       - name: Document with sphinx
         run: |
           sphinx-build ./docs/source ./docs/build

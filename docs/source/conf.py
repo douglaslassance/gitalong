@@ -12,17 +12,17 @@
 #
 # pylint: skip-file
 
-import gitarmony
+import gitalong
 
 
 # -- Project information -----------------------------------------------------
 
-project = gitarmony.__name__
-copyright = gitarmony.__copyright__
-author = gitarmony.__author__
+project = gitalong.__name__
+copyright = gitalong.__copyright__
+author = gitalong.__author__
 
 # The full version, including alpha/beta/rc tags
-release = gitarmony.__version__
+release = gitalong.__version__
 
 # -- General configuration ---------------------------------------------------
 

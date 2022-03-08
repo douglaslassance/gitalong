@@ -1,8 +1,8 @@
-class GitarmonyError(Exception):
+class GitalongError(Exception):
 
-    """Base error for gitarmony."""
+    """Base error for gitalong."""
 
 
-class GitarmonyNotInstalled(GitarmonyError):
+class GitalongNotInstalled(GitalongError):
 
-    """Error for when gitarmony is not installed in the managed repository."""
+    """Error for when gitalong is not installed in the managed repository."""

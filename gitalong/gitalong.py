@@ -16,19 +16,19 @@ from gitdb.util import hex_to_bin
 
 from .enums import CommitSpread
 from .functions import get_real_path, is_binary_file
-from .exceptions import GitarmonyNotInstalled
+from .exceptions import GitalongNotInstalled
 from .functions import set_read_only, pulled_within, get_filenames_from_move_string
 
 
-class Gitarmony:
-    """The Gitarmony class aggregates all the Gitarmony actions that can happen on a
+class Gitalong:
+    """The Gitalong class aggregates all the Gitalong actions that can happen on a
     repository.
 
     Attributes:
-        config_basename (str): The basename of the Gitarmony configuration file.
+        config_basename (str): The basename of the Gitalong configuration file.
     """
 
-    config_basename = ".gitarmony.json"
+    config_basename = ".gitalong.json"
 
     def __init__(self, managed_repository: str = "", git_binary: str = ""):
         """
@@ -39,11 +39,11 @@ class Gitarmony:
                 Path to specific Git binary. Will find the one in PATH by default.
 
         Raises:
-            GitarmonyNotInstalled: Description
+            GitalongNotInstalled: Description
 
         No Longer Raises:
-            git.exc.GitarmonyNotInstalled: Description
-            gitarmony.exceptions.GitarmonyNotInstalled: Description
+            git.exc.GitalongNotInstalled: Description
+            gitalong.exceptions.GitalongNotInstalled: Description
         """
         if git_binary:
             git.refresh(git_binary)
@@ -54,8 +54,8 @@ class Gitarmony:
             with open(self.config_path, encoding="utf8") as _config_file:
                 self._config = json.loads(_config_file.read())
         except FileNotFoundError as error:
-            raise GitarmonyNotInstalled(
-                "Gitarmony is not installed on this repository."
+            raise GitalongNotInstalled(
+                "Gitalong is not installed on this repository."
             ) from error
 
         if self._config.get(
@@ -66,26 +66,26 @@ class Gitarmony:
             config_writer = self._managed_repository.config_writer()
             config_writer.set_value("core", "fileMode", "false")
             config_writer.release()
-        self._gitarmony_repository = self._clone_gitarmony_repository()
+        self._gitalong_repository = self._clone_gitalong_repository()
 
-    def _clone_gitarmony_repository(self):
+    def _clone_gitalong_repository(self):
         """
         Returns:
-            git.Repo: Clones the gitarmony repository if not done already.
+            git.Repo: Clones the gitalong repository if not done already.
         """
         try:
-            return Repo(os.path.join(self.managed_repository_root, ".gitarmony"))
+            return Repo(os.path.join(self.managed_repository_root, ".gitalong"))
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
             remote = self._config.get("remote_url")
             return Repo.clone_from(
                 remote,
-                os.path.join(self.managed_repository_root, ".gitarmony"),
+                os.path.join(self.managed_repository_root, ".gitalong"),
             )
 
     @classmethod
     def install(
         cls,
-        gitarmony_repository: str,
+        gitalong_repository: str,
         managed_repository: str = "",
         modify_permissions=False,
         pull_treshold: float = 60.0,
@@ -96,16 +96,16 @@ class Gitarmony:
         update_hooks: bool = False,
         git_binary: str = "",
     ):
-        """Install Gitarmony on a repository.
+        """Install Gitalong on a repository.
 
         Args:
-            gitarmony_repository (str):
-                The URL of the repository that will store gitarmony data.
+            gitalong_repository (str):
+                The URL of the repository that will store gitalong data.
             managed_repository (str, optional):
-                The repository in which we install Gitarmony. Defaults to current
+                The repository in which we install Gitalong. Defaults to current
                 working directory. Current working directory if not passed.
             modify_permissions (bool, optional):
-                Whether Gitarmony should managed permissions of binary files.
+                Whether Gitalong should managed permissions of binary files.
             track_binaries (bool, optional):
                 Track all binary files by automatically detecting them.
             track_uncomitted (bool, optional):
@@ -114,21 +114,21 @@ class Gitarmony:
             tracked_extensions (list, optional):
                 List of extensions to track.
             pull_treshold (list, optional):
-                Time in seconds that need to pass before Gitarmony pulls again. Defaults
+                Time in seconds that need to pass before Gitalong pulls again. Defaults
                 to 10 seconds. This is for optimization sake as pull and fetch operation
                 are expensive. Defaults to 60 seconds.
             update_gitignore (bool, optional):
                 Whether .gitignore should be modified in the managed repository to
-                ignore Gitarmony files.
+                ignore Gitalong files.
             update_hooks (bool, optional):
-                Whether hooks should be updated with Gitarmony logic.
+                Whether hooks should be updated with Gitalong logic.
             git_binary (str, optional):
                 Path to specific Git binary. Will find the one in PATH by default.
 
         Deleted Parameters:
             Returns:
-                Gitarmony:
-                    The gitarmony management class corresponding to the repository in
+                Gitalong:
+                    The gitalong management class corresponding to the repository in
                     which we just installed.
         """
         tracked_extensions = tracked_extensions or []
@@ -136,7 +136,7 @@ class Gitarmony:
         config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
         with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
-                "remote_url": gitarmony_repository,
+                "remote_url": gitalong_repository,
                 "modify_permissions": modify_permissions,
                 "track_binaries": track_binaries,
                 "tracked_extensions": ",".join(tracked_extensions),
@@ -145,18 +145,18 @@ class Gitarmony:
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
-        gitarmony = cls(
+        gitalong = cls(
             managed_repository=managed_repository.working_dir, git_binary=git_binary
         )
-        gitarmony._clone_gitarmony_repository()
+        gitalong._clone_gitalong_repository()
         if update_gitignore:
-            gitarmony.update_gitignore()
+            gitalong.update_gitignore()
         if update_hooks:
-            gitarmony.install_hooks()
-        return gitarmony
+            gitalong.install_hooks()
+        return gitalong
 
     def update_gitignore(self):
-        """Update the .gitignore of the managed repository with Gitarmony directives.
+        """Update the .gitignore of the managed repository with Gitalong directives.
 
         TODO: Improve update by considering what is already ignored.
         """
@@ -179,7 +179,7 @@ class Gitarmony:
     def managed_repository(self) -> Repo:
         """
         Returns:
-            git.Repo: The repository we are managing with Gitarmony.
+            git.Repo: The repository we are managing with Gitalong.
         """
         return self._managed_repository
 
@@ -187,7 +187,7 @@ class Gitarmony:
     def config_path(self) -> str:
         """
         Returns:
-            dict: The content of `.gitarmony.json` as a dictionary.
+            dict: The content of `.gitalong.json` as a dictionary.
         """
         return os.path.join(self.managed_repository_root, self.config_basename)
 
@@ -195,7 +195,7 @@ class Gitarmony:
     def config(self) -> dict:
         """
         Returns:
-            dict: The content of `.gitarmony.json` as a dictionary.
+            dict: The content of `.gitalong.json` as a dictionary.
         """
         return self._config
 
@@ -214,7 +214,7 @@ class Gitarmony:
         return os.path.normpath(os.path.join(self.managed_repository_root, basename))
 
     def install_hooks(self):
-        """Installs Gitarmony hooks in managed repository.
+        """Installs Gitalong hooks in managed repository.
 
         TODO: Implement non-destructive version of these hooks. Currently we don't have
         any consideration for preexisting content.
@@ -556,7 +556,7 @@ class Gitarmony:
         Returns:
             TYPE: The path to the JSON file that tracks the local commits.
         """
-        return os.path.join(self._gitarmony_repository.working_dir, "commits.json")
+        return os.path.join(self._gitalong_repository.working_dir, "commits.json")
 
     def update_tracked_files_permissions(self, force=False):
         """Updates binary permissions of tracked files."""
@@ -609,7 +609,7 @@ class Gitarmony:
             filename (str): The absolute or relative file or folder path to check for.
 
         Returns:
-            bool: Whether the file is tracked by Gitarmony.
+            bool: Whether the file is tracked by Gitalong.
         """
         if self.is_ignored(filename):
             return False
@@ -653,7 +653,7 @@ class Gitarmony:
                 The tracked commits to update with. Default to evaluating updated
                 tracked commits.
             push (bool, optional):
-                Whether we are pushing the update JSON file to the Gitarmony repository
+                Whether we are pushing the update JSON file to the Gitalong repository
                 remote.
         """
         commits = commits or self.updated_tracked_commits
@@ -662,10 +662,10 @@ class Gitarmony:
             dump = json.dumps(commits, indent=4, sort_keys=True)
             _file.write(dump)
         if push:
-            self._gitarmony_repository.index.add(json_path)
+            self._gitalong_repository.index.add(json_path)
             basename = os.path.basename(json_path)
-            self._gitarmony_repository.index.commit(message=f"Update {basename}")
-            self._gitarmony_repository.remote().push()
+            self._gitalong_repository.index.commit(message=f"Update {basename}")
+            self._gitalong_repository.remote().push()
 
     @property
     def tracked_commits(self) -> typing.List[dict]:
@@ -675,10 +675,10 @@ class Gitarmony:
                 A list of commits that haven't been pushed to remote. Also includes
                 commits representing uncommitted changes.
         """
-        gitarmony_repository = self._gitarmony_repository
-        remote = gitarmony_repository.remote()
+        gitalong_repository = self._gitalong_repository
+        remote = gitalong_repository.remote()
         pull_treshold = self._config.get("pull_treshold", 10)
-        if not pulled_within(gitarmony_repository, pull_treshold) and remote.refs:
+        if not pulled_within(gitalong_repository, pull_treshold) and remote.refs:
             # TODO: If we could check that a pull is already happening then we could
             # avoid this try except and save time.
             try:

@@ -1,11 +1,11 @@
-# gitarmony-python
+# gitalong-python
 
-[![PyPI version](https://badge.fury.io/py/gitarmony-python.svg)](https://badge.fury.io/py/gitarmony-python)
-[![Documentation Status](https://readthedocs.org/projects/gitarmony-python/badge/?version=latest)](https://gitarmony-python.readthedocs.io/en/latest)
-[![codecov](https://codecov.io/gh/douglaslassance/gitarmony-python/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitarmony-python)
+[![PyPI version](https://badge.fury.io/py/gitalong-python.svg)](https://badge.fury.io/py/gitalong-python)
+[![Documentation Status](https://readthedocs.org/projects/gitalong-python/badge/?version=latest)](https://gitalong-python.readthedocs.io/en/latest)
+[![codecov](https://codecov.io/gh/douglaslassance/gitalong-python/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong-python)
 
-A Python API allowing to interact with Gitarmony features on a Git repository.
-More about Gitarmony in this [medium article]().
+A Python API allowing to interact with Gitalong features on a Git repository.
+More about Gitalong in this [medium article]().
 
 ## Pre-requisites
 
@@ -14,7 +14,7 @@ More about Gitarmony in this [medium article]().
 ## Installation
 
 ```
-pip install gitarmony
+pip install gitalong
 ```
 
 ## Usage
@@ -22,20 +22,20 @@ pip install gitarmony
 ```python
 from pprint import pprint
 
-from gitarmony import Gitarmony, GitarmonyNotInstalled
+from gitalong import Gitalong, GitalongNotInstalled
 
 try:
-    gitarmony = Gitarmony(managed_repository_path)
-except GitarmonyNotInstalled:
-    # Gitarmony stores its data in its own repository therefore we need to pass that repository URL.
-    gitarmony = Gitarmony.install(managed_repository_path, data_repository_url)
+    gitalong = Gitalong(managed_repository_path)
+except GitalongNotInstalled:
+    # Gitalong stores its data in its own repository therefore we need to pass that repository URL.
+    gitalong = Gitalong.install(managed_repository_path, data_repository_url)
 
 # Now we'll get the last commit for a given file.
 # This could return a dummy commit representing uncommitted changes.
-last_commit = gitarmony.get_file_last_commit(filename)
+last_commit = gitalong.get_file_last_commit(filename)
 pprint(last_commit)
 
-spread = gitarmony.get_commit_spread(commit)
+spread = gitalong.get_commit_spread(commit)
 if commit_spread & CommitSpread.LOCAL_UNCOMMITTED == CommitSpread.LOCAL_UNCOMMITTED:
     print("Commit represents our local uncommitted changes."
 if commit_spread & CommitSpread.LOCAL_ACTIVE_BRANCH == CommitSpread.LOCAL_ACTIVE_BRANCH:
@@ -54,10 +54,10 @@ if commit_spread & CommitSpread.CLONE_UNCOMMITTED == CommitSpread.CLONE_UNCOMMIT
     print("Commit represents someone else's uncommitted changes."
 
 # To update tracked commit with the ones based on local changes.
-gitarmony.update_tracked_commits()
+gitalong.update_tracked_commits()
 
 # To update permissions of tracked files.
-gitarmony.update_binary_permissions()
+gitalong.update_binary_permissions()
 ```
 
 # Development
@@ -68,5 +68,5 @@ This projects requires the following:
 -   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (macOS/Linux)
 -   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
 
-Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitarmony-python` virtual environment with `mkvirtualenv`.
+Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong-python` virtual environment with `mkvirtualenv`.
 Build systems for installing requirements and running tests are on board of the SublimeText project.

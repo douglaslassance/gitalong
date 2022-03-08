@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import logging
 
-from gitarmony.functions import (
+from gitalong.functions import (
     is_binary_file,
     set_read_only,
     is_read_only,

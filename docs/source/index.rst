@@ -4,7 +4,7 @@ Content
 .. toctree::
    :maxdepth: 4
 
-   generated/gitarmony
+   generated/gitalong
 
 Indices and tables
 ==================
