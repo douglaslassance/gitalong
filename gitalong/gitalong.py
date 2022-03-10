@@ -90,7 +90,7 @@ class Gitalong:
         modify_permissions=False,
         pull_treshold: float = 60.0,
         track_binaries: bool = False,
-        track_uncomitted: bool = False,
+        track_uncommitted: bool = False,
         tracked_extensions: dict = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
@@ -108,7 +108,7 @@ class Gitalong:
                 Whether Gitalong should managed permissions of binary files.
             track_binaries (bool, optional):
                 Track all binary files by automatically detecting them.
-            track_uncomitted (bool, optional):
+            track_uncommitted (bool, optional):
                 Track uncommitted changes. Better for collaboration but requires to push
                 tracked commits after each file system operation.
             tracked_extensions (list, optional):
@@ -141,7 +141,7 @@ class Gitalong:
                 "track_binaries": track_binaries,
                 "tracked_extensions": ",".join(tracked_extensions),
                 "pull_treshold": pull_treshold,
-                "track_uncomitted": track_uncomitted,
+                "track_uncommitted": track_uncommitted,
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
@@ -271,11 +271,11 @@ class Gitalong:
         filename = self.get_relative_path(filename)
         remote = self._managed_repository.remote().url
         last_commit = {}
-        track_uncomitted = self.config.get("track_uncomitted", False)
+        track_uncommitted = self.config.get("track_uncommitted", False)
         for tracked_commit in tracked_commits:
             if (
                 # We ignore uncommitted tracked commits if configuration says so.
-                (not track_uncomitted and "sha" not in tracked_commit)
+                (not track_uncommitted and "sha" not in tracked_commit)
                 # We ignore commits from other remotes.
                 or tracked_commit.get("remote") != remote
             ):
@@ -489,7 +489,7 @@ class Gitalong:
         # We are collecting local commit for all local branches.
         for branch in self._managed_repository.branches:
             self.accumulate_local_only_commits(branch.commit, local_commits)
-        if self.config.get("track_uncomitted"):
+        if self.config.get("track_uncommitted"):
             uncommitted_changes_commit = self.uncommitted_changes_commit
             if uncommitted_changes_commit:
                 local_commits.insert(0, uncommitted_changes_commit)
