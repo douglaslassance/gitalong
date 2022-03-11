@@ -8,3 +8,7 @@ disable=
 	logging-format-interpolation,
 	missing-module-docstring
 
+
+[FORMAT]
+
+max-line-length=88

@@ -23,42 +23,46 @@ from .functions import set_read_only, pulled_within, get_filenames_from_move_str
 class Gitalong:
     """The Gitalong class aggregates all the Gitalong actions that can happen on a
     repository.
-
-    Attributes:
-        config_basename (str): The basename of the Gitalong configuration file.
     """
 
-    config_basename = ".gitalong.json"
+    _instances = {}
+    _config_basename = ".gitalong.json"
 
-    def __init__(self, managed_repository: str = "", git_binary: str = ""):
+    def __new__(
+        cls,
+        managed_repository: str = "",
+        use_cached_instances=False,
+    ):
+        managed_repo = Repo(managed_repository, search_parent_directories=True)
+        working_dir = managed_repo.working_dir
+        if use_cached_instances:
+            return cls._instances.setdefault(working_dir, super().__new__(cls))
+        return super().__new__(cls)
+
+    def __init__(
+        self,
+        managed_repository: str = "",
+        use_cached_instances=False,  # pylint: disable=unused-argument
+    ):
         """
         Args:
-            managed_repository (str, optional):
-                The managed repository. Current working directory if not passed.
-            git_binary (str, optional):
-                Path to specific Git binary. Will find the one in PATH by default.
+            managed_repository (str):
+                The managed repository exact absolute path.
+            use_cached_instances (bool):
+                If true, the class will return "singleton" cached per clone.
 
         Raises:
             GitalongNotInstalled: Description
-
-        No Longer Raises:
-            git.exc.GitalongNotInstalled: Description
-            gitalong.exceptions.GitalongNotInstalled: Description
         """
-        if git_binary:
-            git.refresh(git_binary)
+        self._config = None
+        self._submodules = None
+
         self._managed_repository = Repo(
             managed_repository, search_parent_directories=True
         )
-        try:
-            with open(self.config_path, encoding="utf8") as _config_file:
-                self._config = json.loads(_config_file.read())
-        except FileNotFoundError as error:
-            raise GitalongNotInstalled(
-                "Gitalong is not installed on this repository."
-            ) from error
+        self._gitalong_repository = self._clone_gitalong_repository()
 
-        if self._config.get(
+        if self.config.get(
             "modify_permissions", False
         ) and self._managed_repository.config_reader().get_value(
             "core", "fileMode", True
@@ -66,17 +70,16 @@ class Gitalong:
             config_writer = self._managed_repository.config_writer()
             config_writer.set_value("core", "fileMode", "false")
             config_writer.release()
-        self._gitalong_repository = self._clone_gitalong_repository()
 
     def _clone_gitalong_repository(self):
         """
         Returns:
-            git.Repo: Clones the gitalong repository if not done already.
+            git.Repo: Clones the Gitalong repository if not done already.
         """
         try:
             return Repo(os.path.join(self.managed_repository_root, ".gitalong"))
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
-            remote = self._config.get("remote_url")
+            remote = self.config.get("remote_url")
             return Repo.clone_from(
                 remote,
                 os.path.join(self.managed_repository_root, ".gitalong"),
@@ -94,13 +97,12 @@ class Gitalong:
         tracked_extensions: dict = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
-        git_binary: str = "",
     ):
         """Install Gitalong on a repository.
 
         Args:
             gitalong_repository (str):
-                The URL of the repository that will store gitalong data.
+                The URL of the repository that will store Gitalong data.
             managed_repository (str, optional):
                 The repository in which we install Gitalong. Defaults to current
                 working directory. Current working directory if not passed.
@@ -122,18 +124,15 @@ class Gitalong:
                 ignore Gitalong files.
             update_hooks (bool, optional):
                 Whether hooks should be updated with Gitalong logic.
-            git_binary (str, optional):
-                Path to specific Git binary. Will find the one in PATH by default.
 
-        Deleted Parameters:
-            Returns:
-                Gitalong:
-                    The gitalong management class corresponding to the repository in
-                    which we just installed.
+        Returns:
+            Gitalong:
+                The Gitalong management class corresponding to the repository in
+                which we just installed.
         """
         tracked_extensions = tracked_extensions or []
         managed_repository = Repo(managed_repository, search_parent_directories=True)
-        config_path = os.path.join(managed_repository.working_dir, cls.config_basename)
+        config_path = os.path.join(managed_repository.working_dir, cls._config_basename)
         with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
                 "remote_url": gitalong_repository,
@@ -145,9 +144,7 @@ class Gitalong:
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
-        gitalong = cls(
-            managed_repository=managed_repository.working_dir, git_binary=git_binary
-        )
+        gitalong = cls(managed_repository=managed_repository.working_dir)
         gitalong._clone_gitalong_repository()
         if update_gitignore:
             gitalong.update_gitignore()
@@ -189,7 +186,7 @@ class Gitalong:
         Returns:
             dict: The content of `.gitalong.json` as a dictionary.
         """
-        return os.path.join(self.managed_repository_root, self.config_basename)
+        return os.path.join(self.managed_repository_root, self._config_basename)
 
     @property
     def config(self) -> dict:
@@ -197,6 +194,14 @@ class Gitalong:
         Returns:
             dict: The content of `.gitalong.json` as a dictionary.
         """
+        if self._config is None:
+            try:
+                with open(self.config_path, encoding="utf8") as _config_file:
+                    self._config = json.loads(_config_file.read())
+            except FileNotFoundError as error:
+                raise GitalongNotInstalled(
+                    "Gitalong is not installed on this repository."
+                ) from error
         return self._config
 
     @property
@@ -300,7 +305,7 @@ class Gitalong:
                     if key in last_commit:
                         del last_commit[key]
         if not last_commit:
-            pull_treshold = self._config.get("pull_treshold", 10)
+            pull_treshold = self.config.get("pull_treshold", 60)
             if not pulled_within(self._managed_repository, pull_treshold):
                 try:
                     self._managed_repository.remote().fetch(prune=prune)
@@ -550,19 +555,6 @@ class Gitalong:
             branch_names.add(branch.split("/")[-1])
         return list(branch_names)
 
-    @property
-    def tracked_commits_json_path(self):
-        """
-        Returns:
-            TYPE: The path to the JSON file that tracks the local commits.
-        """
-        return os.path.join(self._gitalong_repository.working_dir, "commits.json")
-
-    def update_tracked_files_permissions(self, force=False):
-        """Updates binary permissions of tracked files."""
-        if force and self._config.get("modify_permissions", False):
-            self.make_tracked_files_read_only()
-
     def is_ignored(self, filename: str) -> bool:
         """
         Args:
@@ -578,30 +570,87 @@ class Gitalong:
         except git.exc.GitCommandError:
             return False
 
-    def make_tracked_files_read_only(self, dirname=""):
-        """Make tracked files read-only. File changed locally will be skipped.
+    @property
+    def submodules(self) -> list:
+        """
+        Returns:
+            TYPE: A list of submodule relative filenames.
+        """
+        if self._submodules is None:
+            self._submodules = [_.name for _ in self._managed_repository.submodules]
+        return self._submodules
+
+    def is_submodule_file(self, filename) -> bool:
+        """
+        Args:
+            filename (TYPE): Description
+
+        Returns:
+            TYPE: Whether a an absolute or relative filename belongs to a submodule.
+        """
+        for submodule in self.submodules:
+            if self.get_relative_path(filename).startswith(submodule):
+                return True
+        return False
+
+    @property
+    def tracked_commits_json_path(self):
+        """
+        Returns:
+            TYPE: The path to the JSON file that tracks the local commits.
+        """
+        return os.path.join(self._gitalong_repository.working_dir, "commits.json")
+
+    @property
+    def managed_repository_files(self) -> list:
+        """
+        Returns:
+            list:
+                The files that are tracked by the managed repository. Not to be confused
+                with the files tracked by Gitalong.
+        """
+        git_cmd = self._managed_repository.git
+        filenames = git_cmd.ls_tree(full_tree=True, name_only=True, r="HEAD")
+        return filenames.split("\n")
+
+    @property
+    def locally_changed_files(self) -> list:
+        """
+        Returns:
+            list:
+                The relative filenames that have been changed by local commits or
+                uncommitted changes.
+        """
+        local_changes = set()
+        for commit in self.local_only_commits:
+            local_changes = local_changes.union(commit.get("changes", []))
+        return local_changes
+
+    def update_file_permissions(
+        self, filename: str, locally_changed_files: list = None
+    ) -> tuple:
+        """Updates the permissions of a file based on whether or not it was locally
+        changed.
 
         Args:
-            dirname (str, optional):
-                The directory recurse into. Defaults to the managed repository root.
+            filename (str): The relative or absolute filename to update permissions for.
+            locally_changed_files (list, optional):
+                For optimization sake you can pass the locally changed files if you
+                already have them. Default will compute them.
+
+        Returns:
+            tuple: A tuple featuring the permission and the filename.
         """
-        # Filtering out files that have changed locally. No need to make them read-only.
-        rel_local_changes = set()
-        for commit in self.local_only_commits:
-            rel_local_changes.union(commit.get("changes", []))
-        abs_local_changes = []
-        for change in rel_local_changes:
-            abs_local_changes.append(self.get_absolute_path(change))
-        dirname = dirname or self.managed_repository_root
-        for basename in os.listdir(dirname):
-            path = os.path.join(dirname, basename)
-            if os.path.isdir(path):
-                if basename == ".git" or self.is_ignored(path):
-                    continue
-                self.make_tracked_files_read_only(path)
-            else:
-                if path not in abs_local_changes and self.is_file_tracked(path):
-                    set_read_only(path, read_only=True, check_exists=False)
+        locally_changed_files = locally_changed_files or self.locally_changed_files
+        if self.is_file_tracked(filename):
+            read_only = self.get_relative_path(filename) not in locally_changed_files
+            if set_read_only(
+                self.get_absolute_path(filename),
+                read_only=read_only,
+                check_exists=False,
+            ):
+                return ("R" if read_only else "W", filename)
+        return ()
 
     def is_file_tracked(self, filename: str) -> bool:
         """
@@ -613,11 +662,11 @@ class Gitalong:
         """
         if self.is_ignored(filename):
             return False
-        tracked_extensions = self._config.get("tracked_extensions", [])
+        tracked_extensions = self.config.get("tracked_extensions", [])
         if os.path.splitext(filename)[-1] in tracked_extensions:
             return True
         # The binary check is expensive so we are doing it last.
-        return self._config.get("track_binaries", False) and is_binary_file(
+        return self.config.get("track_binaries", False) and is_binary_file(
             self.get_absolute_path(filename)
         )
 
@@ -677,7 +726,7 @@ class Gitalong:
         """
         gitalong_repository = self._gitalong_repository
         remote = gitalong_repository.remote()
-        pull_treshold = self._config.get("pull_treshold", 10)
+        pull_treshold = self.config.get("pull_treshold", 60)
         if not pulled_within(gitalong_repository, pull_treshold) and remote.refs:
             # TODO: If we could check that a pull is already happening then we could
             # avoid this try except and save time.
@@ -724,14 +773,9 @@ class Gitalong:
             spread & CommitSpread.LOCAL_UNCOMMITTED == CommitSpread.LOCAL_UNCOMMITTED
         )
         missing_commit = {} if is_local_commit or is_uncommitted else last_commit
-        if not missing_commit:
-            if os.path.exists(filename):
-                set_read_only(filename, False)
-        # Since we figured out this file should not be touched,we'll also lock the file
-        # here in case it was not locked.
-        if self._config.get("modify_permissions", False):
-            if os.path.exists(filename):
-                set_read_only(filename, True)
+        if os.path.exists(filename):
+            if not missing_commit:
+                set_read_only(filename, missing_commit)
         return missing_commit
 
     @property

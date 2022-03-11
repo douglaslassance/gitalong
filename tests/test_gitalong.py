@@ -4,9 +4,9 @@ import tempfile
 import unittest
 import logging
 
-from git import Repo
+from git.repo import Repo
 
-from gitalong.gitalong import Gitalong, CommitSpread
+from gitalong import Gitalong, CommitSpread
 from gitalong.functions import is_read_only
 
 from .functions import save_image
@@ -31,7 +31,7 @@ class GitalongTestCase(unittest.TestCase):
             self.managed_clone.working_dir,
             modify_permissions=True,
             track_binaries=True,
-            track_uncomitted=True,
+            track_uncommitted=True,
             update_gitignore=True,
             # Hooks are turned off because we would have to install Gitalong CLI as
             # part of that test. Instead we are simulating the hooks operations below.
@@ -61,7 +61,7 @@ class GitalongTestCase(unittest.TestCase):
             os.path.normpath(config.get("remote_url")),
         )
 
-    def test_local_only_commits(self):
+    def test_worfklow(self):
         local_only_commits = self.gitalong.local_only_commits
         working_dir = self.managed_clone.working_dir
         self.assertEqual(1, len(local_only_commits))
@@ -130,8 +130,9 @@ class GitalongTestCase(unittest.TestCase):
 
         self.assertEqual(False, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.gitalong.config_path))
-        self.gitalong.make_tracked_files_read_only(self.managed_clone.working_dir)
+        self.gitalong.update_file_permissions(staged_image_01_path)
         self.assertEqual(True, is_read_only(staged_image_01_path))
+        self.gitalong.update_file_permissions(self.gitalong.config_path)
         self.assertEqual(False, is_read_only(self.gitalong.config_path))
 
         self.gitalong.update_tracked_commits()
