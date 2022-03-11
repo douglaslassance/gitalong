@@ -106,13 +106,16 @@ def pulled_within(repository: git.Repo, seconds: float) -> bool:
 
 
 def get_filenames_from_move_string(move_string: str) -> tuple:
+    arrow = " => "
+    if arrow not in move_string:
+        return (move_string,)
     lefts = []
     rights = []
     match = MOVE_STRING_REGEX.search(move_string)
     if match:
         for group in match.groups():
             move_string = move_string.replace(group, "")
-            splits = group.split(" => ")
+            splits = group.split(arrow)
             lefts.append(splits[0])
             rights.append(splits[-1])
     pair = {move_string.format(*lefts), move_string.format(*rights)}

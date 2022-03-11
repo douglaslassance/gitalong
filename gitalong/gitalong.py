@@ -316,15 +316,15 @@ class Gitalong:
             args = ["--all", "--remotes", '--pretty=format:"%H"', "--", filename]
             output = self._managed_repository.git.log(*args)
             file_commits = output.replace('"', "").split("\n") if output else []
-            file_commits = [
+            last_commit = (
                 self.get_commit_dict(
-                    git.objects.Commit(self._managed_repository, hex_to_bin(c))
+                    git.objects.Commit(
+                        self._managed_repository, hex_to_bin(file_commits[0])
+                    )
                 )
-                for c in file_commits
-            ]
-            file_commits.sort(key=lambda commit: commit.get("date"))
-            last_commit = file_commits[-1] if file_commits else {}
-
+                if file_commits
+                else {}
+            )
             if last_commit and "sha" in last_commit:
                 # We are only evaluating branch information here because it's expensive.
                 last_commit["branches"] = {
@@ -606,8 +606,8 @@ class Gitalong:
         """
         Returns:
             list:
-                The files that are tracked by the managed repository. Not to be confused
-                with the files tracked by Gitalong.
+                The relative filenames that are tracked by the managed repository. Not
+                to be confused with the files tracked by Gitalong.
         """
         git_cmd = self._managed_repository.git
         filenames = git_cmd.ls_tree(full_tree=True, name_only=True, r="HEAD")
