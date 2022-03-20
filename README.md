@@ -1,7 +1,7 @@
 # gitalong-python
 
-[![PyPI version](https://badge.fury.io/py/gitalong-python.svg)](https://badge.fury.io/py/gitalong-python)
-[![Documentation Status](https://readthedocs.org/projects/gitalong-python/badge/?version=latest)](https://gitalong-python.readthedocs.io/en/latest)
+[![PyPI version](https://badge.fury.io/py/gitalong.svg)](https://badge.fury.io/py/gitalong)
+[![Documentation Status](https://readthedocs.org/projects/gitalong/badge/?version=latest)](https://gitalong.readthedocs.io/en/latest)
 [![codecov](https://codecov.io/gh/douglaslassance/gitalong-python/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong-python)
 
 An API built-on top of Git to avoid conflicts when working with others.
