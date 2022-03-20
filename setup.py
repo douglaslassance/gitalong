@@ -17,7 +17,9 @@ with open(os.path.join(dirname, "README.md"), encoding="utf-8") as fle:
 setup(
     name="gitalong",
     version=info.get("__version__", ""),
-    description="An API to perform gitalong operation on Git repositories.",
+    description=(
+        "An API built-on top of Git to avoid conflicts when working with others."
+    ),
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/douglaslassance/gitalong-python",
