@@ -1,0 +1,19 @@
+#!/bin/sh
+
+# Git LFS
+command -v git-lfs >/dev/null 2>&1 || { echo >&2 "\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting .git/hooks/post-checkout.\n"; exit 2; }
+git lfs post-checkout "$@"
+
+# Gitalong
+NEW_HEAD=$1
+PREVIOUS_HEAD=$2
+# The goal of this check is to detect when the user is dropping uncommitted changes.
+# It should trigger this post-checkout with the previous and new heads being the same.
+if [ "$NEW_HEAD" = "$PREVIOUS_HEAD" ];
+then
+	if (where gitalong) then
+		gitalong sync
+	else
+		echo "Gitalong CLI is not installed on this system."
+	fi
+fi
