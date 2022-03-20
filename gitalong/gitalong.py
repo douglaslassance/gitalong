@@ -610,8 +610,13 @@ class Gitalong:
                 to be confused with the files tracked by Gitalong.
         """
         git_cmd = self._managed_repository.git
-        filenames = git_cmd.ls_tree(full_tree=True, name_only=True, r="HEAD")
-        return filenames.split("\n")
+        try:
+            # TODO: HEAD might not be safe here since user could checkout an earlier
+            # commit.
+            filenames = git_cmd.ls_tree(full_tree=True, name_only=True, r="HEAD")
+            return filenames.split("\n")
+        except git.exc.GitCommandError:
+            return []
 
     @property
     def locally_changed_files(self) -> list:
