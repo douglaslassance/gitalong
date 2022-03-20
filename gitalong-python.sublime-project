@@ -1,0 +1,61 @@
+{
+	"build_systems": [
+		{
+			"cmd": [
+				"pip",
+				"install",
+				"--editable",
+				".[ci]"
+			],
+			"name": "Install requirements with PyPI",
+			"path": "$WORKON_HOME/gitalong-python/bin:$PATH",
+			"windows": {
+				"path": "$WORKON_HOME/gitalong-python/Scripts;$PATH",
+			},
+			"working_dir": "$project_path",
+		},
+		{
+			"cmd": [
+				"pytest",
+				"--cov-report=html",
+				"--cov=gitalong",
+				"--profile-svg"
+			],
+			"name": "Test with pytest",
+			"path": "$WORKON_HOME/gitalong-python/bin:$PATH",
+			"windows": {
+				"path": "$WORKON_HOME/gitalong-python/Scripts;$PATH",
+			},
+			"working_dir": "$project_path",
+		},
+		{
+			"cmd": [
+				"sphinx-build",
+				"./docs/source",
+				"./docs/build"
+			],
+			"name": "Document with Sphinx",
+			"path": "$WORKON_HOME/gitalong-python/bin:$PATH",
+			"windows": {
+				"path": "$WORKON_HOME/gitalong-python/Scripts;$PATH",
+			},
+			"working_dir": "$project_path",
+		}
+	],
+	"folders": [
+		{
+			"file_exclude_patterns": [
+				".coverage"
+			],
+			"folder_exclude_patterns": [
+				"__pycache__",
+				"htmlcov",
+				"*.egg-info",
+				".pytest_cache",
+				"build"
+			],
+			"path": ".",
+		},
+	],
+	"virtualenv": "$WORKON_HOME/gitalong-python",
+}
