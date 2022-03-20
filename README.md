@@ -4,8 +4,7 @@
 [![Documentation Status](https://readthedocs.org/projects/gitalong-python/badge/?version=latest)](https://gitalong-python.readthedocs.io/en/latest)
 [![codecov](https://codecov.io/gh/douglaslassance/gitalong-python/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong-python)
 
-A Python API allowing to interact with Gitalong features on a Git repository.
-More about Gitalong in this [medium article]().
+An API built-on top of Git to avoid conflicts when working with others.
 
 ## Pre-requisites
 
