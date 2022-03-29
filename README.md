@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/gitalong.svg)](https://badge.fury.io/py/gitalong)
 [![Documentation Status](https://readthedocs.org/projects/gitalong/badge/?version=latest)](https://gitalong.readthedocs.io/en/latest)
-[![codecov](https://codecov.io/gh/douglaslassance/gitalong-python/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong-python)
+[![codecov](https://codecov.io/gh/douglaslassance/gitalong/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong)
 
 Gitalong is a tool for Git repositories that seek to prevent conflicts between files when working with a team.
 It uses hooks and a dedicated repository to communicate local changes across all clones of a given remote.
