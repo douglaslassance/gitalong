@@ -1,8 +1,3 @@
-class GitalongError(Exception):
+class RepositoryNotSetup(Exception):
 
-    """Base error for gitalong."""
-
-
-class GitalongNotInstalled(GitalongError):
-
-    """Error for when gitalong is not installed in the managed repository."""
+    """Error for when gitalong is not setup in the managed repository."""
