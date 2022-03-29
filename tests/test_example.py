@@ -7,7 +7,7 @@ from gitalong import Repository, RepositoryNotSetup, CommitSpread
 
 
 def test_example():
-    # Creating temp directory for the files.
+    """Testing example code featured in README.md."""
     dirname = tempfile.mkdtemp()
     logging.info(dirname)
 
@@ -21,9 +21,9 @@ def test_example():
 
     except RepositoryNotSetup:
 
-        # Creating a repository that Gitalong will use to store and share local changes. You
-        # would normally host this somewhere like GitHub so your entire team has access to
-        # it.
+        # Creating a repository that Gitalong will use to store and share local changes.
+        # You would normally host this somewhere like GitHub so your entire team has
+        # access to it.
         store = Repo.init(path="store.git", bare=True)
 
         # Setting up Gitalong in your project repository.
@@ -60,9 +60,10 @@ def test_example():
     # `track_uncommitted`. Uncommitted changes will be stored as sha-less commit.
     repository.update_tracked_commits()
 
-    # Update permissions of all files based on track commits. Because `modify_permssions`
-    # was passed this will update all permissions of tracked files. Permission updates
-    # currently comes at high performance cost and is not recommended.
+    # Update permissions of all files based on track commits. Because
+    # `modify_permssions` was passed this will update all permissions of tracked files.
+    # Permission updates currently comes at high performance cost and is not
+    # recommended.
     locally_changed_files = repository.locally_changed_files
     for filename in repository.files:
         repository.update_file_permissions(filename, locally_changed_files)
@@ -89,10 +90,10 @@ def test_example():
     )
 
     # Trying to make the files writable.
-    assert bool(repository.make_file_writable("uncommitted.png")) == False
-    assert bool(repository.make_file_writable("local.gif")) == False
-    assert bool(repository.make_file_writable("remote.jpg")) == True
-    assert bool(repository.make_file_writable("untracked.txt")) == False
+    assert bool(repository.make_file_writable("uncommitted.png")) is False
+    assert bool(repository.make_file_writable("local.gif")) is False
+    assert bool(repository.make_file_writable("remote.jpg")) is True
+    assert bool(repository.make_file_writable("untracked.txt")) is False
 
 
 if __name__ == "__main__":
