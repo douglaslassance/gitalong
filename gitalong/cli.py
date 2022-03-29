@@ -6,11 +6,10 @@ import git
 
 from click.decorators import pass_context
 
+from .__info__ import __version__
 from .enums import CommitSpread
 from .exceptions import RepositoryNotSetup
 from .repository import Repository
-
-__version__ = "0.1.0.dev1"
 
 
 def get_repository(repository: str) -> Repository:

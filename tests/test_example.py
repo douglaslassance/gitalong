@@ -24,7 +24,7 @@ def test_example():
         # Creating a repository that Gitalong will use to store and share local changes.
         # You would normally host this somewhere like GitHub so your entire team has
         # access to it.
-        store = Repo.init(path="store.git", bare=True)
+        store = Repo.init(path=os.path.join(dirname, "store.git"), bare=True)
 
         # Setting up Gitalong in your project repository.
         # This will clone the registry repository in an ignored `.gitalong` folder.
