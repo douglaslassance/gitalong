@@ -42,7 +42,6 @@ setup(
             "pytest-html~=2.1",
             "pytest-pep8~=1.0",
             "pytest-profiling~=1.7",
-            "requests-mock~=1.8",
             "sphinx-markdown-tables~=0.0",
             "sphinx-rtd-theme~=0.5",
             "sphinxcontrib-apidoc~=0.3",
