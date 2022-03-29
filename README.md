@@ -80,8 +80,6 @@ import os
 import tempfile
 import logging
 
-from pprint import pprint
-
 from git.repo import Repo
 from gitalong import Repository, RepositoryNotSetup, CommitSpread
 
