@@ -33,7 +33,7 @@ git clone project.git project
 git init --bare store.git
 
 # Setting up Gitalong in your project repository.
-# This will clone the registry repository in an ignored `.gitalong` folder.
+# This will clone the store repository in an ignored `.gitalong` folder.
 # It will also start tracking a `.gitalong.json` configuration file.
 gitalong -C project setup store.git --modify-permissions --tracked-extensions .jpg,.gif,.png --track-uncommitted --update-gitignore --update-hooks
 
