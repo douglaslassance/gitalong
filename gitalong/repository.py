@@ -16,11 +16,11 @@ from gitdb.util import hex_to_bin
 
 from .enums import CommitSpread
 from .functions import get_real_path, is_binary_file
-from .exceptions import GitalongNotInstalled
+from .exceptions import RepositoryNotSetup
 from .functions import set_read_only, pulled_within, get_filenames_from_move_string
 
 
-class Gitalong:
+class Repository:
     """The Gitalong class aggregates all the Gitalong actions that can happen on a
     repository.
     """
@@ -30,10 +30,10 @@ class Gitalong:
 
     def __new__(
         cls,
-        managed_repository: str = "",
+        repository: str = "",
         use_cached_instances=False,
     ):
-        managed_repo = Repo(managed_repository, search_parent_directories=True)
+        managed_repo = Repo(repository, search_parent_directories=True)
         working_dir = managed_repo.working_dir
         if use_cached_instances:
             return cls._instances.setdefault(working_dir, super().__new__(cls))
@@ -41,12 +41,12 @@ class Gitalong:
 
     def __init__(
         self,
-        managed_repository: str = "",
+        repository: str = "",
         use_cached_instances=False,  # pylint: disable=unused-argument
     ):
         """
         Args:
-            managed_repository (str):
+            repository (str):
                 The managed repository exact absolute path.
             use_cached_instances (bool):
                 If true, the class will return "singleton" cached per clone.
@@ -57,10 +57,8 @@ class Gitalong:
         self._config = None
         self._submodules = None
 
-        self._managed_repository = Repo(
-            managed_repository, search_parent_directories=True
-        )
-        self._gitalong_repository = self._clone_gitalong_repository()
+        self._managed_repository = Repo(repository, search_parent_directories=True)
+        self._store_repository = self._clone_store_repository()
 
         if self.config.get(
             "modify_permissions", False
@@ -71,38 +69,39 @@ class Gitalong:
             config_writer.set_value("core", "fileMode", "false")
             config_writer.release()
 
-    def _clone_gitalong_repository(self):
+    def _clone_store_repository(self):
         """
         Returns:
             git.Repo: Clones the Gitalong repository if not done already.
         """
         try:
-            return Repo(os.path.join(self.managed_repository_root, ".gitalong"))
+            return Repo(os.path.join(self.working_dir, ".gitalong"))
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
-            remote = self.config.get("remote_url")
+            remote = self.config.get("store_url")
             return Repo.clone_from(
                 remote,
-                os.path.join(self.managed_repository_root, ".gitalong"),
+                os.path.join(self.working_dir, ".gitalong"),
             )
 
     @classmethod
-    def install(
+    def setup(
         cls,
-        gitalong_repository: str,
+        store_repository: str,
         managed_repository: str = "",
         modify_permissions=False,
         pull_treshold: float = 60.0,
         track_binaries: bool = False,
         track_uncommitted: bool = False,
-        tracked_extensions: dict = None,
+        tracked_extensions: list = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
     ):
-        """Install Gitalong on a repository.
+        """Setup Gitalong in a repository.
 
         Args:
-            gitalong_repository (str):
-                The URL of the repository that will store Gitalong data.
+            store_repository (str):
+                The URL or path to the repository that Gitalong will use to store local
+                changes.
             managed_repository (str, optional):
                 The repository in which we install Gitalong. Defaults to current
                 working directory. Current working directory if not passed.
@@ -135,17 +134,17 @@ class Gitalong:
         config_path = os.path.join(managed_repository.working_dir, cls._config_basename)
         with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
-                "remote_url": gitalong_repository,
+                "store_url": store_repository,
                 "modify_permissions": modify_permissions,
                 "track_binaries": track_binaries,
-                "tracked_extensions": ",".join(tracked_extensions),
+                "tracked_extensions": tracked_extensions,
                 "pull_treshold": pull_treshold,
                 "track_uncommitted": track_uncommitted,
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
-        gitalong = cls(managed_repository=managed_repository.working_dir)
-        gitalong._clone_gitalong_repository()
+        gitalong = cls(repository=managed_repository.working_dir)
+        gitalong._clone_store_repository()
         if update_gitignore:
             gitalong.update_gitignore()
         if update_hooks:
@@ -157,7 +156,7 @@ class Gitalong:
 
         TODO: Improve update by considering what is already ignored.
         """
-        gitignore_path = os.path.join(self.managed_repository_root, ".gitignore")
+        gitignore_path = os.path.join(self.working_dir, ".gitignore")
         content = ""
         if os.path.exists(gitignore_path):
             with open(gitignore_path, encoding="utf8") as gitignore:
@@ -173,20 +172,12 @@ class Gitalong:
                 gitignore.write(content + patch_content)
 
     @property
-    def managed_repository(self) -> Repo:
-        """
-        Returns:
-            git.Repo: The repository we are managing with Gitalong.
-        """
-        return self._managed_repository
-
-    @property
     def config_path(self) -> str:
         """
         Returns:
             dict: The content of `.gitalong.json` as a dictionary.
         """
-        return os.path.join(self.managed_repository_root, self._config_basename)
+        return os.path.join(self.working_dir, self._config_basename)
 
     @property
     def config(self) -> dict:
@@ -199,7 +190,7 @@ class Gitalong:
                 with open(self.config_path, encoding="utf8") as _config_file:
                     self._config = json.loads(_config_file.read())
             except FileNotFoundError as error:
-                raise GitalongNotInstalled(
+                raise RepositoryNotSetup(
                     "Gitalong is not installed on this repository."
                 ) from error
         return self._config
@@ -216,7 +207,7 @@ class Gitalong:
             )
         except configparser.NoOptionError:
             basename = os.path.join(".git", "hooks")
-        return os.path.normpath(os.path.join(self.managed_repository_root, basename))
+        return os.path.normpath(os.path.join(self.working_dir, basename))
 
     def install_hooks(self):
         """Installs Gitalong hooks in managed repository.
@@ -243,7 +234,7 @@ class Gitalong:
             str: The path relative to the managed repository.
         """
         if os.path.exists(filename):
-            filename = os.path.relpath(filename, self.managed_repository_root)
+            filename = os.path.relpath(filename, self.working_dir)
         return filename
 
     def get_absolute_path(self, filename: str) -> str:
@@ -256,7 +247,7 @@ class Gitalong:
         """
         if os.path.exists(filename):
             return filename
-        return os.path.join(self.managed_repository_root, filename)
+        return os.path.join(self.working_dir, filename)
 
     def get_file_last_commit(self, filename: str, prune: bool = True) -> dict:
         """
@@ -325,12 +316,12 @@ class Gitalong:
                 if file_commits
                 else {}
             )
-            if last_commit and "sha" in last_commit:
-                # We are only evaluating branch information here because it's expensive.
-                last_commit["branches"] = {
-                    "local": self.get_commit_branches(last_commit["sha"]),
-                    "remote": self.get_commit_branches(last_commit["sha"], remote=True),
-                }
+        if last_commit and "sha" in last_commit:
+            # We are only evaluating branch information here because it's expensive.
+            last_commit["branches"] = {
+                "local": self.get_commit_branches(last_commit["sha"]),
+                "remote": self.get_commit_branches(last_commit["sha"], remote=True),
+            }
         return last_commit
 
     @property
@@ -361,28 +352,28 @@ class Gitalong:
             if "sha" in commit:
                 if active_branch in commit.get("branches", {}).get("local", []):
                     commit_spread |= (
-                        CommitSpread.LOCAL_ACTIVE_BRANCH
+                        CommitSpread.MINE_ACTIVE_BRANCH
                         if is_issued
-                        else CommitSpread.CLONE_MATCHING_BRANCH
+                        else CommitSpread.THEIR_MATCHING_BRANCH
                     )
                 else:
                     commit_spread |= (
-                        CommitSpread.LOCAL_OTHER_BRANCH
+                        CommitSpread.MINE_OTHER_BRANCH
                         if is_issued
-                        else CommitSpread.CLONE_OTHER_BRANCH
+                        else CommitSpread.THEIR_OTHER_BRANCH
                     )
             else:
                 commit_spread |= (
-                    CommitSpread.LOCAL_UNCOMMITTED
+                    CommitSpread.MINE_UNCOMMITTED
                     if is_issued
-                    else CommitSpread.CLONE_UNCOMMITTED
+                    else CommitSpread.THEIR_UNCOMMITTED
                 )
         else:
             remote_branches = commit.get("branches", {}).get("remote", [])
             if active_branch in remote_branches:
                 commit_spread |= CommitSpread.REMOTE_MATCHING_BRANCH
             if active_branch in commit.get("branches", {}).get("local", []):
-                commit_spread |= CommitSpread.LOCAL_ACTIVE_BRANCH
+                commit_spread |= CommitSpread.MINE_ACTIVE_BRANCH
             if active_branch in remote_branches:
                 remote_branches.remove(active_branch)
             if remote_branches:
@@ -479,7 +470,7 @@ class Gitalong:
         return {
             "host": socket.gethostname(),
             "user": getpass.getuser(),
-            "clone": get_real_path(self.managed_repository_root),
+            "clone": get_real_path(self.working_dir),
         }
 
     @property
@@ -599,10 +590,10 @@ class Gitalong:
         Returns:
             TYPE: The path to the JSON file that tracks the local commits.
         """
-        return os.path.join(self._gitalong_repository.working_dir, "commits.json")
+        return os.path.join(self._store_repository.working_dir, "commits.json")
 
     @property
-    def managed_repository_files(self) -> list:
+    def files(self) -> list:
         """
         Returns:
             list:
@@ -716,10 +707,10 @@ class Gitalong:
             dump = json.dumps(commits, indent=4, sort_keys=True)
             _file.write(dump)
         if push:
-            self._gitalong_repository.index.add(json_path)
+            self._store_repository.index.add(json_path)
             basename = os.path.basename(json_path)
-            self._gitalong_repository.index.commit(message=f"Update {basename}")
-            self._gitalong_repository.remote().push()
+            self._store_repository.index.commit(message=f"Update {basename}")
+            self._store_repository.remote().push()
 
     @property
     def tracked_commits(self) -> typing.List[dict]:
@@ -729,10 +720,10 @@ class Gitalong:
                 A list of commits that haven't been pushed to remote. Also includes
                 commits representing uncommitted changes.
         """
-        gitalong_repository = self._gitalong_repository
-        remote = gitalong_repository.remote()
+        store_repository = self._store_repository
+        remote = store_repository.remote()
         pull_treshold = self.config.get("pull_treshold", 60)
-        if not pulled_within(gitalong_repository, pull_treshold) and remote.refs:
+        if not pulled_within(store_repository, pull_treshold) and remote.refs:
             # TODO: If we could check that a pull is already happening then we could
             # avoid this try except and save time.
             try:
@@ -771,11 +762,10 @@ class Gitalong:
         last_commit = self.get_file_last_commit(filename, prune=prune)
         spread = self.get_commit_spread(last_commit)
         is_local_commit = (
-            spread & CommitSpread.LOCAL_ACTIVE_BRANCH
-            == CommitSpread.LOCAL_ACTIVE_BRANCH
+            spread & CommitSpread.MINE_ACTIVE_BRANCH == CommitSpread.MINE_ACTIVE_BRANCH
         )
         is_uncommitted = (
-            spread & CommitSpread.LOCAL_UNCOMMITTED == CommitSpread.LOCAL_UNCOMMITTED
+            spread & CommitSpread.MINE_UNCOMMITTED == CommitSpread.MINE_UNCOMMITTED
         )
         missing_commit = {} if is_local_commit or is_uncommitted else last_commit
         if os.path.exists(filename):
@@ -784,9 +774,5 @@ class Gitalong:
         return missing_commit
 
     @property
-    def managed_repository_root(self) -> str:
-        """
-        Returns:
-            str: The managed repository dirname.
-        """
+    def working_dir(self):
         return self._managed_repository.working_dir

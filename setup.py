@@ -17,9 +17,7 @@ with open(os.path.join(dirname, "README.md"), encoding="utf-8") as fle:
 setup(
     name="gitalong",
     version=info.get("__version__", ""),
-    description=(
-        "An API built-on top of Git to avoid conflicts when working with others."
-    ),
+    description=("Git without conflicts."),
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/douglaslassance/gitalong-python",
@@ -30,11 +28,11 @@ setup(
     install_requires=[
         "GitPython~=3.1",
         "dictdiffer~=0.9",
-        "python-dotenv~=0.19",
     ],
     extras_require={
         "ci": [
             "black",
+            "click~=8.0",
             "flake8-print~=3.1",
             "flake8~=3.9",
             "pep8-naming~=0.11",
@@ -48,7 +46,12 @@ setup(
             "sphinx-markdown-tables~=0.0",
             "sphinx-rtd-theme~=0.5",
             "sphinxcontrib-apidoc~=0.3",
-            "Sphinx~=3.2",
+            "Sphinx~=4.5",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "gitalong = gitalong.cli:main",
         ],
     },
     include_package_data=True,

@@ -4,8 +4,7 @@ import stat
 import pathlib
 import re
 
-import git
-
+from git.repo import Repo
 
 MOVE_STRING_REGEX = re.compile("{(.*)}")
 
@@ -88,11 +87,11 @@ def get_real_path(filename: str) -> str:
     return filename
 
 
-def pulled_within(repository: git.Repo, seconds: float) -> bool:
+def pulled_within(repository: Repo, seconds: float) -> bool:
     """Summary
 
     Args:
-        repository (git.Repo): The repository to check for.
+        repository (Repo): The repository to check for.
         seconds (float): Time in seconds since last push.
 
     Returns:
