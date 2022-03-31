@@ -26,6 +26,7 @@ setup(
     license=info.get("__license__", ""),
     packages=["gitalong"],
     install_requires=[
+        "click~=8.0",
         "GitPython~=3.1",
         "dictdiffer~=0.9",
     ],
@@ -52,6 +53,10 @@ setup(
         "console_scripts": [
             "gitalong = gitalong.cli:main",
         ],
+        "gui_scripts": [
+            "gitalong-gui = gitalong.cli:main",
+        ],
     },
     include_package_data=True,
+    python_require="~=3.7",
 )
