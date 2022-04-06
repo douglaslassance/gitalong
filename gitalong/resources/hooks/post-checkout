@@ -11,7 +11,8 @@ PREVIOUS_HEAD=$2
 # It should trigger this post-checkout with the previous and new heads being the same.
 if [ "$NEW_HEAD" = "$PREVIOUS_HEAD" ];
 then
-	if (where gitalong) then
+	if command -v gitalong
+	then
 		gitalong sync
 	else
 		echo "Gitalong CLI is not installed on this system."
