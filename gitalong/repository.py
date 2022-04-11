@@ -16,7 +16,7 @@ from gitdb.util import hex_to_bin
 
 from .enums import CommitSpread
 from .functions import get_real_path, is_binary_file
-from .exceptions import RepositoryNotSetup
+from .exceptions import RepositoryInvalidConfig, RepositoryNotSetup
 from .functions import set_read_only, pulled_within, get_filenames_from_move_string
 
 
@@ -77,7 +77,12 @@ class Repository:
         try:
             return Repo(os.path.join(self.working_dir, ".gitalong"))
         except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
-            remote = self.config.get("store_url")
+            try:
+                remote = self.config["store_url"]
+            except KeyError as error:
+                config = self._config_basename
+                message = f'Could not find value for "store_url" in "{config}".'
+                raise RepositoryInvalidConfig(message) from error
             return Repo.clone_from(
                 remote,
                 os.path.join(self.working_dir, ".gitalong"),
