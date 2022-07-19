@@ -181,7 +181,7 @@ if __name__ == "__main__":
 
 # Development
 
-In addition to users pre-requisites, you will need the following:
+In addition to standard pre-requisites, you will need the following:
 
 -   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (macOS/Linux)
 -   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
