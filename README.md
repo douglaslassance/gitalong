@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
 In addition to standard pre-requisites, you will need the following:
 
--   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (macOS/Linux)
+-   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Unix)
 -   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
 -   [SublimeText](https://www.sublimetext.com/)
 
