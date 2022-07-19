@@ -6,7 +6,7 @@
 
 Gitalong is a tool for Git repositories that seek to prevent conflicts between files when working with a team.
 It uses hooks and a dedicated repository to communicate local changes across all clones of a given remote.
-In turns this information can be leveraged by integrations to prevent modifying file that are already changed elsewhere.
+In turns this information can be leveraged by integrations to prevent modifying files that are already changed elsewhere.
 
 ## Pre-requisites
 
