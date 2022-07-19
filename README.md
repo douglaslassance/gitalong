@@ -181,11 +181,11 @@ if __name__ == "__main__":
 
 # Development
 
-This projects requires the following:
+In addition to users pre-requisites, you will need the following:
 
--   [Python >=3.7](https://www.python.org/downloads/)
 -   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (macOS/Linux)
 -   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
+-   [SublimeText](https://www.sublimetext.com/)
 
 Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong` virtual environment with `mkvirtualenv`.
-Build systems for installing requirements and running tests are on board of the SublimeText project.
+Build systems for installing requirements and running tests are on board the SublimeText project.
