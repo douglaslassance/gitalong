@@ -1,9 +1,0 @@
-{
-    "modify_permissions": true,
-    "pull_treshold": 60.0,
-    "store_headers": "/var/folders/nc/3ll6c4wd0x9237vp06j5vbmh0000gn/T/tmp4gg6p4xb/managed",
-    "store_url": "/var/folders/nc/3ll6c4wd0x9237vp06j5vbmh0000gn/T/tmp4gg6p4xb/store.git",
-    "track_binaries": true,
-    "track_uncommitted": true,
-    "tracked_extensions": []
-}
