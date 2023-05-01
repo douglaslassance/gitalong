@@ -10,8 +10,8 @@ In turns this information can be leveraged by integrations to prevent modifying 
 
 ## Pre-requisites
 
--   [Python >=3.7](https://www.python.org/downloads/)
--   [Git >=2.35.1](https://git-scm.com/downloads)
+- [Python >=3.7](https://www.python.org/downloads/)
+- [Git >=2.35.1](https://git-scm.com/downloads)
 
 ## Installation
 
@@ -108,7 +108,7 @@ def test_example():
         # This will clone the registry repository in an ignored `.gitalong` folder.
         # It will also start tracking a `.gitalong.json` configuration file.
         repository = Repository.setup(
-            store_repository=store.working_dir,
+            store_url=store.working_dir,
             managed_repository=project_clone.working_dir,
             modify_permissions=True,
             tracked_extensions=[".jpg", ".gif", ".png"],
@@ -176,16 +176,53 @@ def test_example():
 
 if __name__ == "__main__":
     test_example()
-
 ```
 
-# Development
+## Stores
+
+Instead using a dedicated Git repository to store its data, Gitalong can also leverage a REST API end point.
+The following data is expected:
+
+- **author:** string
+- **changes:** comma-separated strings or array of strings
+- **clone:** string
+- **date:** string
+- **host:** string
+- **remote:** string
+- **sha:** string
+- **user:** string
+
+The drawback is the need to have that infrastructure in place, but the advantage is the performance when pulling and pushing the data.
+Referencing the previous example, you simply need to pass your headers as such:
+
+### Shell
+
+```shell
+gitalong -C project setup https://rest.api/resource --header "key: value" --header "envar: \$VALUE" --modify-permissions --tracked-extensions .jpg,.gif,.png --track-uncommitted --update-gitignore --update-hooks
+```
+
+### Python
+
+```python
+repository = Repository.setup(
+    store_url="https://rest.api/resource",
+    headers={"key": "value", "envar": "$VALUE"},
+    managed_repository=project_clone.working_dir,
+    modify_permissions=True,
+    tracked_extensions=[".jpg", ".gif", ".png"],
+    track_uncommitted=True,
+    update_gitignore=True,
+    # Skipping hook update for the test.
+    update_hooks=False,
+)
+```
+## Development
 
 In addition to standard pre-requisites, you will need the following:
 
--   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Unix)
--   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
--   [SublimeText](https://www.sublimetext.com/)
+- [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Unix)
+- [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
+- [SublimeText](https://www.sublimetext.com/)
 
 Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong` virtual environment with `mkvirtualenv`.
 Build systems for installing requirements and running tests are on board the SublimeText project.

@@ -12,7 +12,7 @@ from gitalong.functions import is_read_only
 from .functions import save_image
 
 
-class GitalongTestCase(unittest.TestCase):
+class RepositoryTestCase(unittest.TestCase):
     """Sets up a temporary git repository for each test"""
 
     def setUp(self):

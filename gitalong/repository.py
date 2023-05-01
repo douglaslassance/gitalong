@@ -1,7 +1,6 @@
 import os
 import shutil
 import logging
-import typing
 import json
 import socket
 import datetime
@@ -15,14 +14,16 @@ from git.repo import Repo
 from gitdb.util import hex_to_bin
 
 from .enums import CommitSpread
+from .stores.git_store import GitStore
+from .stores.rest_store import RestStore
 from .functions import get_real_path, is_binary_file
-from .exceptions import RepositoryInvalidConfig, RepositoryNotSetup
+from .exceptions import RepositoryNotSetup
 from .functions import set_read_only, pulled_within, get_filenames_from_move_string
 
 
 class Repository:
-    """The Gitalong class aggregates all the Gitalong actions that can happen on a
-    repository.
+    """Aggregates all the Gitalong actions that can happen on a
+    Git repository.
     """
 
     _instances = {}
@@ -58,7 +59,9 @@ class Repository:
         self._submodules = None
 
         self._managed_repository = Repo(repository, search_parent_directories=True)
-        self._store_repository = self._clone_store_repository()
+        self._store = (
+            RestStore(self) if self.config.get("store_headers") else GitStore(self)
+        )
 
         if self.config.get(
             "modify_permissions", False
@@ -69,29 +72,11 @@ class Repository:
             config_writer.set_value("core", "fileMode", "false")
             config_writer.release()
 
-    def _clone_store_repository(self):
-        """
-        Returns:
-            git.Repo: Clones the Gitalong repository if not done already.
-        """
-        try:
-            return Repo(os.path.join(self.working_dir, ".gitalong"))
-        except (git.exc.NoSuchPathError, git.exc.InvalidGitRepositoryError):
-            try:
-                remote = self.config["store_url"]
-            except KeyError as error:
-                config = self._config_basename
-                message = f'Could not find value for "store_url" in "{config}".'
-                raise RepositoryInvalidConfig(message) from error
-            return Repo.clone_from(
-                remote,
-                os.path.join(self.working_dir, ".gitalong"),
-            )
-
     @classmethod
     def setup(
         cls,
-        store_repository: str,
+        store_url: str,
+        store_headers: dict = None,
         managed_repository: str = "",
         modify_permissions=False,
         pull_treshold: float = 60.0,
@@ -139,7 +124,8 @@ class Repository:
         config_path = os.path.join(managed_repository.working_dir, cls._config_basename)
         with open(config_path, "w", encoding="utf8") as _config_file:
             config_settings = {
-                "store_url": store_repository,
+                "store_url": store_url,
+                "store_headers": store_headers or {},
                 "modify_permissions": modify_permissions,
                 "track_binaries": track_binaries,
                 "tracked_extensions": tracked_extensions,
@@ -149,7 +135,7 @@ class Repository:
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
             _config_file.write(dump)
         gitalong = cls(repository=managed_repository.working_dir)
-        gitalong._clone_store_repository()
+        # gitalong._clone_store_repository()
         if update_gitignore:
             gitalong.update_gitignore()
         if update_hooks:
@@ -267,7 +253,7 @@ class Repository:
         # We are checking the tracked commit first as they represented local changes.
         # They are in nature always more recent. If we find a relevant commit here we
         # can skip looking elsewhere.
-        tracked_commits = self.tracked_commits
+        tracked_commits = self._store.commits
         relevant_tracked_commits = []
         filename = self.get_relative_path(filename)
         remote = self._managed_repository.remote().url
@@ -296,7 +282,7 @@ class Repository:
                 last_commit["sha"], remote=True
             ):
                 tracked_commits.remove(last_commit)
-                self.update_tracked_commits(tracked_commits)
+                self._store.commits = tracked_commits
                 for key in self.context_dict:
                     if key in last_commit:
                         del last_commit[key]
@@ -590,14 +576,6 @@ class Repository:
         return False
 
     @property
-    def tracked_commits_json_path(self):
-        """
-        Returns:
-            TYPE: The path to the JSON file that tracks the local commits.
-        """
-        return os.path.join(self._store_repository.working_dir, "commits.json")
-
-    @property
     def files(self) -> list:
         """
         Returns:
@@ -670,83 +648,6 @@ class Repository:
         return self.config.get("track_binaries", False) and is_binary_file(
             self.get_absolute_path(filename)
         )
-
-    @property
-    def updated_tracked_commits(self) -> list:
-        """
-        Returns:
-            list:
-                Local commits for all clones with local commits and uncommitted changes
-                from this clone.
-        """
-        # Removing any matching contextual commits from tracked commits.
-        # We are re-evaluating those.
-        tracked_commits = []
-        for commit in self.tracked_commits:
-            remote = self._managed_repository.remote().url
-            is_other_remote = commit.get("remote") != remote
-            if is_other_remote or not self.is_issued_commit(commit):
-                tracked_commits.append(commit)
-                continue
-        # Adding all local commit to the list of tracked commits.
-        # Will include uncommitted changes as a "fake" commit.
-        for commit in self.local_only_commits:
-            tracked_commits.append(commit)
-        return tracked_commits
-
-    def update_tracked_commits(self, commits: list = None, push: bool = True):
-        """Write and pushes JSON file that tracks the local commits from all clones
-        using the passed commits.
-
-        Args:
-            commits (list, optional):
-                The tracked commits to update with. Default to evaluating updated
-                tracked commits.
-            push (bool, optional):
-                Whether we are pushing the update JSON file to the Gitalong repository
-                remote.
-        """
-        commits = commits or self.updated_tracked_commits
-        json_path = self.tracked_commits_json_path
-        with open(json_path, "w") as _file:
-            dump = json.dumps(commits, indent=4, sort_keys=True)
-            _file.write(dump)
-        if push:
-            self._store_repository.index.add(json_path)
-            basename = os.path.basename(json_path)
-            self._store_repository.index.commit(message=f"Update {basename}")
-            self._store_repository.remote().push()
-
-    @property
-    def tracked_commits(self) -> typing.List[dict]:
-        """
-        Returns:
-            typing.List[dict]:
-                A list of commits that haven't been pushed to remote. Also includes
-                commits representing uncommitted changes.
-        """
-        store_repository = self._store_repository
-        remote = store_repository.remote()
-        pull_treshold = self.config.get("pull_treshold", 60)
-        if not pulled_within(store_repository, pull_treshold) and remote.refs:
-            # TODO: If we could check that a pull is already happening then we could
-            # avoid this try except and save time.
-            try:
-                remote.pull(
-                    ff=True,
-                    quiet=True,
-                    rebase=True,
-                    autostash=True,
-                    verify=False,
-                    summary=False,
-                )
-            except git.exc.GitCommandError:
-                pass
-        serializable_commits = []
-        if os.path.exists(self.tracked_commits_json_path):
-            with open(self.tracked_commits_json_path, "r") as _file:
-                serializable_commits = json.loads(_file.read())
-        return serializable_commits
 
     def make_file_writable(
         self,

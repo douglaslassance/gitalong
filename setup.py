@@ -27,8 +27,9 @@ setup(
     packages=["gitalong"],
     install_requires=[
         "click~=8.0",
-        "GitPython~=3.1",
         "dictdiffer~=0.9",
+        "GitPython~=3.1",
+        "requests~=2.28",
     ],
     extras_require={
         "ci": [

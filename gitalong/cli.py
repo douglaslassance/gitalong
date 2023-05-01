@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 
 import click
 import git
@@ -161,9 +162,19 @@ def claim(ctx, filename):
 
 @click.command(help="Setup Gitalong in a repository.")
 @click.argument(
-    "store-repository",
-    # help="The URL or path to the repository that will store Gitalong data.",
+    "store-url",
+    # help="The URL or path to the repository or REST API endpoint that will store the
+    # Gitalong data.",
     required=True,
+)
+@click.option(
+    "-sh",
+    "--store-headers",
+    is_flag=True,
+    help=(
+        "If using a REST API for storing Gitalong data, the headers used to connect the"
+        "end point."
+    ),
 )
 @click.option(
     "-mp",
@@ -234,7 +245,8 @@ def claim(ctx, filename):
 @click.pass_context
 def setup(
     ctx,
-    store_repository,
+    store_url,
+    store_headers,
     modify_permissions,
     pull_treshold,
     track_binaries,
@@ -244,7 +256,8 @@ def setup(
     update_hooks,
 ):
     Repository.setup(
-        store_repository=store_repository,
+        store_url=store_url,
+        store_headers=json.loads(store_headers),
         managed_repository=ctx.obj.get("REPOSITORY", ""),
         modify_permissions=modify_permissions,
         pull_treshold=pull_treshold,
