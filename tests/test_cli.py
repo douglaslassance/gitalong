@@ -11,36 +11,12 @@ from git.repo import Repo
 
 from gitalong import cli  # noqa: E402 pylint: disable=wrong-import-position
 
+from .gitalong_case import GitalongCase
 from .functions import save_image  # noqa: E402
 
 
-class CliTestCase(unittest.TestCase):
+class CliTestCase(GitalongCase):
     """Sets up a temporary git repository for each test"""
-
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        logging.info(self.temp_dir)
-        self.managed_remote = Repo.init(
-            path=os.path.join(self.temp_dir, "managed.git"), bare=True
-        )
-        self.managed_clone = self.managed_remote.clone(
-            os.path.join(self.temp_dir, "managed")
-        )
-        self.store_remote = Repo.init(
-            path=os.path.join(self.temp_dir, "store.git"), bare=True
-        )
-
-    def tearDown(self):
-        if hasattr(self, "_outcome"):
-            result = self.defaultTestResult()
-            self._feedErrorsToResult(result, self._outcome.errors)
-            error = self.list_to_reason(result.errors)
-            failure = self.list_to_reason(result.failures)
-            if not error and not failure:
-                try:
-                    shutil.rmtree(self.temp_dir)
-                except PermissionError as error:
-                    logging.error(error)
 
     def list_to_reason(self, exc_list):
         if exc_list and exc_list[-1][0] is self:

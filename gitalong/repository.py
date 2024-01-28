@@ -22,9 +22,7 @@ from .functions import set_read_only, pulled_within, get_filenames_from_move_str
 
 
 class Repository:
-    """Aggregates all the Gitalong actions that can happen on a
-    Git repository.
-    """
+    """Aggregates all the Gitalong actions that can happen on a Git repository."""
 
     _instances = {}
     _config_basename = ".gitalong.json"
@@ -79,7 +77,7 @@ class Repository:
         store_headers: dict = None,
         managed_repository: str = "",
         modify_permissions=False,
-        pull_treshold: float = 60.0,
+        pull_threshold: float = 60.0,
         track_binaries: bool = False,
         track_uncommitted: bool = False,
         tracked_extensions: list = None,
@@ -89,9 +87,11 @@ class Repository:
         """Setup Gitalong in a repository.
 
         Args:
-            store_repository (str):
+            store_url (str):
                 The URL or path to the repository that Gitalong will use to store local
                 changes.
+            store_headers (str):
+                The headers to connect to the API end point.
             managed_repository (str, optional):
                 The repository in which we install Gitalong. Defaults to current
                 working directory. Current working directory if not passed.
@@ -104,7 +104,7 @@ class Repository:
                 tracked commits after each file system operation.
             tracked_extensions (list, optional):
                 List of extensions to track.
-            pull_treshold (list, optional):
+            pull_threshold (list, optional):
                 Time in seconds that need to pass before Gitalong pulls again. Defaults
                 to 10 seconds. This is for optimization sake as pull and fetch operation
                 are expensive. Defaults to 60 seconds.
@@ -129,7 +129,7 @@ class Repository:
                 "modify_permissions": modify_permissions,
                 "track_binaries": track_binaries,
                 "tracked_extensions": tracked_extensions,
-                "pull_treshold": pull_treshold,
+                "pull_threshold": pull_threshold,
                 "track_uncommitted": track_uncommitted,
             }
             dump = json.dumps(config_settings, indent=4, sort_keys=True)
@@ -208,7 +208,7 @@ class Repository:
         """
         hooks = os.path.join(os.path.dirname(__file__), "resources", "hooks")
         destination_dir = self.hooks_path
-        for (dirname, _, basenames) in os.walk(hooks):
+        for dirname, _, basenames in os.walk(hooks):
             for basename in basenames:
                 filename = os.path.join(dirname, basename)
                 destination = os.path.join(destination_dir, basename)
@@ -248,7 +248,7 @@ class Repository:
 
         Returns:
             dict: The last commit for the provided filename across all branches local or
-                remote.
+            remote.
         """
         # We are checking the tracked commit first as they represented local changes.
         # They are in nature always more recent. If we find a relevant commit here we
@@ -287,8 +287,8 @@ class Repository:
                     if key in last_commit:
                         del last_commit[key]
         if not last_commit:
-            pull_treshold = self.config.get("pull_treshold", 60)
-            if not pulled_within(self._managed_repository, pull_treshold):
+            pull_threshold = self.config.get("pull_threshold", 60)
+            if not pulled_within(self._managed_repository, pull_threshold):
                 try:
                     self._managed_repository.remote().fetch(prune=prune)
                 except git.exc.GitCommandError:
@@ -614,7 +614,7 @@ class Repository:
         Args:
             filename (str): The relative or absolute filename to update permissions for.
             locally_changed_files (list, optional):
-                For optimization sake you can pass the locally changed files if you
+                For optimization’s sake you can pass the locally changed files if you
                 already have them. Default will compute them.
 
         Returns:
@@ -628,7 +628,7 @@ class Repository:
                 read_only=read_only,
                 check_exists=False,
             ):
-                return ("R" if read_only else "W", filename)
+                return "R" if read_only else "W", filename
         return ()
 
     def is_file_tracked(self, filename: str) -> bool:
@@ -661,6 +661,7 @@ class Repository:
             filename (str):
                 The file to make writable. Takes a path that's absolute or relative to
                 the managed repository.
+            prune (bool, optional): Prune branches if a fetch is necessary.
 
         Returns:
             dict: The missing commit that we are missing.
@@ -676,9 +677,35 @@ class Repository:
         missing_commit = {} if is_local_commit or is_uncommitted else last_commit
         if os.path.exists(filename):
             if not missing_commit:
-                set_read_only(filename, missing_commit)
+                set_read_only(filename, bool(missing_commit))
         return missing_commit
 
     @property
     def working_dir(self):
         return self._managed_repository.working_dir
+
+    def update_tracked_commits(self):
+        self._store.commits = self.updated_tracked_commits
+
+    @property
+    def updated_tracked_commits(self) -> list:
+        """
+        Returns:
+            list:
+                Local commits for all clones with local commits and uncommitted changes
+                from this clone.
+        """
+        # Removing any matching contextual commits from tracked commits.
+        # We are re-evaluating those.
+        tracked_commits = []
+        for commit in self._store.commits:
+            remote = self._managed_repository.remote().url
+            is_other_remote = commit.get("remote") != remote
+            if is_other_remote or not self.is_issued_commit(commit):
+                tracked_commits.append(commit)
+                continue
+        # Adding all local commit to the list of tracked commits.
+        # Will include uncommitted changes as a "fake" commit.
+        for commit in self.local_only_commits:
+            tracked_commits.append(commit)
+        return tracked_commits

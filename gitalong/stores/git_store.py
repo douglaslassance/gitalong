@@ -26,8 +26,8 @@ class GitStore(Store):
         """
         store_repository = self._store_repository
         remote = store_repository.remote()
-        pull_treshold = self.config.get("pull_treshold", 60)
-        if not pulled_within(store_repository, pull_treshold) and remote.refs:
+        pull_threshold = self._managed_repository.config.get("pull_threshold", 60)
+        if not pulled_within(store_repository, pull_threshold) and remote.refs:
             # TODO: If we could check that a pull is already happening then we could
             # avoid this try except and save time.
             try:
@@ -76,7 +76,6 @@ class GitStore(Store):
 
     @commits.setter
     def commits(self, commits: typing.List[dict]):
-        commits = commits or self.updated_tracked_commits
         json_path = self.json_path
         with open(json_path, "w", encoding="utf-8") as _file:
             dump = json.dumps(commits, indent=4, sort_keys=True)

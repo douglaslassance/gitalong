@@ -15,7 +15,7 @@ class RestStore(Store):
         super().__init__(managed_repository)
         config = self._managed_repository.config
         self._url = config.get("stored_url", "")
-        # Feeling the stringified headers with environment variables.
+        # Filling the string headers with environment variables.
         self._headers = json.loads(
             os.path.expandvars(json.dumps(config.get("store_headers", {})))
         )

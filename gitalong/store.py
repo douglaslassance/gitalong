@@ -26,4 +26,4 @@ class Store(ABC):
 
         Args: commits (list, optional): The commits to update the store with.
         """
-        return []
+        pass

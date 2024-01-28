@@ -9,23 +9,15 @@ from git.repo import Repo
 from gitalong import Repository, CommitSpread, RepositoryNotSetup
 from gitalong.functions import is_read_only
 
+from .gitalong_case import GitalongCase
 from .functions import save_image
 
 
-class RepositoryTestCase(unittest.TestCase):
+class RepositoryTestCase(GitalongCase):
     """Sets up a temporary git repository for each test"""
 
     def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        logging.info(self.temp_dir)
-        self.managed_remote = Repo.init(
-            path=os.path.join(self.temp_dir, "managed.git"), bare=True
-        )
-        self.managed_clone = self.managed_remote.clone(
-            os.path.join(self.temp_dir, "managed")
-        )
-        self.store_url = os.path.join(self.temp_dir, "store.git")
-        self.store_remote = Repo.init(path=self.store_url, bare=True)
+        super(RepositoryTestCase, self).setUp()
 
         self.assertRaises(
             RepositoryNotSetup, Repository, self.managed_clone.working_dir
@@ -33,7 +25,8 @@ class RepositoryTestCase(unittest.TestCase):
 
         self.repository = Repository.setup(
             self.store_remote.working_dir,
-            self.managed_clone.working_dir,
+            store_headers={},
+            managed_repository=self.managed_clone.working_dir,
             modify_permissions=True,
             track_binaries=True,
             track_uncommitted=True,
@@ -42,18 +35,6 @@ class RepositoryTestCase(unittest.TestCase):
             # part of that test. Instead, we are simulating the hooks operations below.
             update_hooks=False,
         )
-
-    def tearDown(self):
-        if hasattr(self, "_outcome"):
-            result = self.defaultTestResult()
-            self._feedErrorsToResult(result, self._outcome.errors)
-            error = self.list_to_reason(result.errors)
-            failure = self.list_to_reason(result.failures)
-            if not error and not failure:
-                try:
-                    shutil.rmtree(self.temp_dir)
-                except PermissionError as error:
-                    logging.error(error)
 
     def list_to_reason(self, exc_list):
         if exc_list and exc_list[-1][0] is self:
@@ -66,7 +47,7 @@ class RepositoryTestCase(unittest.TestCase):
             os.path.normpath(config.get("store_url")),
         )
 
-    def test_worfklow(self):
+    def test_workflow(self):
         local_only_commits = self.repository.local_only_commits
         working_dir = self.managed_clone.working_dir
         self.assertEqual(1, len(local_only_commits))

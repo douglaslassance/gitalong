@@ -32,14 +32,11 @@ def get_status(repository, filename, commit) -> str:
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
-    splits = []
-    splits.append(prop)
-    splits.append(filename)
-    splits.append(commit.get("sha", "-"))
-    splits.append(",".join(commit.get("branches", {}).get("local", ["-"])) or "-")
-    splits.append(",".join(commit.get("branches", {}).get("remote", ["-"])) or "-")
-    splits.append(commit.get("host", "-"))
-    splits.append(commit.get("author", commit.get("user", "-")) or "-")
+    splits = [prop, filename, commit.get("sha", "-"),
+              ",".join(commit.get("branches", {}).get("local", ["-"])) or "-",
+              ",".join(commit.get("branches", {}).get("remote", ["-"])) or "-",
+              commit.get("host", "-"),
+              commit.get("author", commit.get("user", "-")) or "-"]
     return " ".join(splits)
 
 
@@ -107,7 +104,8 @@ def update(ctx, repository):
 @click.command(
     help=(
         "Prints missing commits in this local branch for each filename. "
-        "Format: `<spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>`"  # noqa: E501 pylint: disable=line-too-long
+        "Format: `<spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>`"
+        # noqa: E501 pylint: disable=line-too-long
     )
 )
 @click.argument(
@@ -170,11 +168,12 @@ def claim(ctx, filename):
 @click.option(
     "-sh",
     "--store-headers",
-    is_flag=True,
+    default="{}",
     help=(
         "If using a REST API for storing Gitalong data, the headers used to connect the"
         "end point."
     ),
+    required=False
 )
 @click.option(
     "-mp",
@@ -189,8 +188,8 @@ def claim(ctx, filename):
 )
 @click.option(
     "-pt",
-    "--pull-treshold",
-    default=True,
+    "--pull-threshold",
+    default=60,
     help=(
         "Time in seconds that need to pass before Gitalong pulls again. Defaults to 10"
         "seconds. This is for optimization sake as pull and fetch operation are "
@@ -248,7 +247,7 @@ def setup(
     store_url,
     store_headers,
     modify_permissions,
-    pull_treshold,
+    pull_threshold,
     track_binaries,
     track_uncommitted,
     tracked_extensions,
@@ -260,7 +259,7 @@ def setup(
         store_headers=json.loads(store_headers),
         managed_repository=ctx.obj.get("REPOSITORY", ""),
         modify_permissions=modify_permissions,
-        pull_treshold=pull_treshold,
+        pull_threshold=pull_threshold,
         track_binaries=track_binaries,
         track_uncommitted=track_uncommitted,
         tracked_extensions=tracked_extensions.split(","),
@@ -294,7 +293,7 @@ class Group(click.Group):
     "-gb",
     "--git-binary",
     default="",
-    help=("Path to the git binary to use. " "Defaults to the one available in PATH."),
+    help="Path to the git binary to use. Defaults to the one available in PATH.",
     required=False,
 )
 @click.pass_context
