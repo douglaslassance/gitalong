@@ -1,24 +1,23 @@
-import os
-import shutil
-import logging
-import json
-import socket
+import configparser
 import datetime
 import getpass
-import configparser
+import json
+import logging
+import os
+import shutil
+import socket
 
 import dictdiffer
 import git
-
 from git.repo import Repo
 from gitdb.util import hex_to_bin
 
 from .enums import CommitSpread
-from .stores.git_store import GitStore
-from .stores.rest_store import RestStore
+from .exceptions import RepositoryNotSetup, RepositoryInvalidConfig
 from .functions import get_real_path, is_binary_file
-from .exceptions import RepositoryNotSetup
 from .functions import set_read_only, pulled_within, get_filenames_from_move_string
+from .stores.git_store import GitStore
+from .stores.jsonbin_store import JsonbinStore
 
 
 class Repository:
@@ -57,9 +56,14 @@ class Repository:
         self._submodules = None
 
         self._managed_repository = Repo(repository, search_parent_directories=True)
-        self._store = (
-            RestStore(self) if self.config.get("store_headers") else GitStore(self)
-        )
+
+        store_url = self.config.get("store_url")
+        if store_url.startswith("https://api.jsonbin.io"):
+            self._store = JsonbinStore(self)
+        elif store_url.endswith(".git"):
+            self._store = GitStore(self)
+        else:
+            raise RepositoryInvalidConfig("Invalid store URL in configuration.")
 
         if self.config.get(
             "modify_permissions", False
@@ -96,7 +100,7 @@ class Repository:
                 The repository in which we install Gitalong. Defaults to current
                 working directory. Current working directory if not passed.
             modify_permissions (bool, optional):
-                Whether Gitalong should managed permissions of binary files.
+                Whether Gitalong should manage permissions of binary files.
             track_binaries (bool, optional):
                 Track all binary files by automatically detecting them.
             track_uncommitted (bool, optional):
@@ -106,8 +110,8 @@ class Repository:
                 List of extensions to track.
             pull_threshold (list, optional):
                 Time in seconds that need to pass before Gitalong pulls again. Defaults
-                to 10 seconds. This is for optimization sake as pull and fetch operation
-                are expensive. Defaults to 60 seconds.
+                to 10 seconds. This is for optimization's sake as pull and fetch
+                operation are expensive. Defaults to 60 seconds.
             update_gitignore (bool, optional):
                 Whether .gitignore should be modified in the managed repository to
                 ignore Gitalong files.
@@ -276,7 +280,7 @@ class Repository:
             last_commit = relevant_tracked_commits[-1]
             # Because there is no post-push hook a local commit that got pushed could
             # have never been removed from our tracked commits. To cover for this case
-            # we are checking if this commit is on remote and modify it so it's
+            # we are checking if this commit is on remote and modify it, so it's
             # conform to a remote commit.
             if "sha" in last_commit and self.get_commit_branches(
                 last_commit["sha"], remote=True
@@ -326,10 +330,10 @@ class Repository:
             git.objects.Commit.iter_items(self._managed_repository, active_branch)
         )
 
-    def get_commit_spread(self, commit: dict) -> dict:
+    def get_commit_spread(self, commit: dict) -> int:
         """
         Args:
-            commit (dict): The commit to check for.
+            commit (int): The commit to check for.
 
         Returns:
             dict:
@@ -517,17 +521,17 @@ class Repository:
             "author": commit.author.name,
         }
 
-    def get_commit_branches(self, hexsha: str, remote: bool = False) -> list:
+    def get_commit_branches(self, sha: str, remote: bool = False) -> list:
         """
         Args:
-            hexsha (str): The hexsha of the commit to check for.
+            sha (str): The sha of the commit to check for.
             remote (bool, optional): Whether we should return local or remote branches.
 
         Returns:
             list: A list of branch names that this commit is living on.
         """
         args = ["--remote" if remote else []]
-        args += ["--contains", hexsha]
+        args += ["--contains", sha]
         branches = self._managed_repository.git.branch(*args)
         branches = branches.replace("*", "")
         branches = branches.replace(" ", "")
@@ -568,7 +572,7 @@ class Repository:
             filename (TYPE): Description
 
         Returns:
-            TYPE: Whether a an absolute or relative filename belongs to a submodule.
+            TYPE: Whether an absolute or relative filename belongs to a submodule.
         """
         for submodule in self.submodules:
             if self.get_relative_path(filename).startswith(submodule):
@@ -608,8 +612,7 @@ class Repository:
     def update_file_permissions(
         self, filename: str, locally_changed_files: list = None
     ) -> tuple:
-        """Updates the permissions of a file based on whether or not it was locally
-        changed.
+        """Updates the permissions of a file based on them being locally changed.
 
         Args:
             filename (str): The relative or absolute filename to update permissions for.
@@ -644,7 +647,7 @@ class Repository:
         tracked_extensions = self.config.get("tracked_extensions", [])
         if os.path.splitext(filename)[-1] in tracked_extensions:
             return True
-        # The binary check is expensive so we are doing it last.
+        # The binary check is expensive, so we are doing it last.
         return self.config.get("track_binaries", False) and is_binary_file(
             self.get_absolute_path(filename)
         )

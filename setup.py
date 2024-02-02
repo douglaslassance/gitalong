@@ -28,6 +28,7 @@ setup(
     install_requires=[
         "click~=8.1",
         "dictdiffer~=0.9",
+        "gitdb~=4.0",
         "GitPython~=3.1",
         "requests~=2.31",
     ],
@@ -41,6 +42,7 @@ setup(
             "pytest-cov~=4.1",
             "pytest-html~=4.1",
             "pytest-profiling~=1.7",
+            "responses~=0.24",
             "sphinx-markdown-tables~=0.0",
             "sphinx-rtd-theme~=0.5",
             "sphinxcontrib-apidoc~=0.3",

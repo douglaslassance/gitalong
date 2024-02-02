@@ -1,31 +1,41 @@
+import getpass
+import logging
 import os
 import shutil
-import tempfile
+import socket
 import unittest
-import logging
 
+from click.testing import CliRunner
 from git.repo import Repo
 
-from gitalong import Repository, CommitSpread, RepositoryNotSetup
+from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
 from gitalong.functions import is_read_only
-
-from .gitalong_case import GitalongCase
 from .functions import save_image
 
 
-class RepositoryTestCase(GitalongCase):
-    """Sets up a temporary git repository for each test"""
+class GitalongCase(unittest.TestCase):
 
-    def setUp(self):
-        super(RepositoryTestCase, self).setUp()
+    __test__ = False
+
+    def setup_repository(self, temp_dir, store_url, store_headers=None):
+        self.temp_dir = temp_dir
+        logging.info(self.temp_dir)
+        self.managed_remote = Repo.init(
+            path=os.path.join(self.temp_dir, "managed.git"), bare=True
+        )
+        self.managed_clone = self.managed_remote.clone(
+            os.path.join(self.temp_dir, "managed")
+        )
+        self.store_url = store_url
+        self.store_headers = store_headers
 
         self.assertRaises(
             RepositoryNotSetup, Repository, self.managed_clone.working_dir
         )
 
         self.repository = Repository.setup(
-            self.store_remote.working_dir,
-            store_headers={},
+            store_url=store_url,
+            store_headers=store_headers,
             managed_repository=self.managed_clone.working_dir,
             modify_permissions=True,
             track_binaries=True,
@@ -47,7 +57,7 @@ class RepositoryTestCase(GitalongCase):
             os.path.normpath(config.get("store_url")),
         )
 
-    def test_workflow(self):
+    def test_lib(self):
         local_only_commits = self.repository.local_only_commits
         working_dir = self.managed_clone.working_dir
         self.assertEqual(1, len(local_only_commits))
@@ -127,3 +137,44 @@ class RepositoryTestCase(GitalongCase):
         self.assertEqual(False, bool(missing_commit))
         missing_commit = self.repository.make_file_writable(image_path)
         self.assertEqual(True, bool(missing_commit))
+
+    def test_cli(self):
+        working_dir = self.managed_clone.working_dir
+        obj = {"REPOSITORY": working_dir}
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli.setup,
+            [
+                self.store_url,
+                "--track-uncommitted",
+                "--track-binaries",
+                "--modify-permissions",
+                "--update-gitignore",
+            ],
+            obj=obj,
+        )
+        self.assertEqual(0, result.exit_code, result.output)
+
+        config_path = os.path.join(working_dir, ".gitalong.json")
+        self.assertEqual(True, os.path.exists(config_path))
+
+        # Testing detecting un-tracked files.
+        untracked_image_01 = os.path.join(working_dir, "untracked_image_01.jpg")
+        save_image(untracked_image_01)
+
+        result = runner.invoke(cli.update, obj=obj)
+        self.assertEqual(0, result.exit_code, result.output)
+
+        result = runner.invoke(cli.status, [untracked_image_01], obj=obj)
+        self.assertEqual(0, result.exit_code, result.output)
+        host = socket.gethostname()
+        user = getpass.getuser()
+        output = f"+------- {untracked_image_01} - - - {host} {user}\n"
+        self.assertEqual(output, result.output)
+
+    def tearDown(self):
+        try:
+            shutil.rmtree(self.temp_dir)
+        except PermissionError as error:
+            logging.error(error)
