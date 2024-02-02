@@ -17,7 +17,7 @@ class GitalongCase(unittest.TestCase):
 
     __test__ = False
 
-    def setup_repository(self, temp_dir, store_url, store_headers=None):
+    def _setup_repository(self, temp_dir, store_url, store_headers=None):
         self.temp_dir = temp_dir
         logging.info(self.temp_dir)
         self._managed_remote = Repo.init(
@@ -45,10 +45,6 @@ class GitalongCase(unittest.TestCase):
             # part of that test. Instead, we are simulating the hooks operations below.
             update_hooks=False,
         )
-
-    def list_to_reason(self, exc_list):
-        if exc_list and exc_list[-1][0] is self:
-            return exc_list[-1][1]
 
     def test_config(self):
         config = self.repository.config

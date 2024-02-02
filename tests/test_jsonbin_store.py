@@ -14,17 +14,17 @@ class JsonbinStoreTestCase(GitalongCase):
 
         self._stored_value = {"record": {}}
 
-        self._get_patcher = patch("requests.get", self.get_patch)
+        self._get_patcher = patch("requests.get", self._get_patch)
         self._get_patcher.start()
 
-        self._put_patcher = patch("requests.put", self.put_patch)
+        self._put_patcher = patch("requests.put", self._put_patch)
         self._put_patcher.start()
 
         self._store_headers = {"X-Master-Key": "<ACCESS_KEY>"}
 
-        self.setup_repository(temp_dir, url, store_headers=self._store_headers)
+        self._setup_repository(temp_dir, url, store_headers=self._store_headers)
 
-    def get_patch(self, url, headers=None):
+    def _get_patch(self, url, headers=None, timeout=0):
         self.assertEqual(url, self._store_url)
         self.assertDictEqual(headers or {}, self._store_headers)
         mock_response = MagicMock()
@@ -32,7 +32,7 @@ class JsonbinStoreTestCase(GitalongCase):
         mock_response.json.return_value = self._stored_value
         return mock_response
 
-    def put_patch(self, url, headers=None, json=None):
+    def _put_patch(self, url, headers=None, timeout=0, json=None):
         self.assertEqual(url, self._store_url)
         store_headers = {"Content-Type": "application/json"}
         store_headers.update(self._store_headers)

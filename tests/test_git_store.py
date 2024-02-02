@@ -14,4 +14,4 @@ class GitStoreTestCase(GitalongCase):
         temp_dir = tempfile.mkdtemp()
         store_url = os.path.join(temp_dir, "store.git")
         Repo.init(path=store_url, bare=True)
-        self.setup_repository(temp_dir, store_url)
+        self._setup_repository(temp_dir, store_url)

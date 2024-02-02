@@ -1,8 +1,8 @@
 import os
-import time
-import stat
 import pathlib
 import re
+import stat
+import time
 
 from git.repo import Repo
 
@@ -85,6 +85,23 @@ def get_real_path(filename: str) -> str:
         )
         filename = str(pathlib.Path(filename).resolve())
     return filename
+
+
+def modified_within(filename: str, seconds: float) -> bool:
+    """Summary
+
+    Args:
+        filename (str): The file to check for.
+        seconds (float): Time in seconds since last push.
+
+    Returns:
+        TYPE: Whether the file was modified within the time provided.
+    """
+    if not os.path.exists(filename):
+        return False
+    modified_time = os.path.getmtime(filename)
+    current_time = time.time()
+    return current_time - modified_time < seconds
 
 
 def pulled_within(repository: Repo, seconds: float) -> bool:
