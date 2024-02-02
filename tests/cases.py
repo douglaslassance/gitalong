@@ -20,23 +20,23 @@ class GitalongCase(unittest.TestCase):
     def setup_repository(self, temp_dir, store_url, store_headers=None):
         self.temp_dir = temp_dir
         logging.info(self.temp_dir)
-        self.managed_remote = Repo.init(
+        self._managed_remote = Repo.init(
             path=os.path.join(self.temp_dir, "managed.git"), bare=True
         )
-        self.managed_clone = self.managed_remote.clone(
+        self._managed_clone = self._managed_remote.clone(
             os.path.join(self.temp_dir, "managed")
         )
-        self.store_url = store_url
-        self.store_headers = store_headers
+        self._store_url = store_url
+        self._store_headers = store_headers or {}
 
         self.assertRaises(
-            RepositoryNotSetup, Repository, self.managed_clone.working_dir
+            RepositoryNotSetup, Repository, self._managed_clone.working_dir
         )
 
         self.repository = Repository.setup(
             store_url=store_url,
             store_headers=store_headers,
-            managed_repository=self.managed_clone.working_dir,
+            managed_repository=self._managed_clone.working_dir,
             modify_permissions=True,
             track_binaries=True,
             track_uncommitted=True,
@@ -53,13 +53,13 @@ class GitalongCase(unittest.TestCase):
     def test_config(self):
         config = self.repository.config
         self.assertEqual(
-            os.path.normpath(self.store_url),
+            os.path.normpath(self._store_url),
             os.path.normpath(config.get("store_url")),
         )
 
     def test_lib(self):
         local_only_commits = self.repository.local_only_commits
-        working_dir = self.managed_clone.working_dir
+        working_dir = self._managed_clone.working_dir
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(2, len(local_only_commits[0]["changes"]))
 
@@ -69,16 +69,16 @@ class GitalongCase(unittest.TestCase):
         # Testing detecting staged files.
         staged_image_01_path = os.path.join(working_dir, "staged_image_01.jpg")
         save_image(staged_image_01_path)
-        self.managed_clone.index.add(staged_image_01_path)
+        self._managed_clone.index.add(staged_image_01_path)
         self.assertEqual(4, len(self.repository.local_only_commits[0]["changes"]))
 
-        commit = self.managed_clone.index.commit(message="Add staged_image.jpg")
+        commit = self._managed_clone.index.commit(message="Add staged_image.jpg")
         local_only_commits = self.repository.local_only_commits
         self.assertEqual(2, len(local_only_commits))
         self.assertEqual(3, len(local_only_commits[0]["changes"]))
         self.assertEqual(1, len(local_only_commits[1]["changes"]))
 
-        self.managed_clone.remote().push()
+        self._managed_clone.remote().push()
         local_only_commits = self.repository.local_only_commits
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(3, len(local_only_commits[0]["changes"]))
@@ -90,14 +90,14 @@ class GitalongCase(unittest.TestCase):
         # print("POST-SAVE TRACKED COMMITS")
         # pprint(self.repository.get_tracked_commits())
 
-        self.managed_clone.index.add(image_path)
-        self.managed_clone.index.commit(message="Add staged_image_02.jpg")
+        self._managed_clone.index.add(image_path)
+        self._managed_clone.index.commit(message="Add staged_image_02.jpg")
         # Simulating the post-commit hook.
         self.repository.update_tracked_commits()
         # print("POST-COMMIT TRACKED COMMITS")
         # pprint(self.repository.get_tracked_commits())
 
-        self.managed_clone.remote().push()
+        self._managed_clone.remote().push()
         # Simulating a post-push hook.
         # It could only be implemented server-side as it's not an actual Git hook.
         self.repository.update_tracked_commits()
@@ -113,7 +113,7 @@ class GitalongCase(unittest.TestCase):
         )
 
         # We are dropping the last commit locally.
-        self.managed_clone.git.reset("--hard", commit.hexsha)
+        self._managed_clone.git.reset("--hard", commit.hexsha)
         # Simulating the post-checkout hook.
         self.repository.update_tracked_commits()
         # print("POST-CHECKOUT TRACKED COMMITS")
@@ -139,19 +139,24 @@ class GitalongCase(unittest.TestCase):
         self.assertEqual(True, bool(missing_commit))
 
     def test_cli(self):
-        working_dir = self.managed_clone.working_dir
+        working_dir = self._managed_clone.working_dir
         obj = {"REPOSITORY": working_dir}
 
         runner = CliRunner()
+
+        args = [self._store_url]
+        for key, value in self._store_headers.items():
+            args += ["--store-header", f"{key}={value}"]
+        args += [
+            "--track-uncommitted",
+            "--track-binaries",
+            "--modify-permissions",
+            "--update-gitignore",
+        ]
+
         result = runner.invoke(
             cli.setup,
-            [
-                self.store_url,
-                "--track-uncommitted",
-                "--track-binaries",
-                "--modify-permissions",
-                "--update-gitignore",
-            ],
+            args,
             obj=obj,
         )
         self.assertEqual(0, result.exit_code, result.output)

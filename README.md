@@ -5,8 +5,9 @@
 [![codecov](https://codecov.io/gh/douglaslassance/gitalong/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong)
 
 Gitalong is a tool for Git repositories that seek to prevent conflicts between files when working with a team.
-It uses hooks and a dedicated repository to communicate local changes across all clones of a given remote.
-In turns this information can be leveraged by integrations to prevent modifying files that are already changed elsewhere.
+It uses hooks and a store to communicate local changes across all clones of a given remote.
+In turns this information can be leveraged by integrations to prevent modifying files that are already changed
+elsewhere.
 
 ## Pre-requisites
 
@@ -164,7 +165,7 @@ def test_example():
     assert local_spread == CommitSpread.MINE_ACTIVE_BRANCH
     assert remote_spread == CommitSpread.REMOTE_MATCHING_BRANCH
     assert untracked_spread == (
-        CommitSpread.REMOTE_MATCHING_BRANCH | CommitSpread.MINE_ACTIVE_BRANCH
+            CommitSpread.REMOTE_MATCHING_BRANCH | CommitSpread.MINE_ACTIVE_BRANCH
     )
 
     # Trying to make the files writable.
@@ -180,42 +181,40 @@ if __name__ == "__main__":
 
 ## Stores
 
-Instead using a dedicated Git repository to store its data, Gitalong can also leverage a REST API end point.
-The following data is expected:
+As mentioned earlier, Gitalong needs an accessible place to store and share local changes with all clones of the managed
+repository.
+Multiple options are offered here.
 
-- **author:** string
-- **changes:** comma-separated strings or array of strings
-- **clone:** string
-- **date:** string
-- **host:** string
-- **remote:** string
-- **sha:** string
-- **user:** string
+### Git repository
 
-The drawback is the need to have that infrastructure in place, but the advantage is the performance when pulling and pushing the data.
-Referencing the previous example, you simply need to pass your headers as such:
+A Git repository can be used for this purpose.
+The advantage of this solution is that you won't need more infrastructure and security mechanisms than what is needed to
+access your project's repository. That said, pulling and pushing the data that way is pretty slow.
+This method is used in the usage examples above.
+
+### JSONBin.io
+
+[JSONBin.io](https://jsonbin.io) is a simple JSON hosting service.
+You will get faster operations with this option but it may come at a [cost](https://jsonbin.io/pricing) depending on
+your usage. See how to set this up below.
 
 ### Shell
 
-```shell
-gitalong -C project setup https://rest.api/resource --header "key: value" --header "envar: \$VALUE" --modify-permissions --tracked-extensions .jpg,.gif,.png --track-uncommitted --update-gitignore --update-hooks
+```azure
+gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> --store-header X-Access-Key=<ACCESS_KEY> ...
 ```
 
 ### Python
 
 ```python
 repository = Repository.setup(
-    store_url="https://rest.api/resource",
-    headers={"key": "value", "envar": "$VALUE"},
-    managed_repository=project_clone.working_dir,
-    modify_permissions=True,
-    tracked_extensions=[".jpg", ".gif", ".png"],
-    track_uncommitted=True,
-    update_gitignore=True,
-    # Skipping hook update for the test.
-    update_hooks=False,
-)
+    store_url="https://api.jsonbin.io/v3/b/<BIN_ID>",
+    store_headers={"X-Access-Key": "<ACCESS_KEY>"},
+    ...
 ```
+
+Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS_KEY`.
+
 ## Development
 
 In addition to standard pre-requisites, you will need the following:
@@ -224,5 +223,6 @@ In addition to standard pre-requisites, you will need the following:
 - [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
 - [SublimeText](https://www.sublimetext.com/)
 
-Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong` virtual environment with `mkvirtualenv`.
+Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong` virtual environment
+with `mkvirtualenv`.
 Build systems for installing requirements and running tests are on board the SublimeText project.

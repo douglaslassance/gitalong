@@ -1,10 +1,8 @@
 import os
 import sys
-import json
 
 import click
 import git
-
 from click.decorators import pass_context
 
 from .__info__ import __version__
@@ -32,12 +30,24 @@ def get_status(repository, filename, commit) -> str:
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
-    splits = [prop, filename, commit.get("sha", "-"),
-              ",".join(commit.get("branches", {}).get("local", ["-"])) or "-",
-              ",".join(commit.get("branches", {}).get("remote", ["-"])) or "-",
-              commit.get("host", "-"),
-              commit.get("author", commit.get("user", "-")) or "-"]
+    splits = [
+        prop,
+        filename,
+        commit.get("sha", "-"),
+        ",".join(commit.get("branches", {}).get("local", ["-"])) or "-",
+        ",".join(commit.get("branches", {}).get("remote", ["-"])) or "-",
+        commit.get("host", "-"),
+        commit.get("author", commit.get("user", "-")) or "-",
+    ]
     return " ".join(splits)
+
+
+def validate_key_value(ctx, param, value):
+    result = {}
+    for item in value:
+        key, val = item.split("=")
+        result[key] = val
+    return result
 
 
 @click.command(help="Prints the requested configuration property value.")
@@ -167,13 +177,13 @@ def claim(ctx, filename):
 )
 @click.option(
     "-sh",
-    "--store-headers",
-    default="{}",
+    "--store-header",
+    callback=validate_key_value,
     help=(
-        "If using a REST API for storing Gitalong data, the headers used to connect the"
-        "end point."
+        "If using JSONBin.io as a store, the headers used to connect the" "end point."
     ),
-    required=False
+    required=False,
+    multiple=True,
 )
 @click.option(
     "-mp",
@@ -245,7 +255,7 @@ def claim(ctx, filename):
 def setup(
     ctx,
     store_url,
-    store_headers,
+    store_header,
     modify_permissions,
     pull_threshold,
     track_binaries,
@@ -256,7 +266,7 @@ def setup(
 ):
     Repository.setup(
         store_url=store_url,
-        store_headers=json.loads(store_headers),
+        store_headers=store_header,
         managed_repository=ctx.obj.get("REPOSITORY", ""),
         modify_permissions=modify_permissions,
         pull_threshold=pull_threshold,

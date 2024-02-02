@@ -12,8 +12,8 @@ class JsonbinStore(Store):
 
     def __init__(self, managed_repository):
         super().__init__(managed_repository)
-        self._url: str = self._managed_repository.config.get("STORE_URL", "")
-        self._headers: dict = self._managed_repository.config.get("STORE_HEADERS", {})
+        self._url: str = self._managed_repository.config.get("store_url", "")
+        self._headers: dict = self._managed_repository.config.get("store_headers", {})
 
     @property
     def commits(self) -> typing.List[dict]:
@@ -29,6 +29,6 @@ class JsonbinStore(Store):
         for key, value in self._headers.items():
             headers[key] = os.path.expandvars(value)
         headers.update({"Content-Type": "application/json"})
-        response = requests.put(self._url, headers=self._headers, json=commits)
+        response = requests.put(self._url, headers=headers, json=commits)
         if response.status_code != 200:
             raise StoreNotReachable()
