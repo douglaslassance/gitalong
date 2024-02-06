@@ -84,7 +84,7 @@ class Repository:
         pull_threshold: float = 60.0,
         track_binaries: bool = False,
         track_uncommitted: bool = False,
-        tracked_extensions: list = None,
+        tracked_extensions: list[str] = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
     ):
@@ -106,7 +106,7 @@ class Repository:
             track_uncommitted (bool, optional):
                 Track uncommitted changes. Better for collaboration but requires to push
                 tracked commits after each file system operation.
-            tracked_extensions (list, optional):
+            tracked_extensions (List[str], optional):
                 List of extensions to track.
             pull_threshold (list, optional):
                 Time in seconds that need to pass before Gitalong pulls again. Defaults
@@ -126,18 +126,16 @@ class Repository:
         tracked_extensions = tracked_extensions or []
         managed_repository = Repo(managed_repository, search_parent_directories=True)
         config_path = os.path.join(managed_repository.working_dir, cls._config_basename)
-        with open(config_path, "w", encoding="utf8") as _config_file:
-            config_settings = {
-                "store_url": store_url,
-                "store_headers": store_headers or {},
-                "modify_permissions": modify_permissions,
-                "track_binaries": track_binaries,
-                "tracked_extensions": tracked_extensions,
-                "pull_threshold": pull_threshold,
-                "track_uncommitted": track_uncommitted,
-            }
-            dump = json.dumps(config_settings, indent=4, sort_keys=True)
-            _config_file.write(dump)
+        config = {
+            "store_url": store_url,
+            "store_headers": store_headers or {},
+            "modify_permissions": modify_permissions,
+            "track_binaries": track_binaries,
+            "tracked_extensions": tracked_extensions,
+            "pull_threshold": pull_threshold,
+            "track_uncommitted": track_uncommitted,
+        }
+        cls._write_config_file(config, config_path)
         gitalong = cls(repository=managed_repository.working_dir)
         # gitalong._clone_store_repository()
         if update_gitignore:
@@ -145,6 +143,11 @@ class Repository:
         if update_hooks:
             gitalong.install_hooks()
         return gitalong
+
+    @staticmethod
+    def _write_config_file(config: dict, path: str):
+        with open(path, "w", encoding="utf8") as config_file:
+            json.dump(config, config_file, indent=4, sort_keys=True)
 
     def update_gitignore(self):
         """Update the .gitignore of the managed repository with Gitalong directives.

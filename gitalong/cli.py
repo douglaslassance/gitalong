@@ -22,6 +22,7 @@ def get_repository(repository: str) -> Repository:
 
 def get_status(repository, filename, commit) -> str:
     spread = repository.get_commit_spread(commit) if repository else 0
+    fail = "×"
     prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"

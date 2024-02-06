@@ -74,7 +74,7 @@ class GitStore(Store):
     @commits.setter
     def commits(self, commits: typing.List[dict]):
         self._write_local_json(commits)
-        self._store_repository.index.add(self._local_json)
-        basename = os.path.basename(self._local_json)
+        self._store_repository.index.add(self._local_json_path)
+        basename = os.path.basename(self._local_json_path)
         self._store_repository.index.commit(message=f"Update {basename}")
         self._store_repository.remote().push()

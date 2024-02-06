@@ -10,29 +10,26 @@ class Store(ABC):
     def __init__(self, managed_repository):
         super().__init__()
         self._managed_repository = managed_repository
-        self._local_json = os.path.join(
-            self._managed_repository.working_dir, ".gitalong", "commits.json"
-        )
 
     def _read_local_json(self) -> typing.List[dict]:
         if os.path.exists(self._local_json_path):
-            with open(self._local_json_path, "r", encoding="utf-8") as fle:
-                return json.loads(fle.read())
+            with open(self._local_json_path, "r", encoding="utf-8") as _file:
+                return json.loads(_file.read())
         return []
 
     def _write_local_json(self, commits: typing.List[dict]):
-        cache_dirname = os.path.dirname(self._local_json)
+        cache_dirname = os.path.dirname(self._local_json_path)
         if not os.path.exists(cache_dirname):
             os.makedirs(cache_dirname)
-        with open(self._local_json_path, "w", encoding="utf-8") as fle:
-            fle.write(json.dumps(commits, indent=4, sort_keys=True))
+        with open(self._local_json_path, "w", encoding="utf-8") as _file:
+            json.dump(commits, _file, indent=4, sort_keys=True)
 
     @property
     @abstractmethod
     def _local_json_path(self) -> str:
         """
         Returns:
-            TYPE: The path to the JSON file that tracks the local commits.
+            str: The path to the JSON file that tracks the local commits.
         """
         return ""
 
@@ -41,7 +38,7 @@ class Store(ABC):
     def commits(self) -> typing.List[dict]:
         """
         Returns:
-            The stored commits.
+            typing.List[dict]: The stored commits.
         """
         return []
 
