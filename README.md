@@ -219,10 +219,25 @@ Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS
 
 In addition to standard pre-requisites, you will need the following:
 
-- [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Unix)
+- [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Linux/macOS)
 - [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
-- [SublimeText](https://www.sublimetext.com/)
 
-Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong` virtual environment
-with `mkvirtualenv`.
-Build systems for installing requirements and running tests are on board the SublimeText project.
+Setup your virtual environment using:
+
+```shell
+mkvirtualenv gitalong
+pip install --editable .[ci]
+```
+
+Run tests using:
+```python
+pytest --cov-report=html --cov=gitalong --profile-svg
+```
+
+Build docs using:
+```shell
+sphinx-build ./docs/source ./docs/build
+```
+
+
+As a bonus, build systems for installing requirements and running tests are on board the provided Sublime Text project and can be accessed using <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd>.
