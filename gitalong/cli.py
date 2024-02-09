@@ -21,8 +21,8 @@ def get_repository(repository: str) -> Repository:
 
 
 def get_status(repository, filename, commit) -> str:
+    """TODO: Add proper offline support."""
     spread = repository.get_commit_spread(commit) if repository else 0
-    fail = "×"
     prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
@@ -87,6 +87,7 @@ def config(ctx, prop):
 )
 @click.pass_context
 def update(ctx, repository):
+    """TODO: Improve error handling."""
     repositories = repository or []
     repositories = list(repositories)
     repositories.insert(0, ctx.obj.get("REPOSITORY", ""))
@@ -268,6 +269,7 @@ def setup(
     update_gitignore,
     update_hooks,
 ):
+    """TODO: Add support for branch groups."""
     Repository.setup(
         store_url=store_url,
         store_headers=store_header,

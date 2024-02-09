@@ -35,8 +35,7 @@ def is_binary_string(string: str) -> bool:
 
 
 def is_read_only(filename: str) -> bool:
-    """TODO: Make sure this works on other operating system than Windows.
-
+    """
     Args:
         filename (str): The absolute filename of the file to check.
 
@@ -44,7 +43,7 @@ def is_read_only(filename: str) -> bool:
         bool: Whether the file is read only.
     """
     _stat = os.stat(filename)
-    return not bool(_stat.st_mode & stat.S_IWRITE)
+    return not _stat.st_mode & stat.S_IWUSR
 
 
 def set_read_only(

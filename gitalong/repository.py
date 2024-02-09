@@ -211,7 +211,7 @@ class Repository:
         """Installs Gitalong hooks in managed repository.
 
         TODO: Implement non-destructive version of these hooks. Currently we don't have
-        any consideration for preexisting content.
+        any consideration for pre-existing content.
         """
         hooks = os.path.join(os.path.dirname(__file__), "resources", "hooks")
         destination_dir = self.hooks_path
