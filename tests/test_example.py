@@ -30,7 +30,7 @@ def test_example():
         # This will clone the registry repository in an ignored `.gitalong` folder.
         # It will also start tracking a `.gitalong.json` configuration file.
         repository = Repository.setup(
-            store_repository=store.working_dir,
+            store_url=store.working_dir,
             managed_repository=project_clone.working_dir,
             modify_permissions=True,
             tracked_extensions=[".jpg", ".gif", ".png"],

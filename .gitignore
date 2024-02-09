@@ -143,3 +143,6 @@ dmypy.json
 
 # pytest-profiling
 /prof/
+
+# unittest
+/https:/
