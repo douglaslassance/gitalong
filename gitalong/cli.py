@@ -68,7 +68,10 @@ def config(ctx, prop):
         repository_config = repository.config
         prop = prop.replace("-", "_")
         if prop in repository_config:
-            click.echo(repository_config[prop])
+            value = repository_config[prop]
+            if isinstance(value, bool):
+                value = str(value).lower()
+            click.echo(value)
 
 
 @click.command(
