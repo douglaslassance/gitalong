@@ -5,13 +5,14 @@
 [![codecov](https://codecov.io/gh/douglaslassance/gitalong/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong)
 
 Gitalong is a tool for Git repositories that seek to prevent conflicts between files when working with a team.
-It uses hooks and a dedicated repository to communicate local changes across all clones of a given remote.
-In turns this information can be leveraged by integrations to prevent modifying files that are already changed elsewhere.
+It uses hooks and a store to communicate local changes across all clones of a given remote.
+In turns this information can be leveraged by integrations to prevent modifying files that are already changed
+elsewhere.
 
 ## Pre-requisites
 
--   [Python >=3.7](https://www.python.org/downloads/)
--   [Git >=2.35.1](https://git-scm.com/downloads)
+- [Python >=3.7](https://www.python.org/downloads/)
+- [Git >=2.35.1](https://git-scm.com/downloads)
 
 ## Installation
 
@@ -108,7 +109,7 @@ def test_example():
         # This will clone the registry repository in an ignored `.gitalong` folder.
         # It will also start tracking a `.gitalong.json` configuration file.
         repository = Repository.setup(
-            store_repository=store.working_dir,
+            store_url=store.working_dir,
             managed_repository=project_clone.working_dir,
             modify_permissions=True,
             tracked_extensions=[".jpg", ".gif", ".png"],
@@ -164,7 +165,7 @@ def test_example():
     assert local_spread == CommitSpread.MINE_ACTIVE_BRANCH
     assert remote_spread == CommitSpread.REMOTE_MATCHING_BRANCH
     assert untracked_spread == (
-        CommitSpread.REMOTE_MATCHING_BRANCH | CommitSpread.MINE_ACTIVE_BRANCH
+            CommitSpread.REMOTE_MATCHING_BRANCH | CommitSpread.MINE_ACTIVE_BRANCH
     )
 
     # Trying to make the files writable.
@@ -176,16 +177,67 @@ def test_example():
 
 if __name__ == "__main__":
     test_example()
-
 ```
 
-# Development
+## Stores
+
+As mentioned earlier, Gitalong needs an accessible place to store and share local changes with all clones of the managed
+repository.
+Multiple options are offered here.
+
+### Git repository
+
+A Git repository can be used for this purpose.
+The advantage of this solution is that you won't need more infrastructure and security mechanisms than what is needed to
+access your project's repository. That said, pulling and pushing the data that way is pretty slow.
+This method is used in the usage examples above.
+
+### JSONBin.io
+
+[JSONBin.io](https://jsonbin.io) is a simple JSON hosting service.
+You will get faster operations with this option but it may come at a [cost](https://jsonbin.io/pricing) depending on
+your usage. See how to set this up below.
+
+### Shell
+
+```azure
+gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> --store-header X-Access-Key=<ACCESS_KEY> ...
+```
+
+### Python
+
+```python
+repository = Repository.setup(
+    store_url="https://api.jsonbin.io/v3/b/<BIN_ID>",
+    store_headers={"X-Access-Key": "<ACCESS_KEY>"},
+    ...
+```
+
+Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS_KEY`.
+
+## Development
 
 In addition to standard pre-requisites, you will need the following:
 
--   [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Unix)
--   [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
--   [SublimeText](https://www.sublimetext.com/)
+- [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Linux/macOS)
+- [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
 
-Make sure your `WORKON_HOME` environment variable is set on Windows, and create a `gitalong` virtual environment with `mkvirtualenv`.
-Build systems for installing requirements and running tests are on board the SublimeText project.
+Setup your virtual environment using:
+
+```shell
+mkvirtualenv gitalong
+pip install --editable .[ci]
+```
+
+Run tests using:
+```python
+pytest --cov-report=html --cov=gitalong --profile-svg
+```
+
+Build docs using:
+```shell
+sphinx-build ./docs/source ./docs/build
+```
+
+
+As a bonus, build systems for installing requirements and running tests are on board the provided Sublime Text project and can be accessed using <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd>.

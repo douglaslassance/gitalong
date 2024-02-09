@@ -1,8 +1,8 @@
 import os
-import time
-import stat
 import pathlib
 import re
+import stat
+import time
 
 from git.repo import Repo
 
@@ -35,8 +35,7 @@ def is_binary_string(string: str) -> bool:
 
 
 def is_read_only(filename: str) -> bool:
-    """TODO: Make sure this works on other operating system than Windows.
-
+    """
     Args:
         filename (str): The absolute filename of the file to check.
 
@@ -44,7 +43,7 @@ def is_read_only(filename: str) -> bool:
         bool: Whether the file is read only.
     """
     _stat = os.stat(filename)
-    return not bool(_stat.st_mode & stat.S_IWRITE)
+    return not _stat.st_mode & stat.S_IWUSR
 
 
 def set_read_only(
@@ -85,6 +84,23 @@ def get_real_path(filename: str) -> str:
         )
         filename = str(pathlib.Path(filename).resolve())
     return filename
+
+
+def modified_within(filename: str, seconds: float) -> bool:
+    """Summary
+
+    Args:
+        filename (str): The file to check for.
+        seconds (float): Time in seconds since last push.
+
+    Returns:
+        TYPE: Whether the file was modified within the time provided.
+    """
+    if not os.path.exists(filename):
+        return False
+    modified_time = os.path.getmtime(filename)
+    current_time = time.time()
+    return current_time - modified_time < seconds
 
 
 def pulled_within(repository: Repo, seconds: float) -> bool:

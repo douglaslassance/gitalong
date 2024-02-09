@@ -3,7 +3,6 @@ import sys
 
 import click
 import git
-
 from click.decorators import pass_context
 
 from .__info__ import __version__
@@ -22,6 +21,7 @@ def get_repository(repository: str) -> Repository:
 
 
 def get_status(repository, filename, commit) -> str:
+    """TODO: Add proper offline support."""
     spread = repository.get_commit_spread(commit) if repository else 0
     prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
@@ -31,15 +31,24 @@ def get_status(repository, filename, commit) -> str:
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
-    splits = []
-    splits.append(prop)
-    splits.append(filename)
-    splits.append(commit.get("sha", "-"))
-    splits.append(",".join(commit.get("branches", {}).get("local", ["-"])) or "-")
-    splits.append(",".join(commit.get("branches", {}).get("remote", ["-"])) or "-")
-    splits.append(commit.get("host", "-"))
-    splits.append(commit.get("author", commit.get("user", "-")) or "-")
+    splits = [
+        prop,
+        filename,
+        commit.get("sha", "-"),
+        ",".join(commit.get("branches", {}).get("local", ["-"])) or "-",
+        ",".join(commit.get("branches", {}).get("remote", ["-"])) or "-",
+        commit.get("host", "-"),
+        commit.get("author", commit.get("user", "-")) or "-",
+    ]
     return " ".join(splits)
+
+
+def validate_key_value(ctx, param, value):
+    result = {}
+    for item in value:
+        key, val = item.split("=")
+        result[key] = val
+    return result
 
 
 @click.command(help="Prints the requested configuration property value.")
@@ -59,7 +68,10 @@ def config(ctx, prop):
         repository_config = repository.config
         prop = prop.replace("-", "_")
         if prop in repository_config:
-            click.echo(repository_config[prop])
+            value = repository_config[prop]
+            if isinstance(value, bool):
+                value = str(value).lower()
+            click.echo(value)
 
 
 @click.command(
@@ -75,6 +87,7 @@ def config(ctx, prop):
 )
 @click.pass_context
 def update(ctx, repository):
+    """TODO: Improve error handling."""
     repositories = repository or []
     repositories = list(repositories)
     repositories.insert(0, ctx.obj.get("REPOSITORY", ""))
@@ -106,7 +119,9 @@ def update(ctx, repository):
 @click.command(
     help=(
         "Prints missing commits in this local branch for each filename. "
-        "Format: `<spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>`"  # noqa: E501 pylint: disable=line-too-long
+        "Format: `<spread> <filename> <commit> <local-branches> "
+        "<remote-branches> <host> <author>`"
+        # noqa: E501 pylint: disable=line-too-long
     )
 )
 @click.argument(
@@ -161,9 +176,20 @@ def claim(ctx, filename):
 
 @click.command(help="Setup Gitalong in a repository.")
 @click.argument(
-    "store-repository",
-    # help="The URL or path to the repository that will store Gitalong data.",
+    "store-url",
+    # help="The URL or path to the repository or REST API endpoint that will store the
+    # Gitalong data.",
     required=True,
+)
+@click.option(
+    "-sh",
+    "--store-header",
+    callback=validate_key_value,
+    help=(
+        "If using JSONBin.io as a store, the headers used to connect the" "end point."
+    ),
+    required=False,
+    multiple=True,
 )
 @click.option(
     "-mp",
@@ -178,8 +204,8 @@ def claim(ctx, filename):
 )
 @click.option(
     "-pt",
-    "--pull-treshold",
-    default=True,
+    "--pull-threshold",
+    default=60,
     help=(
         "Time in seconds that need to pass before Gitalong pulls again. Defaults to 10"
         "seconds. This is for optimization sake as pull and fetch operation are "
@@ -234,20 +260,23 @@ def claim(ctx, filename):
 @click.pass_context
 def setup(
     ctx,
-    store_repository,
+    store_url,
+    store_header,
     modify_permissions,
-    pull_treshold,
+    pull_threshold,
     track_binaries,
     track_uncommitted,
     tracked_extensions,
     update_gitignore,
     update_hooks,
 ):
+    """TODO: Add support for branch groups."""
     Repository.setup(
-        store_repository=store_repository,
+        store_url=store_url,
+        store_headers=store_header,
         managed_repository=ctx.obj.get("REPOSITORY", ""),
         modify_permissions=modify_permissions,
-        pull_treshold=pull_treshold,
+        pull_threshold=pull_threshold,
         track_binaries=track_binaries,
         track_uncommitted=track_uncommitted,
         tracked_extensions=tracked_extensions.split(","),
@@ -281,7 +310,7 @@ class Group(click.Group):
     "-gb",
     "--git-binary",
     default="",
-    help=("Path to the git binary to use. " "Defaults to the one available in PATH."),
+    help="Path to the git binary to use. Defaults to the one available in PATH.",
     required=False,
 )
 @click.pass_context
