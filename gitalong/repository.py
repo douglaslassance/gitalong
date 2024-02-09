@@ -501,9 +501,11 @@ class Repository:
         output = git_cmd.ls_files("--exclude-standard", "--others")
         untracked_changes = output.split("\n") if output else []
         output = git_cmd.diff("--name-only")
+        changes = output.split("\n") if output else []
+        output = git_cmd.diff("--staged", "--name-only")
         staged_changes = output.split("\n") if output else []
         # A file can be in both in untracked and staged changes. The set fixes that.
-        return list(set(untracked_changes + staged_changes))
+        return list(set(untracked_changes + changes + staged_changes))
 
     def get_commit_dict(self, commit: git.objects.Commit) -> dict:
         """
