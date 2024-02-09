@@ -500,7 +500,7 @@ class Repository:
         git_cmd = self._managed_repository.git
         output = git_cmd.ls_files("--exclude-standard", "--others")
         untracked_changes = output.split("\n") if output else []
-        output = git_cmd.diff("--cached", "--name-only")
+        output = git_cmd.diff("--name-only")
         staged_changes = output.split("\n") if output else []
         # A file can be in both in untracked and staged changes. The set fixes that.
         return list(set(untracked_changes + staged_changes))
@@ -707,7 +707,9 @@ class Repository:
         for commit in self._store.commits:
             remote = self._managed_repository.remote().url
             is_other_remote = commit.get("remote") != remote
-            if is_other_remote or not self.is_issued_commit(commit):
+            if self._is_valid_commit(commit) and (
+                is_other_remote or not self.is_issued_commit(commit)
+            ):
                 tracked_commits.append(commit)
                 continue
         # Adding all local commit to the list of tracked commits.
@@ -715,3 +717,7 @@ class Repository:
         for commit in self.local_only_commits:
             tracked_commits.append(commit)
         return tracked_commits
+
+    @staticmethod
+    def _is_valid_commit(com: dict) -> bool:
+        return "changes" in com.keys()
