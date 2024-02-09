@@ -119,7 +119,8 @@ def update(ctx, repository):
 @click.command(
     help=(
         "Prints missing commits in this local branch for each filename. "
-        "Format: `<spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>`"
+        "Format: `<spread> <filename> <commit> <local-branches> "
+        "<remote-branches> <host> <author>`"
         # noqa: E501 pylint: disable=line-too-long
     )
 )
