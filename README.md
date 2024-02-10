@@ -229,15 +229,29 @@ mkvirtualenv gitalong
 pip install --editable .[ci]
 ```
 
-Run tests using:
+### Testing
+
 ```python
-pytest --cov-report=html --cov=gitalong --profile-svg
+pytest - -cov - report = html - -cov = gitalong - -profile - svg
 ```
 
-Build docs using:
+### Documenting
+
 ```shell
 sphinx-build ./docs/source ./docs/build
 ```
 
+### Building
 
-As a bonus, build systems for installing requirements and running tests are on board the provided Sublime Text project and can be accessed using <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd>.
+```shell
+python setup.py sdist bdist_wheel
+```
+
+### Publishing
+
+```shell
+twine upload --username __token__ --verbose dist/*
+```
+
+As a bonus, build systems for installing requirements and running tests are on board the provided Sublime Text project
+and can be accessed using <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd>.
