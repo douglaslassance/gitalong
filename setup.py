@@ -43,10 +43,13 @@ setup(
             "pytest-html~=4.1",
             "pytest-profiling~=1.7",
             "responses~=0.24",
+            "setuptools~=69.0",
             "sphinx-markdown-tables~=0.0",
             "sphinx-rtd-theme~=2.0",
             "sphinxcontrib-apidoc~=0.5",
             "Sphinx~=7.2",
+            "twine~=4.0",
+            "wheel~=0.42",
         ],
     },
     entry_points={
