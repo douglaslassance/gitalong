@@ -24,7 +24,7 @@ setup(
     author=info.get("__author__", ""),
     author_email=info.get("__email__", ""),
     license=info.get("__license__", ""),
-    packages=["gitalong"],
+    packages=["gitalong", "gitalong.stores"],
     install_requires=[
         "click~=8.1",
         "dictdiffer~=0.9",
