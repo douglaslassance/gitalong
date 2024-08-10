@@ -37,7 +37,7 @@ setup(
             "black",
             "flake8~=7.0",
             "pep8-naming~=0.13",
-            "Pillow~=10.2",
+            "Pillow~=10.4",
             "pylint~=3.0",
             "pytest-cov~=4.1",
             "pytest-html~=4.1",
