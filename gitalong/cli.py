@@ -9,6 +9,7 @@ from .__info__ import __version__
 from .enums import CommitSpread
 from .exceptions import RepositoryNotSetup
 from .repository import Repository
+from .functions import set_read_only
 
 
 def get_repository(repository: str) -> Repository:
@@ -172,6 +173,13 @@ def claim(ctx, filename):
         click.echo("\n".join(statuses))
     if error:
         sys.exit(1)
+    repository.update_tracked_commits(claims=[filename])
+    if repository.config.get("modify_permissions"):
+        if os.path.isfile(repository.get_absolute_path(filename)):
+            set_read_only(
+                repository.get_absolute_path(filename),
+                read_only=False,
+            )
 
 
 @click.command(help="Setup Gitalong in a repository.")

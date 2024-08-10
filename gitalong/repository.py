@@ -7,6 +7,8 @@ import os
 import shutil
 import socket
 
+from typing import List
+
 import dictdiffer
 import git
 from git.repo import Repo
@@ -241,7 +243,7 @@ class Repository:
             filename (str): The path relative to the managed repository.
 
         Returns:
-            str: The absolute path.
+            str: The absolute file system path.
         """
         if os.path.exists(filename):
             return filename
@@ -471,8 +473,7 @@ class Repository:
             "clone": get_real_path(self.working_dir),
         }
 
-    @property
-    def local_only_commits(self) -> list:
+    def get_local_only_commits(self, claims=List[str]) -> list:
         """
         Returns:
             list:
@@ -485,6 +486,15 @@ class Repository:
             self.accumulate_local_only_commits(branch.commit, local_commits)
         if self.config.get("track_uncommitted"):
             uncommitted_changes_commit = self.uncommitted_changes_commit
+
+            # Adding file we want to claim to the uncommitted changes commit.
+            for claim in claims:
+                claim = self.get_absolute_path(claim)
+                if os.path.isfile(claim):
+                    uncommitted_changes_commit.setdefault("changes", []).append(
+                        self.get_relative_path(claim)
+                    )
+
             if uncommitted_changes_commit:
                 local_commits.insert(0, uncommitted_changes_commit)
         local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
@@ -610,7 +620,7 @@ class Repository:
                 uncommitted changes.
         """
         local_changes = set()
-        for commit in self.local_only_commits:
+        for commit in self.get_local_only_commits():
             local_changes = local_changes.union(commit.get("changes", []))
         return local_changes
 
@@ -690,13 +700,18 @@ class Repository:
 
     @property
     def working_dir(self):
+        """
+        Returns:
+            str: The working directory of the managed repository.
+        """
         return self._managed_repository.working_dir
 
     def update_tracked_commits(self):
+        """Pulls the tracked commits from the store and updates them."""
         self._store.commits = self.updated_tracked_commits
 
     @property
-    def updated_tracked_commits(self) -> list:
+    def updated_tracked_commits(self, claims: List[str]) -> list:
         """
         Returns:
             list:
@@ -716,7 +731,7 @@ class Repository:
                 continue
         # Adding all local commit to the list of tracked commits.
         # Will include uncommitted changes as a "fake" commit.
-        for commit in self.local_only_commits:
+        for commit in self.get_local_only_commits(claims=claims):
             tracked_commits.append(commit)
         return tracked_commits
 
