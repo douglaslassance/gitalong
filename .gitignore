@@ -131,6 +131,7 @@ dmypy.json
 
 # Sublime Text
 *.sublime-workspace
+*.sublime-project
 
 # macOS
 .DS_Store
@@ -143,3 +144,6 @@ dmypy.json
 
 # unittest
 /https:/
+
+# Visual Studio Code
+*.code-workspace
