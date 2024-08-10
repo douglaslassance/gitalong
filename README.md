@@ -217,15 +217,9 @@ Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS
 
 ## Development
 
-In addition to standard pre-requisites, you will need the following:
-
-- [virtualenwrapper](https://pypi.org/project/virtualenvwrapper/) (Linux/macOS)
-- [virtualenwrapper-win](https://pypi.org/project/virtualenvwrapper-win/) (Windows)
-
-Setup your virtual environment using:
+### Setting up
 
 ```shell
-mkvirtualenv gitalong
 pip install --editable .[ci]
 ```
 
@@ -252,6 +246,3 @@ python setup.py sdist bdist_wheel
 ```shell
 twine upload --username __token__ --verbose dist/*
 ```
-
-As a bonus, build systems for installing requirements and running tests are on board the provided Sublime Text project
-and can be accessed using <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd>.
