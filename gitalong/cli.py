@@ -12,7 +12,9 @@ from .repository import Repository
 from .functions import set_read_only
 
 
-def get_repository(repository: str) -> Repository:
+def get_repository(  # pylint: disable=missing-function-docstring
+    repository: str,
+) -> Repository:
     try:
         # Initializing Gitalong for each file allows to handle files from multiple
         # repository. This is especially import to support submodules.
@@ -44,7 +46,8 @@ def get_status(repository, filename, commit) -> str:
     return " ".join(splits)
 
 
-def validate_key_value(ctx, param, value):
+def validate_key_value(ctx, param, value):  # pylint: disable=unused-argument
+    """Validate that the provided value is a valid key-value."""
     result = {}
     for item in value:
         key, val = item.split("=")
@@ -53,7 +56,7 @@ def validate_key_value(ctx, param, value):
 
 
 @click.command(help="Prints the requested configuration property value.")
-def version():
+def version():  # pylint: disable=missing-function-docstring
     click.echo(f"gitalong version {__version__}")
 
 
@@ -63,7 +66,7 @@ def version():
     # help="The configuration property key to look for."
 )
 @click.pass_context
-def config(ctx, prop):
+def config(ctx, prop):  # pylint: disable=missing-function-docstring
     repository = get_repository(ctx.obj.get("REPOSITORY", ""))
     if repository:
         repository_config = repository.config
@@ -112,7 +115,7 @@ def update(ctx, repository):
                         filename, locally_changed[root]
                     )
                     if perm_change:
-                        perm_changes.append("{} {}".format(*perm_change))
+                        perm_changes.append(f"{' '.join(perm_change)}")
     if perm_changes:
         click.echo("\n".join(perm_changes))
 
@@ -131,7 +134,7 @@ def update(ctx, repository):
     # help="The path to the file that should be made writable."
 )
 @click.pass_context
-def status(ctx, filename):
+def status(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
     repo_filename = ctx.obj.get("REPOSITORY", "")
     for _filename in filename:
@@ -156,9 +159,10 @@ def status(ctx, filename):
     # help="The path to the file that should be made writable."
 )
 @pass_context
-def claim(ctx, filename):
+def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     repo_filename = ctx.obj.get("REPOSITORY", "")
     statuses = []
+    claimables = []
     error = False
     for _filename in filename:
         commit = {}
@@ -167,13 +171,14 @@ def claim(ctx, filename):
         if repository:
             commit = repository.make_file_writable(_filename)
         statuses.append(get_status(repository, _filename, commit))
+        claimables.append(_filename)
         if commit:
             error = True
     if statuses:
         click.echo("\n".join(statuses))
     if error:
         sys.exit(1)
-    repository.update_tracked_commits(claims=[filename])
+    repository.update_tracked_commits(claims=claimables)
     if repository.config.get("modify_permissions"):
         if os.path.isfile(repository.get_absolute_path(filename)):
             set_read_only(
@@ -293,7 +298,7 @@ def setup(
     )
 
 
-class Group(click.Group):
+class Group(click.Group):  # pylint: disable=missing-class-docstring
     def format_help(self, ctx, formatter):
         return click.Group.format_help(self, ctx, formatter)
 
@@ -322,7 +327,7 @@ class Group(click.Group):
     required=False,
 )
 @click.pass_context
-def cli(ctx, repository, git_binary):
+def cli(ctx, repository, git_binary):  # pylint: disable=missing-function-docstring
     ctx.ensure_object(dict)
     if repository:
         ctx.obj["REPOSITORY"] = repository

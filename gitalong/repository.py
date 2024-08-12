@@ -473,7 +473,7 @@ class Repository:
             "clone": get_real_path(self.working_dir),
         }
 
-    def get_local_only_commits(self, claims=List[str]) -> list:
+    def get_local_only_commits(self, claims: List[str] = None) -> list:
         """
         Returns:
             list:
@@ -488,11 +488,11 @@ class Repository:
             uncommitted_changes_commit = self.uncommitted_changes_commit
 
             # Adding file we want to claim to the uncommitted changes commit.
-            for claim in claims:
+            for claim in claims or []:
                 claim = self.get_absolute_path(claim)
                 if os.path.isfile(claim):
                     uncommitted_changes_commit.setdefault("changes", []).append(
-                        self.get_relative_path(claim)
+                        self.get_relative_path(claim).replace("\\", "/")
                     )
 
             if uncommitted_changes_commit:
@@ -706,12 +706,11 @@ class Repository:
         """
         return self._managed_repository.working_dir
 
-    def update_tracked_commits(self):
+    def update_tracked_commits(self, claims: List[str] = None):
         """Pulls the tracked commits from the store and updates them."""
-        self._store.commits = self.updated_tracked_commits
+        self._store.commits = self.get_updated_tracked_commits(claims=claims)
 
-    @property
-    def updated_tracked_commits(self, claims: List[str]) -> list:
+    def get_updated_tracked_commits(self, claims: List[str] = None) -> list:
         """
         Returns:
             list:
