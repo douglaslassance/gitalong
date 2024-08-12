@@ -547,7 +547,11 @@ class Repository:
         """
         args = ["--remote" if remote else []]
         args += ["--contains", sha]
-        branches = self._managed_repository.git.branch(*args)
+        try:
+            branches = self._managed_repository.git.branch(*args)
+        # If the commit is not on any branch we get a git.exc.GitCommandError.
+        except git.exc.GitCommandError:
+            return []
         branches = branches.replace("*", "")
         branches = branches.replace(" ", "")
         branches = branches.split("\n") if branches else []
