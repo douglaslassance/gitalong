@@ -455,6 +455,7 @@ class Repository:
             return
         commit_dict = self.get_commit_dict(start)
         commit_dict.update(self.context_dict)
+        commit_dict["branches"] = {"local": self.get_commit_branches(start.hexsha)}
         # TODO: Maybe we should compare the SHA here.
         if commit_dict not in local_commits:
             local_commits.append(commit_dict)
