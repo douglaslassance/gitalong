@@ -14,6 +14,9 @@ elsewhere.
 - [Python >=3.7](https://www.python.org/downloads/)
 - [Git >=2.35.1](https://git-scm.com/downloads)
 
+> [!TIP]
+> Setting up Python and Git can be intimidating on Windows. You can make your life easier by installing [Scoop](https://scoop.sh/) and running `scoop install python git` in a Windows command prompt.
+
 ## Installation
 
 ```
