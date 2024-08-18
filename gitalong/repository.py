@@ -58,6 +58,7 @@ class Repository:
         self._submodules = None
 
         self._managed_repository = Repo(repository, search_parent_directories=True)
+        self._remote = self._managed_repository.remote()
 
         store_url = self.config.get("store_url")
         if store_url.startswith("https://api.jsonbin.io"):
@@ -265,7 +266,7 @@ class Repository:
         tracked_commits = self._store.commits
         relevant_tracked_commits = []
         filename = self.get_relative_path(filename)
-        remote = self._managed_repository.remote().url
+        remote = self._remote.url
         last_commit = {}
         track_uncommitted = self.config.get("track_uncommitted", False)
         for tracked_commit in tracked_commits:
@@ -299,7 +300,7 @@ class Repository:
             pull_threshold = self.config.get("pull_threshold", 60)
             if not pulled_within(self._managed_repository, pull_threshold):
                 try:
-                    self._managed_repository.remote().fetch(prune=prune)
+                    self._remote.fetch(prune=prune)
                 except git.exc.GitCommandError:
                     pass
 
@@ -401,7 +402,7 @@ class Repository:
         if not uncommitted_changes:
             return {}
         commit = {
-            "remote": self._managed_repository.remote().url,
+            "remote": self._remote.url,
             "changes": self.uncommitted_changes,
             "date": str(datetime.datetime.now()),
         }
@@ -531,7 +532,7 @@ class Repository:
             changes += get_filenames_from_move_string(change)
         return {
             "sha": commit.hexsha,
-            "remote": self._managed_repository.remote().url,
+            "remote": self._remote.url,
             "changes": changes,
             "date": str(commit.committed_datetime),
             "author": commit.author.name,
@@ -726,7 +727,7 @@ class Repository:
         # We are re-evaluating those.
         tracked_commits = []
         for commit in self._store.commits:
-            remote = self._managed_repository.remote().url
+            remote = self._remote.url
             is_other_remote = commit.get("remote") != remote
             if self._is_valid_commit(commit) and (
                 is_other_remote or not self.is_issued_commit(commit)
