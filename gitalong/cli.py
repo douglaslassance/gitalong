@@ -1,5 +1,7 @@
 import os
 import sys
+import pstats
+import cProfile
 
 import click
 import git
@@ -133,8 +135,24 @@ def update(ctx, repository):
     nargs=-1,
     # help="The path to the file that should be made writable."
 )
+@click.option(
+    "-p",
+    "--profile",
+    is_flag=True,
+    help="Will generate a profile file in the current workin directory.",
+)
 @click.pass_context
-def status(ctx, filename):  # pylint: disable=missing-function-docstring
+def status(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
+    if profile:
+        with cProfile.Profile() as pr:
+            run_status(ctx, filename)
+        results = pstats.Stats(pr)
+        results.dump_stats("gitalong.prof")
+        return
+    run_status(ctx, filename)
+
+
+def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
     repo_filename = ctx.obj.get("REPOSITORY", "")
     for _filename in filename:
