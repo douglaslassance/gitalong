@@ -54,7 +54,7 @@ class GitalongCase(unittest.TestCase):
         )
 
     def test_lib(self):
-        local_only_commits = self.repository.local_only_commits
+        local_only_commits = self.repository.get_local_only_commits()
         working_dir = self._managed_clone.working_dir
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(2, len(local_only_commits[0]["changes"]))
@@ -66,16 +66,16 @@ class GitalongCase(unittest.TestCase):
         staged_image_01_path = os.path.join(working_dir, "staged_image_01.jpg")
         save_image(staged_image_01_path)
         self._managed_clone.index.add(staged_image_01_path)
-        self.assertEqual(4, len(self.repository.local_only_commits[0]["changes"]))
+        self.assertEqual(4, len(self.repository.get_local_only_commits()[0]["changes"]))
 
         commit = self._managed_clone.index.commit(message="Add staged_image.jpg")
-        local_only_commits = self.repository.local_only_commits
+        local_only_commits = self.repository.get_local_only_commits()
         self.assertEqual(2, len(local_only_commits))
         self.assertEqual(3, len(local_only_commits[0]["changes"]))
         self.assertEqual(1, len(local_only_commits[1]["changes"]))
 
         self._managed_clone.remote().push()
-        local_only_commits = self.repository.local_only_commits
+        local_only_commits = self.repository.get_local_only_commits()
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(3, len(local_only_commits[0]["changes"]))
 
