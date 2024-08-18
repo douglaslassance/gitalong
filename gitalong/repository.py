@@ -7,6 +7,8 @@ import os
 import shutil
 import socket
 
+from typing import List
+
 import dictdiffer
 import git
 from git.repo import Repo
@@ -56,6 +58,7 @@ class Repository:
         self._submodules = None
 
         self._managed_repository = Repo(repository, search_parent_directories=True)
+        self._remote = self._managed_repository.remote()
 
         store_url = self.config.get("store_url")
         if store_url.startswith("https://api.jsonbin.io"):
@@ -241,7 +244,7 @@ class Repository:
             filename (str): The path relative to the managed repository.
 
         Returns:
-            str: The absolute path.
+            str: The absolute file system path.
         """
         if os.path.exists(filename):
             return filename
@@ -263,7 +266,7 @@ class Repository:
         tracked_commits = self._store.commits
         relevant_tracked_commits = []
         filename = self.get_relative_path(filename)
-        remote = self._managed_repository.remote().url
+        remote = self._remote.url
         last_commit = {}
         track_uncommitted = self.config.get("track_uncommitted", False)
         for tracked_commit in tracked_commits:
@@ -297,7 +300,7 @@ class Repository:
             pull_threshold = self.config.get("pull_threshold", 60)
             if not pulled_within(self._managed_repository, pull_threshold):
                 try:
-                    self._managed_repository.remote().fetch(prune=prune)
+                    self._remote.fetch(prune=prune)
                 except git.exc.GitCommandError:
                     pass
 
@@ -399,7 +402,7 @@ class Repository:
         if not uncommitted_changes:
             return {}
         commit = {
-            "remote": self._managed_repository.remote().url,
+            "remote": self._remote.url,
             "changes": self.uncommitted_changes,
             "date": str(datetime.datetime.now()),
         }
@@ -453,6 +456,7 @@ class Repository:
             return
         commit_dict = self.get_commit_dict(start)
         commit_dict.update(self.context_dict)
+        commit_dict["branches"] = {"local": self.get_commit_branches(start.hexsha)}
         # TODO: Maybe we should compare the SHA here.
         if commit_dict not in local_commits:
             local_commits.append(commit_dict)
@@ -471,8 +475,7 @@ class Repository:
             "clone": get_real_path(self.working_dir),
         }
 
-    @property
-    def local_only_commits(self) -> list:
+    def get_local_only_commits(self, claims: List[str] = None) -> list:
         """
         Returns:
             list:
@@ -485,6 +488,15 @@ class Repository:
             self.accumulate_local_only_commits(branch.commit, local_commits)
         if self.config.get("track_uncommitted"):
             uncommitted_changes_commit = self.uncommitted_changes_commit
+
+            # Adding file we want to claim to the uncommitted changes commit.
+            for claim in claims or []:
+                claim = self.get_absolute_path(claim)
+                if os.path.isfile(claim):
+                    uncommitted_changes_commit.setdefault("changes", []).append(
+                        self.get_relative_path(claim).replace("\\", "/")
+                    )
+
             if uncommitted_changes_commit:
                 local_commits.insert(0, uncommitted_changes_commit)
         local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
@@ -520,7 +532,7 @@ class Repository:
             changes += get_filenames_from_move_string(change)
         return {
             "sha": commit.hexsha,
-            "remote": self._managed_repository.remote().url,
+            "remote": self._remote.url,
             "changes": changes,
             "date": str(commit.committed_datetime),
             "author": commit.author.name,
@@ -537,7 +549,11 @@ class Repository:
         """
         args = ["--remote" if remote else []]
         args += ["--contains", sha]
-        branches = self._managed_repository.git.branch(*args)
+        try:
+            branches = self._managed_repository.git.branch(*args)
+        # If the commit is not on any branch we get a git.exc.GitCommandError.
+        except git.exc.GitCommandError:
+            return []
         branches = branches.replace("*", "")
         branches = branches.replace(" ", "")
         branches = branches.split("\n") if branches else []
@@ -610,7 +626,7 @@ class Repository:
                 uncommitted changes.
         """
         local_changes = set()
-        for commit in self.local_only_commits:
+        for commit in self.get_local_only_commits():
             local_changes = local_changes.union(commit.get("changes", []))
         return local_changes
 
@@ -690,13 +706,17 @@ class Repository:
 
     @property
     def working_dir(self):
+        """
+        Returns:
+            str: The working directory of the managed repository.
+        """
         return self._managed_repository.working_dir
 
-    def update_tracked_commits(self):
-        self._store.commits = self.updated_tracked_commits
+    def update_tracked_commits(self, claims: List[str] = None):
+        """Pulls the tracked commits from the store and updates them."""
+        self._store.commits = self.get_updated_tracked_commits(claims=claims)
 
-    @property
-    def updated_tracked_commits(self) -> list:
+    def get_updated_tracked_commits(self, claims: List[str] = None) -> list:
         """
         Returns:
             list:
@@ -707,7 +727,7 @@ class Repository:
         # We are re-evaluating those.
         tracked_commits = []
         for commit in self._store.commits:
-            remote = self._managed_repository.remote().url
+            remote = self._remote.url
             is_other_remote = commit.get("remote") != remote
             if self._is_valid_commit(commit) and (
                 is_other_remote or not self.is_issued_commit(commit)
@@ -716,7 +736,7 @@ class Repository:
                 continue
         # Adding all local commit to the list of tracked commits.
         # Will include uncommitted changes as a "fake" commit.
-        for commit in self.local_only_commits:
+        for commit in self.get_local_only_commits(claims=claims):
             tracked_commits.append(commit)
         return tracked_commits
 

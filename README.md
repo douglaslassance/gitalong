@@ -217,11 +217,17 @@ Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS
 
 ## Development
 
+You can of course use your editor of choice, that said we provide a solid Visual Studio Code setup.
+
 ### Setting up
+
+Before starting, you'll have to install all the Python dependencies using the following command.
 
 ```shell
 pip install --editable .[ci]
 ```
+
+We recommand you do this in a virtual environment.
 
 ### Testing
 
