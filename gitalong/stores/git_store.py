@@ -3,6 +3,7 @@ import os
 import typing
 
 import git
+import git.exc
 from git.repo import Repo
 
 from ..exceptions import RepositoryInvalidConfig
