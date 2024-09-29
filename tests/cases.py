@@ -1,15 +1,22 @@
+# pylint: disable=missing-function-docstring
+# pylint: disable=missing-class-docstring
+# pylint: disable=attribute-defined-outside-init
+
 import getpass
 import logging
 import os
 import shutil
 import socket
 import unittest
+import asyncio
 
 from click.testing import CliRunner
 from git.repo import Repo
 
 from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
 from gitalong.functions import is_read_only
+from gitalong.batch import claim_files, get_files_last_commits
+
 from .functions import save_image
 
 
@@ -36,7 +43,7 @@ class GitalongCase(unittest.TestCase):
         self.repository = Repository.setup(
             store_url=store_url,
             store_headers=store_headers,
-            managed_repository=self._managed_clone.working_dir,
+            managed_repository=str(self._managed_clone.working_dir),
             modify_permissions=True,
             track_binaries=True,
             track_uncommitted=True,
@@ -50,7 +57,7 @@ class GitalongCase(unittest.TestCase):
         config = self.repository.config
         self.assertEqual(
             os.path.normpath(self._store_url),
-            os.path.normpath(config.get("store_url")),
+            os.path.normpath(config.get("store_url", "")),
         )
 
     def test_lib(self):
@@ -101,7 +108,8 @@ class GitalongCase(unittest.TestCase):
         # pprint(self.repository.get_tracked_commits())
 
         # We just pushed the changes therefore there should be no missing commit.
-        last_commit = self.repository.get_file_last_commit("staged_image_02.jpg")
+        last_commits = asyncio.run(get_files_last_commits(["staged_image_02.jpg"]))
+        last_commit = last_commits[0] if last_commits else {}
         spread = self.repository.get_commit_spread(last_commit)
         self.assertEqual(
             CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH,
@@ -116,7 +124,8 @@ class GitalongCase(unittest.TestCase):
         # pprint(self.repository.get_tracked_commits())
 
         # As a result it should be a commit we do no have locally.
-        last_commit = self.repository.get_file_last_commit("staged_image_02.jpg")
+        last_commits = asyncio.run(get_files_last_commits(["staged_image_02.jpg"]))
+        last_commit = last_commits[0] if last_commits else {}
         spread = self.repository.get_commit_spread(last_commit)
         self.assertEqual(CommitSpread.REMOTE_MATCHING_BRANCH, spread)
 
@@ -129,9 +138,10 @@ class GitalongCase(unittest.TestCase):
 
         self.repository.update_tracked_commits()
 
-        missing_commit = self.repository.make_file_writable(staged_image_01_path)
+        claims = asyncio.run(claim_files([staged_image_01_path, image_path]))
+        missing_commit = claims[0]
         self.assertEqual(False, bool(missing_commit))
-        missing_commit = self.repository.make_file_writable(image_path)
+        missing_commit = claims[1]
         self.assertEqual(True, bool(missing_commit))
 
     def test_cli(self):
