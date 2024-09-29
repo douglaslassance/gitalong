@@ -7,10 +7,12 @@ import os
 import shutil
 import socket
 
-from typing import List
+from typing import Optional, List
 
-import dictdiffer
 import git
+import git.exc
+import dictdiffer
+
 from git.repo import Repo
 from gitdb.util import hex_to_bin
 
@@ -18,6 +20,7 @@ from .enums import CommitSpread
 from .exceptions import RepositoryNotSetup, RepositoryInvalidConfig
 from .functions import get_real_path, is_binary_file
 from .functions import set_read_only, pulled_within, get_filenames_from_move_string
+from .store import Store
 from .stores.git_store import GitStore
 from .stores.jsonbin_store import JsonbinStore
 
@@ -60,7 +63,7 @@ class Repository:
         self._managed_repository = Repo(repository, search_parent_directories=True)
         self._remote = self._managed_repository.remote()
 
-        store_url = self.config.get("store_url")
+        store_url = self.config.get("store_url", "")
         if store_url.startswith("https://api.jsonbin.io"):
             self._store = JsonbinStore(self)
         elif store_url.endswith(".git"):
@@ -81,13 +84,13 @@ class Repository:
     def setup(
         cls,
         store_url: str,
-        store_headers: dict = None,
+        store_headers: Optional[dict] = None,
         managed_repository: str = "",
         modify_permissions=False,
         pull_threshold: float = 60.0,
         track_binaries: bool = False,
         track_uncommitted: bool = False,
-        tracked_extensions: list[str] = None,
+        tracked_extensions: Optional[list[str]] = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
     ):
@@ -127,8 +130,8 @@ class Repository:
                 which we just installed.
         """
         tracked_extensions = tracked_extensions or []
-        managed_repository = Repo(managed_repository, search_parent_directories=True)
-        config_path = os.path.join(managed_repository.working_dir, cls._config_basename)
+        managed_repo = Repo(managed_repository, search_parent_directories=True)
+        config_path = os.path.join(managed_repo.working_dir, cls._config_basename)
         config = {
             "store_url": store_url,
             "store_headers": store_headers or {},
@@ -139,8 +142,7 @@ class Repository:
             "track_uncommitted": track_uncommitted,
         }
         cls._write_config_file(config, config_path)
-        gitalong = cls(repository=managed_repository.working_dir)
-        # gitalong._clone_store_repository()
+        gitalong = cls(repository=str(managed_repo.working_dir))
         if update_gitignore:
             gitalong.update_gitignore()
         if update_hooks:
@@ -181,6 +183,14 @@ class Repository:
         return os.path.join(self.working_dir, self._config_basename)
 
     @property
+    def store(self) -> Store:
+        """
+        Returns:
+            Store: The store that Gitalong uses to keep track of local changes.
+        """
+        return self._store
+
+    @property
     def config(self) -> dict:
         """
         Returns:
@@ -208,7 +218,11 @@ class Repository:
             )
         except configparser.NoOptionError:
             basename = os.path.join(".git", "hooks")
-        return os.path.normpath(os.path.join(self.working_dir, basename))
+        path = os.path.join(
+            self.working_dir,
+            basename,  # pyright: ignore[reportCallIssue, reportArgumentType]
+        )
+        return os.path.normpath(path)
 
     def install_hooks(self):
         """Installs Gitalong hooks in managed repository.
@@ -310,9 +324,7 @@ class Repository:
             file_commits = output.replace('"', "").split("\n") if output else []
             last_commit = (
                 self.get_commit_dict(
-                    git.objects.Commit(
-                        self._managed_repository, hex_to_bin(file_commits[0])
-                    )
+                    git.Commit(self._managed_repository, hex_to_bin(file_commits[0]))
                 )
                 if file_commits
                 else {}
@@ -332,9 +344,7 @@ class Repository:
             list: List of all local commits for active branch.
         """
         active_branch = self._managed_repository.active_branch
-        return list(
-            git.objects.Commit.iter_items(self._managed_repository, active_branch)
-        )
+        return list(git.Commit.iter_items(self._managed_repository, active_branch))
 
     def get_commit_spread(self, commit: dict) -> int:
         """
@@ -441,9 +451,7 @@ class Repository:
             return False
         return self.is_issued_commit(commit)
 
-    def accumulate_local_only_commits(
-        self, start: git.objects.Commit, local_commits: list
-    ):
+    def accumulate_local_only_commits(self, start: git.Commit, local_commits: list):
         """Accumulates a list of local only commit starting from the provided commit.
 
         Args:
@@ -475,7 +483,7 @@ class Repository:
             "clone": get_real_path(self.working_dir),
         }
 
-    def get_local_only_commits(self, claims: List[str] = None) -> list:
+    def get_local_only_commits(self, claims: Optional[List[str]] = None) -> list:
         """
         Returns:
             list:
@@ -519,7 +527,7 @@ class Repository:
         # A file can be in both in untracked and staged changes. The set fixes that.
         return list(set(untracked_changes + changes + staged_changes))
 
-    def get_commit_dict(self, commit: git.objects.Commit) -> dict:
+    def get_commit_dict(self, commit: git.Commit) -> dict:
         """
         Args:
             commit (git.objects.Commit): The commit to get as a dict.
@@ -529,7 +537,7 @@ class Repository:
         """
         changes = []
         for change in list(commit.stats.files.keys()):
-            changes += get_filenames_from_move_string(change)
+            changes += get_filenames_from_move_string(str(change))
         return {
             "sha": commit.hexsha,
             "remote": self._remote.url,
@@ -628,10 +636,10 @@ class Repository:
         local_changes = set()
         for commit in self.get_local_only_commits():
             local_changes = local_changes.union(commit.get("changes", []))
-        return local_changes
+        return list(local_changes)
 
     def update_file_permissions(
-        self, filename: str, locally_changed_files: list = None
+        self, filename: str, locally_changed_files: Optional[list] = None
     ) -> tuple:
         """Updates the permissions of a file based on them being locally changed.
 
@@ -705,18 +713,18 @@ class Repository:
         return missing_commit
 
     @property
-    def working_dir(self):
+    def working_dir(self) -> str:
         """
         Returns:
             str: The working directory of the managed repository.
         """
-        return self._managed_repository.working_dir
+        return str(self._managed_repository.working_dir)
 
-    def update_tracked_commits(self, claims: List[str] = None):
+    def update_tracked_commits(self, claims: Optional[List[str]] = None):
         """Pulls the tracked commits from the store and updates them."""
         self._store.commits = self.get_updated_tracked_commits(claims=claims)
 
-    def get_updated_tracked_commits(self, claims: List[str] = None) -> list:
+    def get_updated_tracked_commits(self, claims: Optional[List[str]] = None) -> list:
         """
         Returns:
             list:
