@@ -413,8 +413,10 @@ class Repository:
         # TODO: Maybe there is a way to get this information using pure Python.
         if self._managed_repository.git.branch("--remotes", "--contains", start.hexsha):
             return
+        # TODO: This is an expensive thing to call inividualy.
         commit_dict = self.get_commit_dict(start)
         commit_dict.update(self.context_dict)
+        # TODO: This is an expensive thing to call inividualy.
         commit_dict["branches"] = {"local": self.get_commit_branches(start.hexsha)}
         # TODO: Maybe we should compare the SHA here.
         if commit_dict not in local_commits:
