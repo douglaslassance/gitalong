@@ -157,7 +157,7 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     file_status = []
     commits = asyncio.run(get_files_last_commits(filename))
     for _filename, commit in zip(filename, commits):
-        repository = get_repository_safe(ctx.obj.get("REPOSITORY", "") or _filename)
+        repository = get_repository_safe(ctx.obj.get("REPOSITORY", _filename))
         absolute_filename = (
             repository.get_absolute_path(_filename) if repository else _filename
         )
@@ -182,7 +182,7 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
     blocking_commits = asyncio.run(claim_files(filename))
     for _filename, commit in zip(filename, blocking_commits):
-        repository = get_repository_safe(ctx.obj.get("REPOSITORY", "") or _filename)
+        repository = get_repository_safe(ctx.obj.get("REPOSITORY", _filename))
         absolute_filename = (
             repository.get_absolute_path(_filename) if repository else _filename
         )

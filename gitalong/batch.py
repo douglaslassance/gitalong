@@ -45,7 +45,12 @@ async def get_files_last_commits(
     """
     last_commits: List[git.Commit | dict] = []
     for filename in filenames:
-        repository = Repository(filename)
+        last_commit = {}
+
+        repository = get_repository_safe(filename)
+        if not repository:
+            last_commits.append(last_commit)
+            continue
 
         # We are checking the tracked commit first as they represented local changes.
         # They are in nature always more recent. If we find a relevant commit here we
@@ -54,7 +59,6 @@ async def get_files_last_commits(
         relevant_tracked_commits = []
         filename = repository.get_relative_path(filename)
         remote = repository.remote_url
-        last_commit = {}
         track_uncommitted = repository.config.get("track_uncommitted", False)
         for tracked_commit in tracked_commits:
             if (
