@@ -36,8 +36,7 @@ class Repository:
     """Aggregates all the Gitalong actions that can happen on a Git repository.
 
     Raises:
-        git.exc.InvalidGitRepositoryError:
-            If the path is not in or the Git clone.
+        git.exc.InvalidGitRepositoryError: If the path is not in or the Git clone.
     """
 
     _instances = {}
@@ -67,7 +66,8 @@ class Repository:
                 If true, the class will return "singleton" cached per clone.
 
         Raises:
-            GitalongNotInstalled: Description
+            RepositoryInvalidConfig: If the store URL is not valid.
+            RepositoryNotSetup: If Gitalong is not installed on the repository.
         """
         self._config = None
         self._submodules = None
@@ -165,7 +165,9 @@ class Repository:
     def from_filename(cls, filename: str) -> Optional["Repository"]:
         """
         Args:
-            filename (str): A path that belong to the repository including itself.
+            filename (str):
+                The absolute path to the clone or either the relative or
+                absolute path to one of its files.
 
         Returns:
             Optional[Repository]: The repository or None.
@@ -183,10 +185,8 @@ class Repository:
             json.dump(config, config_file, indent=4, sort_keys=True)
 
     def update_gitignore(self):
-        """Update the .gitignore of the managed repository with Gitalong directives.
-
-        TODO: Improve update by considering what is already ignored.
-        """
+        """Update the .gitignore of the managed repository with Gitalong directives."""
+        # TODO: Improve by considering what is already ignored.
         gitignore_path = os.path.join(self.working_dir, ".gitignore")
         content = ""
         if os.path.exists(gitignore_path):
