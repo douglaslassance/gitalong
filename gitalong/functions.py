@@ -6,6 +6,7 @@ import time
 
 from git.repo import Repo
 
+
 MOVE_STRING_REGEX = re.compile("{(.*)}")
 
 

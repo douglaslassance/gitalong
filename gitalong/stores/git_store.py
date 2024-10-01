@@ -53,8 +53,8 @@ class GitStore(Store):
         remote = store_repository.remote()
         pull_threshold = self._managed_repository.config.get("pull_threshold", 60)
         if not pulled_within(store_repository, pull_threshold) and remote.refs:
-            # TODO: If we could check that a pull is already happening then we could
-            # avoid this try except and save time.
+            # TODO: We could check that a pull is already happening thus avoiding this
+            # try except and save time.
             try:
                 remote.pull(
                     ff=True,
