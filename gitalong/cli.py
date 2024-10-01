@@ -12,29 +12,8 @@ from click.decorators import pass_context
 from .__info__ import __version__
 
 from .enums import CommitSpread
-from .exceptions import RepositoryNotSetup
 from .repository import Repository
-from .batch import get_files_last_commits, claim_files, get_repository_safe
-
-
-def get_repository(filename: str) -> Repository:
-    """
-    Args:
-        filename (str): A path that belong to the repository including itself.
-
-    Returns:
-        Repository: The repository.
-    """
-    try:
-        # Initializing Gitalong for each file allows to handle files from multiple
-        # repository. This is especially import to support submodules.
-        return Repository(repository=filename, use_cached_instances=True)
-    except git.exc.InvalidGitRepositoryError:
-        click.echo("fatal: not a git repository")
-        raise click.Abort()  # pylint: disable=raise-missing-from
-    except RepositoryNotSetup:
-        click.echo("fatal: not a gitalong repository")
-        raise click.Abort()  # pylint: disable=raise-missing-from
+from .batch import get_files_last_commits, claim_files
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
@@ -80,8 +59,8 @@ def version():  # pylint: disable=missing-function-docstring
 )
 @click.pass_context
 def config(ctx, prop):  # pylint: disable=missing-function-docstring
-    repository = get_repository(ctx.obj.get("REPOSITORY", ""))
-    repository_config = repository.config
+    repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
+    repository_config = repository.config if repository else {}
     prop = prop.replace("-", "_")
     if prop in repository_config:
         value = repository_config[prop]
@@ -103,19 +82,22 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
 @click.pass_context
 def update(ctx, repository):
     """TODO: Improve error handling."""
-    repository = get_repository(ctx.obj.get("REPOSITORY", ""))
-    root = repository.working_dir if repository else ""
+    repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
+    if not repository:
+        return
+    working_dir = repository.working_dir
     repository.update_tracked_commits()
     locally_changed = {}
     permission_changes = []
     if repository.config.get("modify_permissions"):
-        # TODO: This is a very expensive operation and needs to be optimized.
+        # TODO: This is an expensive operation and needs to be optimized.
+        # Also probably should not be done here at the CLI level.
         for filename in repository.files:
             if os.path.isfile(repository.get_absolute_path(filename)):
-                if root not in locally_changed:
-                    locally_changed[root] = repository.locally_changed_files
+                if working_dir not in locally_changed:
+                    locally_changed[working_dir] = repository.locally_changed_files
                 perm_change = repository.update_file_permissions(
-                    filename, locally_changed[root]
+                    filename, locally_changed[working_dir]
                 )
                 if perm_change:
                     permission_changes.append(f"{' '.join(perm_change)}")
@@ -157,7 +139,7 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     file_status = []
     commits = asyncio.run(get_files_last_commits(filename))
     for _filename, commit in zip(filename, commits):
-        repository = get_repository_safe(ctx.obj.get("REPOSITORY", _filename))
+        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
         absolute_filename = (
             repository.get_absolute_path(_filename) if repository else _filename
         )
@@ -182,7 +164,7 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
     blocking_commits = asyncio.run(claim_files(filename))
     for _filename, commit in zip(filename, blocking_commits):
-        repository = get_repository_safe(ctx.obj.get("REPOSITORY", _filename))
+        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
         absolute_filename = (
             repository.get_absolute_path(_filename) if repository else _filename
         )

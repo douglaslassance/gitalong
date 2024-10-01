@@ -1,35 +1,14 @@
 import os
 import asyncio
 
-from typing import Coroutine, Optional, List
+from typing import List, Coroutine
 
 import git
 import git.exc
 
-from git import Repo
-
 from .enums import CommitSpread
 from .repository import Repository
-from .exceptions import RepositoryNotSetup
-from .functions import pulled_within, set_read_only
-
-
-def get_repository_safe(
-    filename: str,
-) -> Optional[Repository]:
-    """
-    Args:
-        filename (str): A path that belong to the repository including itself.
-
-    Returns:
-        Optional[Repository]: The repository or None.
-    """
-    try:
-        return Repository(repository=filename, use_cached_instances=True)
-    except git.exc.InvalidGitRepositoryError:
-        return None
-    except RepositoryNotSetup:
-        return None
+from .functions import set_read_only
 
 
 async def get_files_last_commits(
@@ -47,7 +26,7 @@ async def get_files_last_commits(
     for filename in filenames:
         last_commit = {}
 
-        repository = get_repository_safe(filename)
+        repository = Repository.from_filename(filename)
         if not repository:
             last_commits.append(last_commit)
             continue
@@ -92,19 +71,17 @@ async def get_files_last_commits(
 
         if not last_commit:
             pull_threshold = repository.config.get("pull_threshold", 60)
-            repo = Repo(repository.working_dir)
-            if not pulled_within(repo, pull_threshold):
+            if not repository.pulled_within(pull_threshold):
                 try:
-                    git.Repo(repository.working_dir).remotes.origin.fetch(prune=prune)
                     repository.remote.fetch(prune=prune)
                 except git.exc.GitCommandError:
                     pass
 
             args = ["--all", "--remotes", '--pretty=format:"%H"', "--", filename]
-            output = repo.git.log(*args)
+            output = repository.git.log(*args)
             file_commits = output.replace('"', "").split("\n") if output else []
             sha = file_commits[0] if file_commits else ""
-            last_commit = repo.commit(sha) or {}
+            last_commit = repository.get_commit(sha) or {}
 
         last_commits.append(last_commit)
 
@@ -257,7 +234,7 @@ async def claim_files(
     for filename in filenames:
         last_commits = await get_files_last_commits([filename], prune=prune)
         last_commit = last_commits[0]
-        repository = get_repository_safe(filename)
+        repository = Repository.from_filename(filename)
         config = repository.config if repository else {}
         modify_permissions = config.get("modify_permissions")
         spread = repository.get_commit_spread(last_commit) if repository else 0

@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import socket
+import asyncio
 
 from typing import Optional, List
 
@@ -14,6 +15,9 @@ import git.exc
 import dictdiffer
 
 from git.repo import Repo
+
+# Deliberatedly import the module to avoid circular imports.
+from . import batch
 
 from .store import Store
 from .enums import CommitSpread
@@ -24,7 +28,7 @@ from .functions import (
     get_real_path,
     is_binary_file,
     set_read_only,
-    get_filenames_from_move_string,
+    pulled_within,
 )
 
 
@@ -156,6 +160,22 @@ class Repository:
         if update_hooks:
             gitalong.install_hooks()
         return gitalong
+
+    @classmethod
+    def from_filename(cls, filename: str) -> Optional["Repository"]:
+        """
+        Args:
+            filename (str): A path that belong to the repository including itself.
+
+        Returns:
+            Optional[Repository]: The repository or None.
+        """
+        try:
+            return cls(repository=filename, use_cached_instances=True)
+        except git.exc.InvalidGitRepositoryError:
+            return None
+        except RepositoryNotSetup:
+            return None
 
     @staticmethod
     def _write_config_file(config: dict, path: str):
@@ -410,17 +430,18 @@ class Repository:
             start (git.objects.Commit):
                 The commit that we start peeling from last commit.
         """
-        # TODO: Maybe there is a way to get this information using pure Python.
         if self._managed_repository.git.branch("--remotes", "--contains", start.hexsha):
             return
-        # TODO: This is an expensive thing to call inividualy.
-        commit_dict = self.get_commit_dict(start)
-        commit_dict.update(self.context_dict)
-        # TODO: This is an expensive thing to call inividualy.
-        commit_dict["branches"] = {"local": self.get_commit_branches(start.hexsha)}
-        # TODO: Maybe we should compare the SHA here.
-        if commit_dict not in local_commits:
-            local_commits.append(commit_dict)
+        # TODO: These call to batch functions are expensive for a single file.
+        commits = asyncio.run(batch.get_commits_dicts([start]))
+        commit = commits[0] if commits else {}
+        commit.update(self.context_dict)
+        branches_list = asyncio.run(batch.get_commits_branches([commit]))
+        branches = branches_list[0] if branches_list else []
+        commit["branches"] = {"local": branches}
+        # Maybe we should compare the SHA here.
+        if commit not in local_commits:
+            local_commits.append(commit)
         for parent in start.parents:
             self._accumulate_local_only_commits(parent, local_commits)
 
@@ -469,7 +490,6 @@ class Repository:
         Returns:
             list: A list of unique relative filenames that feature uncommitted changes.
         """
-        # TODO: Maybe there is a way to get this information using pure Python.
         git_cmd = self._managed_repository.git
         output = git_cmd.ls_files("--exclude-standard", "--others")
         untracked_changes = output.split("\n") if output else []
@@ -505,8 +525,7 @@ class Repository:
         """
         git_cmd = self._managed_repository.git
         try:
-            # TODO: HEAD might not be safe here since user could checkout an earlier
-            # commit.
+            # TODO: HEAD might not be safe. The user could checkout an earlier commit.
             filenames = git_cmd.ls_tree(full_tree=True, name_only=True, r="HEAD")
             return filenames.split("\n")
         except git.exc.GitCommandError:
@@ -604,45 +623,38 @@ class Repository:
             tracked_commits.append(commit)
         return tracked_commits
 
-    def get_commit_dict(self, commit: git.Commit) -> dict:
+    def pulled_within(self, seconds: float) -> bool:
         """
         Args:
-            commit (git.objects.Commit): The commit to get as a dict.
+            seconds (float): Time in seconds since last push.
 
         Returns:
-            dict: A simplified JSON serializable dict that represents the commit.
+            TYPE: Whether the repository pulled within the time provided.
         """
-        changes = []
-        for change in list(commit.stats.files.keys()):
-            changes += get_filenames_from_move_string(str(change))
-        return {
-            "sha": commit.hexsha,
-            "remote": self._remote.url,
-            "changes": changes,
-            "date": str(commit.committed_datetime),
-            "author": commit.author.name,
-        }
+        return pulled_within(self._managed_repository, seconds)
 
-    def get_commit_branches(self, sha: str, remote: bool = False) -> list:
+    def log(self, message: str):
+        """Logs a message to the managed repository.
+
+        Args:
+            message (str): The message to log.
+        """
+        self._managed_repository.git.log(message)
+
+    def get_commit(self, sha: str) -> git.Commit:
         """
         Args:
-            sha (str): The sha of the commit to check for.
-            remote (bool, optional): Whether we should return local or remote branches.
+            sha (str): The SHA of the commit to get.
 
         Returns:
-            list: A list of branch names that this commit is living on.
+            git.Commit: The commit object for the provided SHA.
         """
-        args = ["--remote" if remote else []]
-        args += ["--contains", sha]
-        try:
-            branches = self._managed_repository.git.branch(*args)
-        # If the commit is not on any branch we get a git.exc.GitCommandError.
-        except git.exc.GitCommandError:
-            return []
-        branches = branches.replace("*", "")
-        branches = branches.replace(" ", "")
-        branches = branches.split("\n") if branches else []
-        branch_names = set()
-        for branch in branches:
-            branch_names.add(branch.split("/")[-1])
-        return list(branch_names)
+        return self._managed_repository.commit(sha)
+
+    @property
+    def git(self) -> git.Git:
+        """
+        Returns:
+            git.cmd.Git: The Git command line interface for the managed repository.
+        """
+        return self._managed_repository.git
