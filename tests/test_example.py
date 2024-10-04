@@ -6,8 +6,6 @@ import asyncio
 from git.repo import Repo
 from gitalong import Repository, RepositoryNotSetup, CommitSpread
 
-from gitalong.batch import claim_files, get_files_last_commits
-
 
 def test_example():
     """Testing example code featured in README.md."""
@@ -44,20 +42,14 @@ def test_example():
         )
 
     # Creating some files.
-    open(
-        os.path.join(project_clone.working_dir, "uncommitted.png"),
-        "w",
-        encoding="utf-8",
-    ).close()
-    open(
-        os.path.join(project_clone.working_dir, "local.gif"), "w", encoding="utf-8"
-    ).close()
-    open(
-        os.path.join(project_clone.working_dir, "remote.jpg"), "w", encoding="utf-8"
-    ).close()
-    open(
-        os.path.join(project_clone.working_dir, "untracked.txt"), "w", encoding="utf-8"
-    ).close()
+    uncomitted = os.path.join(project_clone.working_dir, "uncommitted.png")
+    local = os.path.join(project_clone.working_dir, "local.gif")
+    remote = os.path.join(project_clone.working_dir, "remote.jpg")
+    untracked = os.path.join(project_clone.working_dir, "untracked.txt")
+    open(uncomitted, "w", encoding="utf-8").close()
+    open(local, "w", encoding="utf-8").close()
+    open(remote, "w", encoding="utf-8").close()
+    open(untracked, "w", encoding="utf-8").close()
 
     # Spreading them across branches.
     project_clone.index.add("untracked.txt")
@@ -74,14 +66,16 @@ def test_example():
     repository.update_tracked_commits()
 
     # Update permissions of all files based on track commits. Because
-    # `modify_permssions` was passed this will update all permissions of tracked files.
+    # `modify_permissions` was passed this will update all permissions of tracked files.
     # Permission updates currently comes at high performance cost and is not
     # recommended.
     locally_changed_files = repository.locally_changed_files
     for filename in repository.files:
         repository.update_file_permissions(filename, locally_changed_files)
 
-    last_commits = asyncio.run(get_files_last_commits(repository.files))
+    last_commits = asyncio.run(
+        repository.batch.get_files_last_commits([uncomitted, local, remote, untracked])
+    )
 
     # Now we'll get the last commit for our files.
     # This could return a dummy commit representing uncommitted changes.
@@ -106,7 +100,7 @@ def test_example():
 
     # Trying to claim the files.
     claims = asyncio.run(
-        claim_files(["uncommitted.png", "local.gif", "remote.jpg", "untracked.txt"])
+        repository.batch.claim_files([uncomitted, local, remote, untracked])
     )
 
     assert bool(claims[0]) is False

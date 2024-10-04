@@ -16,9 +16,6 @@ import dictdiffer
 
 from git.repo import Repo
 
-# Deliberatedly import the module to avoid circular imports.
-from . import batch
-
 from .store import Store
 from .enums import CommitSpread
 from .stores.git_store import GitStore
@@ -166,8 +163,8 @@ class Repository:
         """
         Args:
             filename (str):
-                The absolute path to the clone or either the relative or
-                absolute path to one of its files.
+                Existing absolute path to a file or folder in the managed repository.
+                That inclused the managed repository itself.
 
         Returns:
             Optional[Repository]: The repository or None.
@@ -433,10 +430,10 @@ class Repository:
         if self._managed_repository.git.branch("--remotes", "--contains", start.hexsha):
             return
         # TODO: These call to batch functions are expensive for a single file.
-        commits = asyncio.run(batch.get_commits_dicts([start]))
+        commits = asyncio.run(self.batch.get_commits_dicts([start]))
         commit = commits[0] if commits else {}
         commit.update(self.context_dict)
-        branches_list = asyncio.run(batch.get_commits_branches([commit]))
+        branches_list = asyncio.run(self.batch.get_commits_branches([commit]))
         branches = branches_list[0] if branches_list else []
         commit["branches"] = {"local": branches}
         # Maybe we should compare the SHA here.
@@ -658,3 +655,13 @@ class Repository:
             git.cmd.Git: The Git command line interface for the managed repository.
         """
         return self._managed_repository.git
+
+    @property
+    def batch(self):
+        """
+        Returns:
+            Batch: The batch object for the managed repository.
+        """
+        from . import batch  # pylint: disable=import-outside-toplevel
+
+        return batch

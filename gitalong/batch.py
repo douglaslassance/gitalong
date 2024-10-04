@@ -26,7 +26,7 @@ async def get_files_last_commits(
     for filename in filenames:
         last_commit = {}
 
-        repository = Repository.from_filename(filename)
+        repository = Repository.from_filename(os.path.dirname(filename))
         if not repository:
             last_commits.append(last_commit)
             continue
@@ -114,20 +114,24 @@ async def get_commits_branches(commits: List[dict], remote: bool = False) -> Lis
     branches_list = []
     tasks = []
     for commit in commits:
-        args = ["git", "-C", commit.get("clone", ""), "--remote" if remote else []]
+        if "sha" not in commit:
+            branches_list.append([])
+            continue
+        args = ["git", "-C", commit.get("clone", ""), "branch"]
+        if remote:
+            args += ["--remote"]
         args += ["--contains", commit.get("sha", "")]
         tasks.append(run_command(args))
-        results = await asyncio.gather(*tasks)
-        for result in results:
-            stdout = result[0]
-            branches = stdout.decode("utf-8").split("\n")
-            branches = branches.replace("*", "")
-            branches = branches.replace(" ", "")
-            branches = branches.split("\n") if branches else []
-            branch_names = set()
-            for branch in branches:
-                branch_names.add(branch.split("/")[-1])
-            branches_list.append(list(branch_names))
+    results = await asyncio.gather(*tasks)
+    for result in results:
+        branches = result.split("\n")[0]
+        branches = branches.replace("*", "")
+        branches = branches.replace(" ", "")
+        branches = branches.split("\n") if branches else []
+        branch_names = set()
+        for branch in branches:
+            branch_names.add(branch.split("/")[-1])
+        branches_list.append(list(branch_names))
     return branches_list
 
 
@@ -169,18 +173,34 @@ async def get_commit_changes(commits: List[git.Commit | dict]) -> List[str]:
             changes_list.append(commit.get("changes", []))
             continue
         working_dir = commit.repo.working_dir
-        args = ["git", "-C", working_dir, "diff", "--numstat", "--no-renames"]
-        parent = commit.parents[0].hexsha if commit.parents else ""
-        if parent:
-            args += [f"{commit.hexsha}^", parent]
+        if not commit.parents:
+            # First commit, use git show
+            args = [
+                "git",
+                "-C",
+                working_dir,
+                "show",
+                "--pretty=format:",
+                "--name-only",
+                commit.hexsha,
+            ]
         else:
-            args += [commit.hexsha]
-        args += ["--"]
+            # Subsequent commits, use git diff-tree
+            args = [
+                "git",
+                "-C",
+                working_dir,
+                "diff-tree",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                commit.hexsha,
+            ]
         tasks.append(run_command(args))
     results = await asyncio.gather(*tasks)
     for result in results:
-        stdout = result[0]
-        changes = stdout.decode("utf-8").split("\n")
+        changes = result.split("\n")
+        changes = [change for change in changes if change]
         changes_list.append(changes)
     return changes_list
 
@@ -207,6 +227,7 @@ async def get_commits_dicts(commits: List[git.Commit | dict]) -> List[dict]:
                 "changes": changes,
                 "date": str(commit.committed_datetime),
                 "author": commit.author.name,
+                "clone": commit.repo.working_dir,
             }
         )
     return commit_dicts
@@ -221,9 +242,7 @@ async def claim_files(
     Also makes the files writable if the configured is set to affect permissions.
 
     Args:
-        filename (str):
-            The file to make writable. Takes a path that's absolute or relative to
-            the managed repository.
+        filename (str): The absolute filename to the file to claim.
         prune (bool, optional): Prune branches if a fetch is necessary.
 
     Returns:
@@ -234,7 +253,7 @@ async def claim_files(
     for filename in filenames:
         last_commits = await get_files_last_commits([filename], prune=prune)
         last_commit = last_commits[0]
-        repository = Repository.from_filename(filename)
+        repository = Repository.from_filename(os.path.dirname(filename))
         config = repository.config if repository else {}
         modify_permissions = config.get("modify_permissions")
         spread = repository.get_commit_spread(last_commit) if repository else 0

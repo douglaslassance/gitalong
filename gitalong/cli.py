@@ -75,12 +75,8 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
         "files their permissions changed."
     )
 )
-@click.argument(
-    "repository",
-    # help="The path to the repository to update."
-)
 @click.pass_context
-def update(ctx, repository):
+def update(ctx):
     """TODO: Improve error handling."""
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
     if not repository:
@@ -122,7 +118,10 @@ def update(ctx, repository):
     "-p",
     "--profile",
     is_flag=True,
-    help="Will generate a profile file in the current workin directory.",
+    help=(
+        "Will generate a profile file in the current workin directory."
+        "The file can be open in a profiler like snakeviz."
+    ),
 )
 @click.pass_context
 def status(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
