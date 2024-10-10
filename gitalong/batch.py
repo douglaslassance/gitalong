@@ -124,8 +124,7 @@ async def get_commits_branches(commits: List[dict], remote: bool = False) -> Lis
         tasks.append(run_command(args))
     results = await asyncio.gather(*tasks)
     for result in results:
-        branches = result.split("\n")[0]
-        branches = branches.replace("*", "")
+        branches = result.replace("*", "")
         branches = branches.replace(" ", "")
         branches = branches.split("\n") if branches else []
         branch_names = set()
