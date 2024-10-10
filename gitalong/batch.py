@@ -255,7 +255,11 @@ async def claim_files(
     for filename in filenames:
         last_commits = await get_files_last_commits([filename], prune=prune)
         last_commit = last_commits[0]
-        repository = Repository.from_filename(os.path.dirname(filename))
+        # Not sure if we should let it raise here, but not sure given the batch context.
+        try:
+            repository = Repository.from_filename(os.path.dirname(filename))
+        except git.exc.NoSuchPathError:
+            repository = None
         config = repository.config if repository else {}
         modify_permissions = config.get("modify_permissions")
         spread = repository.get_commit_spread(last_commit) if repository else 0

@@ -175,6 +175,8 @@ class Repository:
             return None
         except RepositoryNotSetup:
             return None
+        except git.exc.NoSuchPathError:
+            return None
 
     @staticmethod
     def _write_config_file(config: dict, path: str):
