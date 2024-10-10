@@ -158,7 +158,7 @@ async def run_command(args: List[str]) -> str:
     return stdout.decode().strip()
 
 
-async def get_commit_changes(commits: List[git.Commit | dict]) -> List[str]:
+async def get_commits_changes(commits: List[git.Commit | dict]) -> List[str]:
     """
     Args:
         commits (git.objects.Commit | dict): The commit to get the changes from.
@@ -174,7 +174,7 @@ async def get_commit_changes(commits: List[git.Commit | dict]) -> List[str]:
             continue
         working_dir = commit.repo.working_dir
         if not commit.parents:
-            # First commit, use git show
+            # For the first commit, use git show.
             args = [
                 "git",
                 "-C",
@@ -185,7 +185,7 @@ async def get_commit_changes(commits: List[git.Commit | dict]) -> List[str]:
                 commit.hexsha,
             ]
         else:
-            # Subsequent commits, use git diff-tree
+            # For subsequent commits, using git diff-tree.
             args = [
                 "git",
                 "-C",
@@ -197,11 +197,14 @@ async def get_commit_changes(commits: List[git.Commit | dict]) -> List[str]:
                 commit.hexsha,
             ]
         tasks.append(run_command(args))
+        changes_list.append((None))
+
     results = await asyncio.gather(*tasks)
     for result in results:
         changes = result.split("\n")
         changes = [change for change in changes if change]
-        changes_list.append(changes)
+        index = changes_list.index(None)
+        changes_list[index] = changes
     return changes_list
 
 
@@ -214,7 +217,7 @@ async def get_commits_dicts(commits: List[git.Commit | dict]) -> List[dict]:
     Returns:
         List[dict]: A list of commit dictionaries.
     """
-    changes_list = await get_commit_changes(commits)
+    changes_list = await get_commits_changes(commits)
     commit_dicts = []
     for commit, changes in zip(commits, changes_list):
         if isinstance(commit, dict):
