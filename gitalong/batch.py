@@ -149,6 +149,7 @@ async def run_command(args: List[str]) -> str:
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.DEVNULL
     )
     stdout, stderr = await process.communicate()
     if process.returncode != 0:
