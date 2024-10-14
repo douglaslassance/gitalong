@@ -5,6 +5,7 @@ from typing import List, Coroutine
 
 import git
 import git.exc
+from pkg_resources import working_set
 
 from .enums import CommitSpread
 from .repository import Repository
@@ -22,6 +23,7 @@ async def get_files_last_commits(
     Returns:
         List[str]: A list of last commits for the files.
     """
+    pruned_repositories = []
     last_commits: List[git.Commit | dict] = []
     for filename in filenames:
         last_commit = {}
@@ -73,7 +75,11 @@ async def get_files_last_commits(
             pull_threshold = repository.config.get("pull_threshold", 60)
             if not repository.pulled_within(pull_threshold):
                 try:
-                    repository.remote.fetch(prune=prune)
+                    # We fetch only once since it's costly.
+                    working_dir = repository.working_dir
+                    if working_dir not in pruned_repositories:
+                        repository.remote.fetch(prune=prune)
+                        pruned_repositories.append(working_dir)
                 except git.exc.GitCommandError:
                     pass
 
@@ -149,7 +155,7 @@ async def run_command(args: List[str]) -> str:
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.DEVNULL
+        stdin=asyncio.subprocess.DEVNULL,
     )
     stdout, stderr = await process.communicate()
     if process.returncode != 0:
@@ -253,9 +259,8 @@ async def claim_files(
     """
     missing_commits = []
     claimables_by_repositoy = {}
-    for filename in filenames:
-        last_commits = await get_files_last_commits([filename], prune=prune)
-        last_commit = last_commits[0]
+    last_commits = await get_files_last_commits(filenames, prune=prune)
+    for filename, last_commit in zip(filenames, last_commits):
         # Not sure if we should let it raise here, but not sure given the batch context.
         try:
             repository = Repository.from_filename(os.path.dirname(filename))
