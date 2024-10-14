@@ -49,4 +49,4 @@ class Store(ABC):
 
         Args: commits (list, optional): The commits to update the store with.
         """
-        pass
+        pass  # pylint: disable=unnecessary-pass

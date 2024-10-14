@@ -11,7 +11,7 @@ elsewhere.
 
 ## Pre-requisites
 
-- [Python >=3.7](https://www.python.org/downloads/)
+- [Python >=3.10](https://www.python.org/downloads/)
 - [Git >=2.35.1](https://git-scm.com/downloads)
 
 > [!TIP]
