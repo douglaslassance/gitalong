@@ -189,6 +189,13 @@ class GitalongCase(unittest.TestCase):
         output = f"+------- {untracked_image_01} - - - {host} {user}\n"
         self.assertEqual(output, result.output)
 
+        result = runner.invoke(cli.claim, [untracked_image_01], obj=obj)
+        self.assertEqual(0, result.exit_code, result.output)
+        host = socket.gethostname()
+        user = getpass.getuser()
+        output = f"-------- {untracked_image_01} - - - - -\n"
+        self.assertEqual(output, result.output)
+
     def tearDown(self):
         try:
             shutil.rmtree(self.temp_dir)

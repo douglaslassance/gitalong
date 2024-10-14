@@ -5,7 +5,6 @@ from typing import List, Coroutine
 
 import git
 import git.exc
-from pkg_resources import working_set
 
 from .enums import CommitSpread
 from .repository import Repository
