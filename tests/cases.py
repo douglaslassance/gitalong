@@ -120,10 +120,9 @@ class GitalongCase(unittest.TestCase):
 
         # We are dropping the last commit locally.
         self._managed_clone.git.reset("--hard", commit.hexsha)
+
         # Simulating the post-checkout hook.
         self.repository.update_tracked_commits()
-        # print("POST-CHECKOUT TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
         # As a result it should be a commit we do no have locally.
         last_commits = asyncio.run(batch.get_files_last_commits([staged_image_02_path]))
@@ -133,8 +132,10 @@ class GitalongCase(unittest.TestCase):
 
         self.assertEqual(False, is_read_only(staged_image_01_path))
         self.assertEqual(False, is_read_only(self.repository.config_path))
+
         self.repository.update_file_permissions(staged_image_01_path)
         self.assertEqual(True, is_read_only(staged_image_01_path))
+
         self.repository.update_file_permissions(self.repository.config_path)
         self.assertEqual(False, is_read_only(self.repository.config_path))
 
