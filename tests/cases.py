@@ -13,7 +13,7 @@ import asyncio
 from click.testing import CliRunner
 from git.repo import Repo
 
-from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
+from gitalong import Repository, CommitSpread, Commit, RepositoryNotSetup, cli
 from gitalong.functions import is_read_only
 
 # Deliberatedly import the module to avoid circular imports.
@@ -111,8 +111,8 @@ class GitalongCase(unittest.TestCase):
 
         # We just pushed the changes therefore there should be no missing commit.
         last_commits = asyncio.run(batch.get_files_last_commits([staged_image_02_path]))
-        last_commit = last_commits[0] if last_commits else {}
-        spread = self.repository.get_commit_spread(last_commit)
+        last_commit = last_commits[0] if last_commits else Commit(None)
+        spread = last_commit.commit_spread
         self.assertEqual(
             CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH,
             spread,
@@ -126,8 +126,8 @@ class GitalongCase(unittest.TestCase):
 
         # As a result it should be a commit we do no have locally.
         last_commits = asyncio.run(batch.get_files_last_commits([staged_image_02_path]))
-        last_commit = last_commits[0] if last_commits else {}
-        spread = self.repository.get_commit_spread(last_commit)
+        last_commit = last_commits[0] if last_commits else Commit(None)
+        spread = last_commit.commit_spread
         self.assertEqual(CommitSpread.REMOTE_MATCHING_BRANCH, spread)
 
         self.assertEqual(False, is_read_only(staged_image_01_path))

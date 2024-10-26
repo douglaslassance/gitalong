@@ -12,12 +12,10 @@ from typing import Optional, List
 
 import git
 import git.exc
-import dictdiffer
 
 from git.repo import Repo
 
 from .store import Store
-from .enums import CommitSpread
 from .stores.git_store import GitStore
 from .stores.jsonbin_store import JsonbinStore
 from .exceptions import RepositoryNotSetup, RepositoryInvalidConfig
@@ -307,71 +305,6 @@ class Repository:
             return filename
         return os.path.join(self.working_dir, filename)
 
-    # @property
-    # def active_branch_commits(self) -> list[git.Commit]:
-    #     """
-    #     Returns:
-    #         list: List of all local commits for active branch.
-    #     """
-    #     active_branch = self._managed_repository.active_branch
-    #     return list(git.Commit.iter_items(self._managed_repository, active_branch))
-
-    def get_commit_spread(self, commit: dict) -> int:
-        """
-        Args:
-            commit (int): The commit to check for.
-
-        Returns:
-            dict:
-                A dictionary of commit spread information containing all
-                information about where this commit lives across branches and clones.
-        """
-        commit_spread = 0
-        active_branch = self._managed_repository.active_branch.name
-        if commit.get("user", ""):
-            is_issued = self._is_issued_commit(commit)
-            if "sha" in commit:
-                if active_branch in commit.get("branches", {}).get("local", []):
-                    commit_spread |= (
-                        CommitSpread.MINE_ACTIVE_BRANCH
-                        if is_issued
-                        else CommitSpread.THEIR_MATCHING_BRANCH
-                    )
-                else:
-                    commit_spread |= (
-                        CommitSpread.MINE_OTHER_BRANCH
-                        if is_issued
-                        else CommitSpread.THEIR_OTHER_BRANCH
-                    )
-            else:
-                commit_spread |= (
-                    CommitSpread.MINE_UNCOMMITTED
-                    if is_issued
-                    else CommitSpread.THEIR_UNCOMMITTED
-                )
-        else:
-            remote_branches = commit.get("branches", {}).get("remote", [])
-            if active_branch in remote_branches:
-                commit_spread |= CommitSpread.REMOTE_MATCHING_BRANCH
-            if active_branch in commit.get("branches", {}).get("local", []):
-                commit_spread |= CommitSpread.MINE_ACTIVE_BRANCH
-            if active_branch in remote_branches:
-                remote_branches.remove(active_branch)
-            if remote_branches:
-                commit_spread |= CommitSpread.REMOTE_OTHER_BRANCH
-        return commit_spread
-
-    @staticmethod
-    def is_uncommitted_changes_commit(commit: dict) -> bool:
-        """
-        Args:
-            commit (dict): The commit dictionary.
-
-        Returns:
-            bool: Whether the commit dictionary represents uncommitted changes.
-        """
-        return "user" in commit.keys()
-
     @property
     def uncommitted_changes_commit(self) -> dict:
         """
@@ -389,39 +322,9 @@ class Repository:
         commit.update(self.context_dict)
         return commit
 
-    def _is_issued_commit(self, commit: dict) -> bool:
-        """
-        Args:
-            commit (dict): The commit dictionary to check for.
-
-        Returns:
-            bool: Whether the commit was issued by the current context.
-        """
-        context_dict = self.context_dict
-        diff_keys = set()
-        for diff in dictdiffer.diff(context_dict, commit):
-            if diff[0] == "change":
-                diff_keys.add(diff[1])
-            elif diff[0] in ("add", "remove"):
-                diff_keys = diff_keys.union([key[0] for key in diff[2]])
-        intersection = set(context_dict.keys()).intersection(diff_keys)
-        return not intersection
-
-    def _is_issued_uncommitted_changes_commit(self, commit: dict) -> bool:
-        """
-        Args:
-            commit (dict): Description
-
-        Returns:
-            bool:
-                Whether the commit represents uncommitted changes and is issued by the
-                current context.
-        """
-        if not self.is_uncommitted_changes_commit(commit):
-            return False
-        return self._is_issued_commit(commit)
-
-    def _accumulate_local_only_commits(self, start: git.Commit, local_commits: list):
+    def _accumulate_local_only_commits(
+        self, start: git.Commit, local_commits: List[dict]
+    ):
         """Accumulates a list of local only commit starting from the provided commit.
 
         Args:
@@ -429,15 +332,24 @@ class Repository:
             start (git.objects.Commit):
                 The commit that we start peeling from last commit.
         """
+        from .commit import Commit  # pylint: disable=import-outside-toplevel
+
         if self._managed_repository.git.branch("--remotes", "--contains", start.hexsha):
             return
-        # TODO: These call to batch functions are expensive for a single file.
-        commits = asyncio.run(self.batch.get_commits_dicts([start]))
-        commit = commits[0] if commits else {}
-        commit.update(self.context_dict)
+
+        commit = Commit(self)
+        commit.update_with_sha(start.hexsha)
+        commit.update_context()
+
+        # TODO: We should find a way to batch these calls as they are expensive.
+        changes = asyncio.run(self.batch.get_commits_changes([commit]))
+        commit["changes"] = changes
+
+        # commits = asyncio.run(self.batch.get_commits_dicts([start]))
         branches_list = asyncio.run(self.batch.get_commits_branches([commit]))
         branches = branches_list[0] if branches_list else []
         commit["branches"] = {"local": branches}
+
         # Maybe we should compare the SHA here.
         if commit not in local_commits:
             local_commits.append(commit)
@@ -612,7 +524,7 @@ class Repository:
             remote = self._remote.url
             is_other_remote = commit.get("remote") != remote
             if "changes" in commit.keys() and (
-                is_other_remote or not self._is_issued_commit(commit)
+                is_other_remote or not commit.is_issued_commit()
             ):
                 tracked_commits.append(commit)
                 continue
@@ -640,16 +552,6 @@ class Repository:
         """
         self._managed_repository.git.log(message)
 
-    def get_commit(self, sha: str) -> git.Commit:
-        """
-        Args:
-            sha (str): The SHA of the commit to get.
-
-        Returns:
-            git.Commit: The commit object for the provided SHA.
-        """
-        return self._managed_repository.commit(sha)
-
     @property
     def git(self) -> git.Git:
         """
@@ -667,3 +569,11 @@ class Repository:
         from . import batch  # pylint: disable=import-outside-toplevel
 
         return batch
+
+    @property
+    def active_branch_name(self) -> str:
+        """
+        Returns:
+            str: The name of the active branch.
+        """
+        return self._managed_repository.active_branch.name
