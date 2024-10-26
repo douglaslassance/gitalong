@@ -86,10 +86,10 @@ def test_example():
 
     # Getting the commit spreads.
     # Spread flags represent where the commit live.
-    uncommitted_spread = repository.get_commit_spread(uncommitted_last_commit)
-    local_spread = repository.get_commit_spread(local_last_commit)
-    remote_spread = repository.get_commit_spread(remote_last_commit)
-    untracked_spread = repository.get_commit_spread(untracked_last_commit)
+    uncommitted_spread = uncommitted_last_commit.commit_spread
+    local_spread = local_last_commit.commit_spread
+    remote_spread = remote_last_commit.commit_spread
+    untracked_spread = untracked_last_commit.commit_spread
 
     assert uncommitted_spread == CommitSpread.MINE_UNCOMMITTED
     assert local_spread == CommitSpread.MINE_ACTIVE_BRANCH

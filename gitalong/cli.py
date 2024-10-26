@@ -142,7 +142,7 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
         absolute_filename = (
             repository.get_absolute_path(_filename) if repository else _filename
         )
-        spread = repository.get_commit_spread(commit) if repository else 0
+        spread = commit.commit_spread if repository else 0
         file_status.append(get_status_string(absolute_filename, commit, spread))
     click.echo("\n".join(file_status), err=False)
 
@@ -167,7 +167,7 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
         absolute_filename = (
             repository.get_absolute_path(_filename) if repository else _filename
         )
-        spread = repository.get_commit_spread(commit) if repository else 0
+        spread = commit.commit_spread if repository else 0
         statuses.append(get_status_string(absolute_filename, commit, spread))
     if statuses:
         click.echo("\n".join(statuses))

@@ -8,26 +8,52 @@ import git.exc
 
 from .enums import CommitSpread
 from .repository import Repository
+from .commit import Commit
 from .functions import set_read_only
+
+
+async def run_command(args: List[str], safe: bool = False) -> str:
+    """
+    Args:
+        args (List[str]): The command to run.
+
+    Raises:
+        Exception: When the command fails.
+
+    Returns:
+        str: The stdout of the command.
+    """
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.DEVNULL,
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        if safe:
+            return ""
+        error = stderr.decode().strip()
+        raise Exception(error)  # pylint: disable=broad-exception-raised
+    return stdout.decode().strip()
 
 
 async def get_files_last_commits(
     filenames: List[str], prune: bool = True
-) -> List[dict]:
+) -> List[Commit]:
     """Get the last commit for a list of files.
 
     Args:
         filenames (List[str]): A list of absolute filenames to get the last commit for.
 
     Returns:
-        List[str]: A list of last commits for the files.
+        List[Commit]: A list of last commits for the files.
     """
-    pruned_repositories = []
-    last_commits: List[git.Commit | dict] = []
+    pruned_repositories: List[str] = []
+    last_commits: List[Commit] = []
     for filename in filenames:
-        last_commit = {}
-
         repository = Repository.from_filename(os.path.dirname(filename))
+        last_commit = Commit(repository)
         if not repository:
             last_commits.append(last_commit)
             continue
@@ -86,28 +112,33 @@ async def get_files_last_commits(
             output = repository.git.log(*args)
             file_commits = output.replace('"', "").split("\n") if output else []
             sha = file_commits[0] if file_commits else ""
-            last_commit = repository.get_commit(sha) or {}
+            last_commit = Commit(repository)
+            last_commit.update_with_sha(sha)
 
         last_commits.append(last_commit)
 
-    last_commit_dicts = await get_commits_dicts(last_commits)
-    local_branches_list = await get_commits_branches(last_commit_dicts)
-    remote_branches_list = await get_commits_branches(last_commit_dicts, remote=True)
+    changes = await get_commits_changes(last_commits)
+    local_branches_list = await get_commits_branches(last_commits)
+    remote_branches_list = await get_commits_branches(last_commits, remote=True)
 
-    for last_commit_dict, local_branches, remote_branches in zip(
-        last_commit_dicts, local_branches_list, remote_branches_list
+    for last_commit, changes, local_branches, remote_branches in zip(
+        last_commits, changes, local_branches_list, remote_branches_list
     ):
+        if changes:
+            last_commit["changes"] = changes
         if local_branches:
-            branches = last_commit_dict.setdefault("branches", {})
+            branches = last_commit.setdefault("branches", {})
             branches["local"] = local_branches
         if remote_branches:
-            branches = last_commit_dict.setdefault("branches", {})
+            branches = last_commit.setdefault("branches", {})
             branches["remote"] = remote_branches
 
-    return last_commit_dicts
+    return last_commits
 
 
-async def get_commits_branches(commits: List[dict], remote: bool = False) -> List[str]:
+async def get_commits_branches(
+    commits: List[Commit], remote: bool = False
+) -> List[str]:
     """
     Args:
         sha (str): The sha of the commit to check for.
@@ -122,11 +153,11 @@ async def get_commits_branches(commits: List[dict], remote: bool = False) -> Lis
         if "sha" not in commit:
             branches_list.append([])
             continue
-        args = ["git", "-C", commit.get("clone", ""), "branch"]
+        args = ["git", "-C", commit.repository.working_dir, "branch"]
         if remote:
             args += ["--remote"]
         args += ["--contains", commit.get("sha", "")]
-        tasks.append(run_command(args))
+        tasks.append(run_command(args, safe=True))
     results = await asyncio.gather(*tasks)
     for result in results:
         branches = result.replace("*", "")
@@ -139,31 +170,7 @@ async def get_commits_branches(commits: List[dict], remote: bool = False) -> Lis
     return branches_list
 
 
-async def run_command(args: List[str]) -> str:
-    """
-    Args:
-        args (List[str]): The command to run.
-
-    Raises:
-        Exception: When the command fails.
-
-    Returns:
-        str: The stdout of the command.
-    """
-    process = await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.DEVNULL,
-    )
-    stdout, stderr = await process.communicate()
-    if process.returncode != 0:
-        message = f"Command failed with error: {stderr.decode().strip()}"
-        raise Exception(message)  # pylint: disable=broad-exception-raised
-    return stdout.decode().strip()
-
-
-async def get_commits_changes(commits: List[git.Commit | dict]) -> List[str]:
+async def get_commits_changes(commits: List[Commit]) -> List[str]:
     """
     Args:
         commits (git.objects.Commit | dict): The commit to get the changes from.
@@ -174,32 +181,43 @@ async def get_commits_changes(commits: List[git.Commit | dict]) -> List[str]:
     changes_list = []
     tasks: List[Coroutine] = []
     for commit in commits:
-        if isinstance(commit, dict):
-            changes_list.append(commit.get("changes", []))
+        if "changes" in commit:
+            changes_list.append(commit["changes"])
             continue
-        working_dir = commit.repo.working_dir
+
+        repository = commit.repository
+        if not repository:
+            changes_list.append([])
+            continue
+
+        sha = commit.get("sha", "")
+        if not sha:
+            changes_list.append([])
+            continue
+
+        # If changes have not been collected we do that.
         if not commit.parents:
             # For the first commit, use git show.
             args = [
                 "git",
                 "-C",
-                working_dir,
+                repository.working_dir,
                 "show",
                 "--pretty=format:",
                 "--name-only",
-                commit.hexsha,
+                sha,
             ]
         else:
             # For subsequent commits, using git diff-tree.
             args = [
                 "git",
                 "-C",
-                working_dir,
+                repository.working_dir,
                 "diff-tree",
                 "--no-commit-id",
                 "--name-only",
                 "-r",
-                commit.hexsha,
+                sha,
             ]
         tasks.append(run_command(args))
         changes_list.append((None))
@@ -213,38 +231,10 @@ async def get_commits_changes(commits: List[git.Commit | dict]) -> List[str]:
     return changes_list
 
 
-async def get_commits_dicts(commits: List[git.Commit | dict]) -> List[dict]:
-    """Get commit information for a list of commits.
-
-    Args:
-        commits (List[git.Commit | dict]): A list of commits.
-
-    Returns:
-        List[dict]: A list of commit dictionaries.
-    """
-    changes_list = await get_commits_changes(commits)
-    commit_dicts = []
-    for commit, changes in zip(commits, changes_list):
-        if isinstance(commit, dict):
-            commit_dicts.append(commit)
-            continue
-        commit_dicts.append(
-            {
-                "sha": commit.hexsha,
-                "remote": commit.repo.remote().url,
-                "changes": changes,
-                "date": str(commit.committed_datetime),
-                "author": commit.author.name,
-                "clone": commit.repo.working_dir,
-            }
-        )
-    return commit_dicts
-
-
 async def claim_files(
     filenames: List[str],
     prune: bool = True,
-) -> List[dict]:
+) -> List[Commit]:
     """If the file is available for changes, temporarily communicates files as changed.
     By communicate we mean until the next update of the tracked commits.
     Also makes the files writable if the configured is set to affect permissions.
@@ -254,30 +244,25 @@ async def claim_files(
         prune (bool, optional): Prune branches if a fetch is necessary.
 
     Returns:
-        List[dict]: The commits that we are missing.
+        List[Commit]: The commits that we are missing.
     """
     missing_commits = []
-    claimables_by_repositoy = {}
     last_commits = await get_files_last_commits(filenames, prune=prune)
     for filename, last_commit in zip(filenames, last_commits):
         # Not sure if we should let it raise here, but not sure given the batch context.
-        try:
-            repository = Repository.from_filename(os.path.dirname(filename))
-        except git.exc.NoSuchPathError:
-            repository = None
+        repository = Repository.from_filename(os.path.dirname(filename))
         config = repository.config if repository else {}
         modify_permissions = config.get("modify_permissions")
-        spread = repository.get_commit_spread(last_commit) if repository else 0
+        spread = last_commit.commit_spread if repository else 0
         is_local_commit = (
             spread & CommitSpread.MINE_ACTIVE_BRANCH == CommitSpread.MINE_ACTIVE_BRANCH
         )
         is_uncommitted = (
             spread & CommitSpread.MINE_UNCOMMITTED == CommitSpread.MINE_UNCOMMITTED
         )
-        missing_commit = {} if is_local_commit or is_uncommitted else last_commit
-        if os.path.exists(filename):
-            if not missing_commit and modify_permissions:
-                set_read_only(filename, bool(missing_commit))
-                claimables_by_repositoy.setdefault(repository, []).append(filename)
+        is_local = is_local_commit or is_uncommitted
+        missing_commit = Commit(repository) if is_local else last_commit
+        if not missing_commit and modify_permissions:
+            set_read_only(filename, bool(missing_commit), check_exists=True)
         missing_commits.append(missing_commit)
     return missing_commits

@@ -30,5 +30,5 @@ def test_local_files():
 
     for filename, last_commit in zip(filenames, last_commits):
         repository = Repository.from_filename(filename)
-        spread = repository.get_commit_spread(last_commit) if repository else 0
+        spread = last_commit.commit_spread if repository else 0
         assert files[filename] == spread
