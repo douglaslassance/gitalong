@@ -343,7 +343,7 @@ class Repository:
 
         # TODO: We should find a way to batch these calls as they are expensive.
         changes = asyncio.run(self.batch.get_commits_changes([commit]))
-        commit["changes"] = changes
+        commit["changes"] = changes[0]
 
         # commits = asyncio.run(self.batch.get_commits_dicts([start]))
         branches_list = asyncio.run(self.batch.get_commits_branches([commit]))
@@ -368,7 +368,7 @@ class Repository:
             "clone": get_real_path(self.working_dir),
         }
 
-    def get_local_only_commits(self, claims: Optional[List[str]] = None) -> list:
+    def get_local_only_commits(self) -> list:
         """
         Returns:
             list:
@@ -381,15 +381,6 @@ class Repository:
             self._accumulate_local_only_commits(branch.commit, local_commits)
         if self.config.get("track_uncommitted"):
             uncommitted_changes_commit = self.uncommitted_changes_commit
-
-            # Adding file we want to claim to the uncommitted changes commit.
-            for claim in claims or []:
-                claim = self.get_absolute_path(claim)
-                if os.path.isfile(claim):
-                    uncommitted_changes_commit.setdefault("changes", []).append(
-                        self.get_relative_path(claim).replace("\\", "/")
-                    )
-
             if uncommitted_changes_commit:
                 local_commits.insert(0, uncommitted_changes_commit)
         local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
@@ -506,11 +497,11 @@ class Repository:
         """
         return str(self._managed_repository.working_dir)
 
-    def update_tracked_commits(self, claims: Optional[List[str]] = None):
+    def update_tracked_commits(self):
         """Pulls the tracked commits from the store and updates them."""
-        self._store.commits = self._get_updated_tracked_commits(claims=claims)
+        self._store.commits = self._get_updated_tracked_commits()
 
-    def _get_updated_tracked_commits(self, claims: Optional[List[str]] = None) -> list:
+    def _get_updated_tracked_commits(self) -> list:
         """
         Returns:
             list:
@@ -530,7 +521,7 @@ class Repository:
                 continue
         # Adding all local commit to the list of tracked commits.
         # Will include uncommitted changes as a "fake" commit.
-        for commit in self.get_local_only_commits(claims=claims):
+        for commit in self.get_local_only_commits():
             tracked_commits.append(commit)
         return tracked_commits
 
