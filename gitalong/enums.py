@@ -2,11 +2,11 @@ from enum import IntFlag, auto
 
 
 class CommitSpread(IntFlag):
-
     """A combinable enumerator to represent where the commit spreads across branches
     and clones.
 
     Attributes:
+        MINE_CLAIMED (int): The commit represent our claimed files.
         MINE_UNCOMITTED (int): Commit represent our local uncommitted changes.
         MINE_ACTIVE_BRANCH (int): Commit is on our local active branch.
         MINE_OTHER_BRANCH (int): Commit is in one ore more of our other local branches.
@@ -15,8 +15,10 @@ class CommitSpread(IntFlag):
         THEIR_OTHER_BRANCH (int): Commit is on someone else's clone non-matching branch.
         THEIR_MATCHING_BRANCH (int): Commit is on someone else's clone matching branch.
         THEIR_UNCOMMITED (int): Commit is on someone else's clone uncommitted changes.
+        THEIR_CLAIMED (int): Commit represent someone else's claimed files.
     """
 
+    MINE_CLAIMED = auto()
     MINE_UNCOMMITTED = auto()
     MINE_ACTIVE_BRANCH = auto()
     MINE_OTHER_BRANCH = auto()
@@ -25,3 +27,4 @@ class CommitSpread(IntFlag):
     THEIR_OTHER_BRANCH = auto()
     THEIR_MATCHING_BRANCH = auto()
     THEIR_UNCOMMITTED = auto()
+    THEIR_CLAIMED = auto()
