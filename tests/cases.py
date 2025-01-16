@@ -16,7 +16,7 @@ from git.repo import Repo
 from gitalong import Repository, CommitSpread, Commit, RepositoryNotSetup, cli
 from gitalong.functions import is_read_only
 
-# Deliberatedly import the module to avoid circular imports.
+# Deliberately import the module to avoid circular imports.
 import gitalong.batch as batch
 
 from .functions import save_image
@@ -144,6 +144,15 @@ class GitalongCase(unittest.TestCase):
         missing_commit = claims[1]
         self.assertEqual(True, bool(missing_commit))
 
+        # Testing the release mechanism
+        releases = asyncio.run(
+            batch.release_files([staged_image_01_path, staged_image_02_path])
+        )
+        missing_commit = releases[0]
+        self.assertEqual(False, bool(missing_commit))
+        missing_commit = releases[1]
+        self.assertEqual(True, bool(missing_commit))
+
     def test_cli(self):
         working_dir = self._managed_clone.working_dir
         obj = {"REPOSITORY": working_dir}
@@ -188,6 +197,12 @@ class GitalongCase(unittest.TestCase):
         self.assertEqual(0, result.exit_code, result.output)
         host = socket.gethostname()
         user = getpass.getuser()
+        output = f"-------- {untracked_image_01} - - - - -\n"
+        self.assertEqual(output, result.output)
+
+        # Testing the release mechanism via CLI
+        result = runner.invoke(cli.release, [untracked_image_01], obj=obj)
+        self.assertEqual(0, result.exit_code, result.output)
         output = f"-------- {untracked_image_01} - - - - -\n"
         self.assertEqual(output, result.output)
 
