@@ -1,23 +1,18 @@
 import os
-import pstats
-import cProfile
 import asyncio
 
 import click
 import git
 import git.exc
 
-from click.decorators import pass_context
-
 from .__info__ import __version__
-
 from .enums import CommitSpread
 from .repository import Repository
 from .batch import get_files_last_commits, claim_files, release_files
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
-    """TODO: Add proper offline support."""
+    """Generate a status string for a file and its commit."""
     prop = "+" if spread & CommitSpread.MINE_CLAIMED else "-"
     prop += "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
@@ -55,10 +50,7 @@ def version():  # pylint: disable=missing-function-docstring
 
 
 @click.command(help="Prints the requested configuration property value.")
-@click.argument(
-    "prop",
-    # help="The configuration property key to look for."
-)
+@click.argument("prop")
 @click.pass_context
 def config(ctx, prop):  # pylint: disable=missing-function-docstring
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
@@ -79,7 +71,7 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
 )
 @click.pass_context
 def update(ctx):
-    """TODO: Improve error handling."""
+    """Update tracked commits with local changes."""
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
     if not repository:
         return
@@ -88,8 +80,6 @@ def update(ctx):
     locally_changed = {}
     permission_changes = []
     if repository.config.get("modify_permissions"):
-        # TODO: This is an expensive operation and needs to be optimized.
-        # Also probably should not be done here at the CLI level.
         for filename in repository.files:
             if os.path.isfile(repository.get_absolute_path(filename)):
                 if working_dir not in locally_changed:
@@ -108,26 +98,24 @@ def update(ctx):
         "Prints missing commits in this local branch for each filename. "
         "Format: `<spread> <filename> <commit> <local-branches> "
         "<remote-branches> <host> <author>`"
-        # noqa: E501 pylint: disable=line-too-long
     )
 )
-@click.argument(
-    "filename",
-    nargs=-1,
-    # help="The paths to the files that should be made writable."
-)
+@click.argument("filename", nargs=-1)
 @click.option(
     "-p",
     "--profile",
     is_flag=True,
     help=(
-        "Will generate a profile file in the current workin directory."
-        "The file can be open in a profiler like snakeviz."
+        "Will generate a profile file in the current working directory."
+        "The file can be opened in a profiler like snakeviz."
     ),
 )
 @click.pass_context
 def status(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
     if profile:
+        import cProfile  # pylint: disable=import-outside-toplevel
+        import pstats  # pylint: disable=import-outside-toplevel
+
         with cProfile.Profile() as pr:
             run_status(ctx, filename)
         results = pstats.Stats(pr)
@@ -151,16 +139,12 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
 
 @click.command(
     help=(
-        "Reserve files preventing other to edit it. "
-        "Make provided files writeable if possible."
+        "Reserve files preventing others from editing them. "
+        "Make provided files writable if possible."
     )
 )
-@click.argument(
-    "filename",
-    nargs=-1,
-    # help="The paths to the files that should be claimed."
-)
-@pass_context
+@click.argument("filename", nargs=-1)
+@click.pass_context
 def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
     blocking_commits = asyncio.run(claim_files(filename))
@@ -177,16 +161,12 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
 
 @click.command(
     help=(
-        "Release claimed files allowing other to edit them. "
+        "Release claimed files allowing others to edit them. "
         "Make provided files read-only."
     )
 )
-@click.argument(
-    "filename",
-    nargs=-1,
-    # help="The paths to the files that should be made writable."
-)
-@pass_context
+@click.argument("filename", nargs=-1)
+@click.pass_context
 def release(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
     blocking_commits = asyncio.run(release_files(filename))
@@ -202,19 +182,12 @@ def release(ctx, filename):  # pylint: disable=missing-function-docstring
 
 
 @click.command(help="Setup Gitalong in a repository.")
-@click.argument(
-    "store-url",
-    # help="The URL or path to the repository or REST API endpoint that will store the
-    # Gitalong data.",
-    required=True,
-)
+@click.argument("store-url", required=True)
 @click.option(
     "-sh",
     "--store-header",
     callback=validate_key_value,
-    help=(
-        "If using JSONBin.io as a store, the headers used to connect the" "end point."
-    ),
+    help="If using JSONBin.io as a store, the headers used to connect the endpoint.",
     required=False,
     multiple=True,
 )
@@ -225,7 +198,7 @@ def release(ctx, filename):  # pylint: disable=missing-function-docstring
     help=(
         "Whether or not Gitalong should affect file permissions of tracked files "
         "to prevent editing of files that are modified elsewhere. This is too "
-        "expensive option for repositories with many files and should should be "
+        "expensive an option for repositories with many files and should be "
         "enabled."
     ),
 )
@@ -234,9 +207,9 @@ def release(ctx, filename):  # pylint: disable=missing-function-docstring
     "--pull-threshold",
     default=60,
     help=(
-        "Time in seconds that need to pass before Gitalong pulls again. Defaults to 10"
-        "seconds. This is for optimization sake as pull and fetch operation are "
-        "expensive. Defaults to 60 seconds."
+        "Time in seconds that need to pass before Gitalong pulls again. Defaults to 60"
+        "seconds. This is for optimization sake as pull and fetch operations are "
+        "expensive."
     ),
     required=False,
 )
@@ -257,7 +230,7 @@ def release(ctx, filename):  # pylint: disable=missing-function-docstring
     "--track-uncommitted",
     is_flag=True,
     help=(
-        "Track uncommitted changes. Better for collaboration but requires to push"
+        "Track uncommitted changes. Better for collaboration but requires pushing"
         "tracked commits after each file system operation."
     ),
 )
@@ -265,21 +238,16 @@ def release(ctx, filename):  # pylint: disable=missing-function-docstring
     "-te",
     "--tracked-extensions",
     default="",
-    help=(
-        "A comma separated list of extensions to track to prevent conflicts. "
-        "to prevent conflicts on them."
-    ),
+    help=("A comma-separated list of extensions to track to prevent conflicts."),
 )
 @click.option(
     "-ug",
     "--update-gitignore",
     is_flag=True,
-    help=(
-        ".gitignore should be modified in the repository to ignore " "Gitalong files."
-    ),
+    help=(".gitignore should be modified in the repository to ignore Gitalong files."),
 )
 @click.option(
-    "-ug",
+    "-uh",
     "--update-hooks",
     is_flag=True,
     help="Hooks should be updated with Gitalong logic.",
@@ -297,7 +265,7 @@ def setup(
     update_gitignore,
     update_hooks,
 ):
-    """TODO: Add support for branch groups."""
+    """Setup Gitalong in a repository."""
     Repository.setup(
         store_url=store_url,
         store_headers=store_header,
@@ -358,7 +326,7 @@ cli.add_command(version)
 
 
 def main():
-    """This main function will be register as the console script when installing the
+    """This main function will be registered as the console script when installing the
     package.
     """
     cli(obj={})  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter

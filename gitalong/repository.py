@@ -97,7 +97,7 @@ class Repository:
         pull_threshold: float = 60.0,
         track_binaries: bool = False,
         track_uncommitted: bool = False,
-        tracked_extensions: Optional[list[str]] = None,
+        tracked_extensions: Optional[List[str]] = None,
         update_gitignore: bool = False,
         update_hooks: bool = False,
     ):
@@ -162,18 +162,18 @@ class Repository:
         Args:
             filename (str):
                 Existing absolute path to a file or folder in the managed repository.
-                That inclused the managed repository itself.
+                That includes the managed repository itself.
 
         Returns:
             Optional[Repository]: The repository or None.
         """
         try:
             return cls(repository=filename, use_cached_instances=True)
-        except git.exc.InvalidGitRepositoryError:
-            return None
-        except RepositoryNotSetup:
-            return None
-        except git.exc.NoSuchPathError:
+        except (
+            git.exc.InvalidGitRepositoryError,
+            RepositoryNotSetup,
+            git.exc.NoSuchPathError,
+        ):
             return None
 
     @staticmethod
@@ -191,7 +191,6 @@ class Repository:
                 content = gitignore.read()
         with open(gitignore_path, "w", encoding="utf8") as gitignore:
             with open(
-                # Reading our .gitignore template.
                 os.path.join(os.path.dirname(__file__), "resources", "gitignore"),
                 encoding="utf8",
             ) as patch:
@@ -203,7 +202,7 @@ class Repository:
     def config_path(self) -> str:
         """
         Returns:
-            dict: The content of `.gitalong.json` as a dictionary.
+            str: The path to the configuration file.
         """
         return os.path.join(self.working_dir, self._config_basename)
 
@@ -341,16 +340,13 @@ class Repository:
         commit.update_with_sha(start.hexsha)
         commit.update_context()
 
-        # TODO: We should find a way to batch these calls as they are expensive.
         changes = asyncio.run(self.batch.get_commits_changes([commit]))
         commit["changes"] = changes[0]
 
-        # commits = asyncio.run(self.batch.get_commits_dicts([start]))
         branches_list = asyncio.run(self.batch.get_commits_branches([commit]))
         branches = branches_list[0] if branches_list else []
         commit["branches"] = {"local": branches}
 
-        # Maybe we should compare the SHA here.
         if commit not in local_commits:
             local_commits.append(commit)
         for parent in start.parents:
@@ -376,7 +372,6 @@ class Repository:
                 represents uncommitted changes.
         """
         local_commits = []
-        # We are collecting local commit for all local branches.
         for branch in self._managed_repository.branches:
             self._accumulate_local_only_commits(branch.commit, local_commits)
         if self.config.get("track_uncommitted"):
@@ -399,7 +394,7 @@ class Repository:
         changes = output.split("\n") if output else []
         output = git_cmd.diff("--staged", "--name-only")
         staged_changes = output.split("\n") if output else []
-        # A file can be in both in untracked and staged changes. The set fixes that.
+        # A file can be in both in untracked and staged changes.
         return list(set(untracked_changes + changes + staged_changes))
 
     def _is_ignored(self, filename: str) -> bool:
@@ -447,7 +442,7 @@ class Repository:
         return list(local_changes)
 
     def update_file_permissions(
-        self, filename: str, locally_changed_files: Optional[list] = None
+        self, filename: str, locally_changed_files: Optional[List[str]] = None
     ) -> tuple:
         """Updates the permissions of a file based on them being locally changed.
 
@@ -484,7 +479,7 @@ class Repository:
         tracked_extensions = self.config.get("tracked_extensions", [])
         if os.path.splitext(filename)[-1] in tracked_extensions:
             return True
-        # The binary check is expensive, so we are doing it last.
+        # The binary check is expensive, so doing it last.
         return self.config.get("track_binaries", False) and is_binary_file(
             self.get_absolute_path(filename)
         )
@@ -508,22 +503,18 @@ class Repository:
                 Local commits for all clones with local commits and uncommitted changes
                 from this clone.
         """
-        # Removing any matching contextual commits from tracked commits.
-        # We are re-evaluating those.
         tracked_commits = []
         for commit in self._store.commits:
             remote = self._remote.url
             is_other_remote = commit.get("remote") != remote
             if (
-                "claims" in commit.keys()  # Keeping claims intact.
-                or is_other_remote  # Keeping other remote commits.
-                or not commit.is_issued_commit()  # Keepin non-issued commits.
+                "claims" in commit.keys()
+                or is_other_remote
+                or not commit.is_issued_commit()
             ):
                 tracked_commits.append(commit)
                 continue
 
-        # Adding all local commit to the list of tracked commits.
-        # Will include uncommitted changes as a "fake" commit.
         for commit in self.get_local_only_commits():
             tracked_commits.append(commit)
         return tracked_commits
@@ -534,7 +525,7 @@ class Repository:
             seconds (float): Time in seconds since last push.
 
         Returns:
-            TYPE: Whether the repository pulled within the time provided.
+            bool: Whether the repository pulled within the time provided.
         """
         return pulled_within(self._managed_repository, seconds)
 
