@@ -13,12 +13,13 @@ from .__info__ import __version__
 
 from .enums import CommitSpread
 from .repository import Repository
-from .batch import get_files_last_commits, claim_files
+from .batch import get_files_last_commits, claim_files, release_files
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
     """TODO: Add proper offline support."""
-    prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
+    prop = "+" if spread & CommitSpread.MINE_CLAIMED else "-"
+    prop += "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_MATCHING_BRANCH else "-"
@@ -26,6 +27,7 @@ def get_status_string(filename: str, commit: dict, spread: int) -> str:
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
+    prop += "+" if spread & CommitSpread.THEIR_CLAIMED else "-"
     splits = [
         prop,
         filename,
@@ -149,8 +151,34 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
 
 @click.command(
     help=(
-        "Make provided files writeable if possible. Return error code 1 if one or more "
-        "files cannot be made writeable."
+        "Reserve files preventing other to edit it. "
+        "Make provided files writeable if possible."
+    )
+)
+@click.argument(
+    "filename",
+    nargs=-1,
+    # help="The paths to the files that should be claimed."
+)
+@pass_context
+def claim(ctx, filename):  # pylint: disable=missing-function-docstring
+    statuses = []
+    blocking_commits = asyncio.run(claim_files(filename))
+    for _filename, commit in zip(filename, blocking_commits):
+        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
+        absolute_filename = (
+            repository.get_absolute_path(_filename) if repository else _filename
+        )
+        spread = commit.commit_spread if repository else 0
+        statuses.append(get_status_string(absolute_filename, commit, spread))
+    if statuses:
+        click.echo("\n".join(statuses))
+
+
+@click.command(
+    help=(
+        "Release claimed files allowing other to edit them. "
+        "Make provided files read-only."
     )
 )
 @click.argument(
@@ -159,9 +187,9 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     # help="The paths to the files that should be made writable."
 )
 @pass_context
-def claim(ctx, filename):  # pylint: disable=missing-function-docstring
+def release(ctx, filename):  # pylint: disable=missing-function-docstring
     statuses = []
-    blocking_commits = asyncio.run(claim_files(filename))
+    blocking_commits = asyncio.run(release_files(filename))
     for _filename, commit in zip(filename, blocking_commits):
         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
         absolute_filename = (

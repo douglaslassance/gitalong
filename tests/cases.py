@@ -92,22 +92,17 @@ class GitalongCase(unittest.TestCase):
         save_image(staged_image_02_path)
         # Simulating the application syncing when saving the file.
         self.repository.update_tracked_commits()
-        # print("POST-SAVE TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
         self._managed_clone.index.add(staged_image_02_path)
         self._managed_clone.index.commit(message="Add staged_image_02.jpg")
+
         # Simulating the post-commit hook.
         self.repository.update_tracked_commits()
-        # print("POST-COMMIT TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
-
         self._managed_clone.remote().push()
+
         # Simulating a post-push hook.
         # It could only be implemented server-side as it's not an actual Git hook.
         self.repository.update_tracked_commits()
-        # print("POST-PUSH TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
         # We just pushed the changes therefore there should be no missing commit.
         last_commits = asyncio.run(batch.get_files_last_commits([staged_image_02_path]))
