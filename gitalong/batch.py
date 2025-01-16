@@ -1,13 +1,10 @@
-from calendar import c
 import os
 import asyncio
 
-from typing import List, Coroutine
+from typing import List
 
 import git
 import git.exc
-
-from gitalong.cli import claim
 
 from .enums import CommitSpread
 from .repository import Repository
@@ -19,9 +16,10 @@ async def run_command(args: List[str], safe: bool = False) -> str:
     """
     Args:
         args (List[str]): The command to run.
+        safe (bool): If True, suppress exceptions and return an empty string on failure.
 
     Raises:
-        Exception: When the command fails.
+        Exception: When the command fails and safe is False.
 
     Returns:
         str: The stdout of the command.
@@ -37,7 +35,7 @@ async def run_command(args: List[str], safe: bool = False) -> str:
         if safe:
             return ""
         error = stderr.decode().strip()
-        raise Exception(error)  # pylint: disable=broad-exception-raised
+        raise Exception(f"Command {' '.join(args)} failed with error: {error}")
     return stdout.decode().strip()
 
 
@@ -48,6 +46,7 @@ async def get_files_last_commits(
 
     Args:
         filenames (List[str]): A list of absolute filenames to get the last commit for.
+        prune (bool): Prune branches if a fetch is necessary.
 
     Returns:
         List[Commit]: A list of last commits for the files.
@@ -148,11 +147,11 @@ async def get_commits_branches(
 ) -> List[str]:
     """
     Args:
-        sha (str): The sha of the commit to check for.
+        commits (List[Commit]): The commits to check for branches.
         remote (bool, optional): Whether we should return local or remote branches.
 
     Returns:
-        list: A list of branch names that this commit is living on.
+        List[str]: A list of branch names that this commit is living on.
     """
     branches_list = []
     tasks = []
@@ -180,7 +179,7 @@ async def get_commits_branches(
 async def get_commits_changes(commits: List[Commit]) -> List[str]:
     """
     Args:
-        commits (git.objects.Commit | dict): The commit to get the changes from.
+        commits (List[Commit]): The commits to get the changes from.
 
     Returns:
         List[str]: A list of filenames that have changed in the commit.
@@ -238,23 +237,22 @@ async def get_commits_changes(commits: List[Commit]) -> List[str]:
     return changes_list
 
 
-async def claim_files(
-    filenames: List[str],
-    prune: bool = True,
+async def update_claims(
+    filenames: List[str], prune: bool = True, release: bool = False
 ) -> List[Commit]:
     """
     Args:
-        filename (str): The absolute filename to the file to claim.
+        filenames (List[str]): The absolute filenames to the files to update.
         prune (bool, optional): Prune branches if a fetch is necessary.
+        release (bool, optional): Whether to release the claims instead of claiming.
 
     Returns:
         List[Commit]: The commits that we are missing.
     """
     missing_commits = []
     last_commits = await get_files_last_commits(filenames, prune=prune)
-    claims_by_respository = {}
+    updates_by_repository = {}
     for filename, last_commit in zip(filenames, last_commits):
-        # Not sure if we should let it raise here, but not sure given the batch context.
         repository = Repository.from_filename(os.path.dirname(filename))
         config = repository.config if repository else {}
         modify_permissions = config.get("modify_permissions")
@@ -266,72 +264,46 @@ async def claim_files(
             spread & CommitSpread.MINE_UNCOMMITTED == CommitSpread.MINE_UNCOMMITTED
         )
         is_claimed = spread & CommitSpread.MINE_CLAIMED == CommitSpread.MINE_CLAIMED
-        can_claim = is_local_commit or is_uncommitted or is_claimed
-        missing_commit = Commit(repository) if can_claim else last_commit
+        can_update = (
+            is_claimed if release else is_local_commit or is_uncommitted or is_claimed
+        )
+        missing_commit = Commit(repository) if can_update else last_commit
         if repository:
-            claims_by_respository.setdefault(repository, []).append(
+            updates_by_repository.setdefault(repository, []).append(
                 repository.get_relative_path(filename)
             )
         if not missing_commit and modify_permissions:
             set_read_only(filename, bool(missing_commit), check_exists=True)
         missing_commits.append(missing_commit)
-    for repository, filenames in claims_by_respository.items():
-        claims_commit = repository.get_context_commit()
+    for repository, filenames in updates_by_repository.items():
+        update_commit = repository.get_context_commit()
         commits_to_store = []
         for commit in repository.store.commits:
             if "claims" in commit and commit.is_issued_commit(commit):
-                claims_commit = commit
+                update_commit = commit
             else:
                 commits_to_store.append(commit)
         for filename in filenames:
-            if filename not in claims_commit.get("claims", []):
-                claims_commit.setdefault("claims", []).append(filename)
-        commits_to_store.append(claims_commit)
+            if release:
+                if filename in update_commit.get("claims", []):
+                    update_commit["claims"].remove(filename)
+            else:
+                if filename not in update_commit.get("claims", []):
+                    update_commit.setdefault("claims", []).append(filename)
+        commits_to_store.append(update_commit)
         repository.store.commits = commits_to_store
     return missing_commits
+
+
+async def claim_files(
+    filenames: List[str],
+    prune: bool = True,
+) -> List[Commit]:
+    return await update_claims(filenames, prune=prune)
 
 
 async def release_files(
     filenames: List[str],
     prune: bool = True,
 ) -> List[Commit]:
-    """
-    Args:
-        filename (str): The absolute filename to the file to release.
-        prune (bool, optional): Prune branches if a fetch is necessary.
-
-    Returns:
-        List[Commit]: The commits that we are missing.
-    """
-    missing_commits = []
-    last_commits = await get_files_last_commits(filenames, prune=prune)
-    claims_by_respository = {}
-    for filename, last_commit in zip(filenames, last_commits):
-        # Not sure if we should let it raise here, but not sure given the batch context.
-        repository = Repository.from_filename(os.path.dirname(filename))
-        config = repository.config if repository else {}
-        modify_permissions = config.get("modify_permissions")
-        spread = last_commit.commit_spread if repository else 0
-        is_claimed = spread & CommitSpread.MINE_CLAIMED == CommitSpread.MINE_CLAIMED
-        missing_commit = Commit(repository) if is_claimed else last_commit
-        if repository:
-            claims_by_respository.setdefault(repository, []).append(
-                repository.get_relative_path(filename)
-            )
-        if not missing_commit and modify_permissions:
-            set_read_only(filename, bool(missing_commit), check_exists=True)
-        missing_commits.append(missing_commit)
-    for repository, filenames in claims_by_respository.items():
-        claims_commit = repository.get_context_commit()
-        commits_to_store = []
-        for commit in repository.store.commits:
-            if "claims" in commit and commit.is_issued_commit(commit):
-                claims_commit = commit
-            else:
-                commits_to_store.append(commit)
-        for filename in filenames:
-            if filename in claims_commit.get("claims", []):
-                claims_commit["claims"].remove(filename)
-        commits_to_store.append(claims_commit)
-        repository.store.commits = commits_to_store
-    return missing_commits
+    return await update_claims(filenames, prune=prune, release=True)
