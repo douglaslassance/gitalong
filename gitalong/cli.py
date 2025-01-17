@@ -13,16 +13,16 @@ from .batch import get_files_last_commits, claim_files, release_files
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
     """Generate a status string for a file and its commit."""
-    prop = "+" if spread & CommitSpread.MINE_CLAIMED else "-"
-    prop += "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
+    prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
+    prop += "+" if spread & CommitSpread.MINE_CLAIMED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.THEIR_CLAIMED else "-"
+    prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
     splits = [
         prop,
         filename,

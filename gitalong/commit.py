@@ -8,7 +8,6 @@ import git
 
 from git import Repo
 
-
 from .functions import get_real_path
 from .enums import CommitSpread
 
@@ -137,9 +136,10 @@ class Commit(dict):
     def commit_spread(self) -> int:
         """
         Returns:
-            dict:
-                A dictionary of commit spread information containing all
-                information about where this commit lives across branches and clones.
+            int:
+                A bit flag representing where the commit is spread.
+                The commit spread allows to determine where this commit lives across
+                branches and clones.
         """
         commit_spread = 0
         active_branch = self._repository.active_branch_name
