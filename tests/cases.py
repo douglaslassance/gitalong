@@ -69,15 +69,16 @@ class GitalongCase(unittest.TestCase):
         self.assertEqual(2, len(local_only_commits[0]["changes"]))
 
         # Testing detecting un-tracked files.
-        save_image(os.path.join(working_dir, "untracked_image_01.jpg"))
+        uncommitted_path = os.path.join(working_dir, "uncommitted.jpg")
+        save_image(uncommitted_path)
 
         # Testing detecting staged files.
-        staged_image_01_path = os.path.join(working_dir, "staged_image_01.jpg")
-        save_image(staged_image_01_path)
-        self._managed_clone.index.add(staged_image_01_path)
+        local_and_remote_path = os.path.join(working_dir, "local_and_remote.jpg")
+        save_image(local_and_remote_path)
+        self._managed_clone.index.add(local_and_remote_path)
         self.assertEqual(4, len(self.repository.get_local_only_commits()[0]["changes"]))
 
-        commit = self._managed_clone.index.commit(message="Add staged_image.jpg")
+        commit = self._managed_clone.index.commit(message="Add local_and_remote.jpg")
         local_only_commits = self.repository.get_local_only_commits()
         self.assertEqual(2, len(local_only_commits))
         self.assertEqual(3, len(local_only_commits[0]["changes"]))
@@ -88,13 +89,14 @@ class GitalongCase(unittest.TestCase):
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(3, len(local_only_commits[0]["changes"]))
 
-        staged_image_02_path = os.path.join(working_dir, "staged_image_02.jpg")
-        save_image(staged_image_02_path)
+        remote_path = os.path.join(working_dir, "remote.jpg")
+        save_image(remote_path)
+
         # Simulating the application syncing when saving the file.
         self.repository.update_tracked_commits()
 
-        self._managed_clone.index.add(staged_image_02_path)
-        self._managed_clone.index.commit(message="Add staged_image_02.jpg")
+        self._managed_clone.index.add(remote_path)
+        self._managed_clone.index.commit(message="Add remote.jpg")
 
         # Simulating the post-commit hook.
         self.repository.update_tracked_commits()
@@ -105,7 +107,7 @@ class GitalongCase(unittest.TestCase):
         self.repository.update_tracked_commits()
 
         # We just pushed the changes therefore there should be no missing commit.
-        last_commits = asyncio.run(batch.get_files_last_commits([staged_image_02_path]))
+        last_commits = asyncio.run(batch.get_files_last_commits([remote_path]))
         last_commit = last_commits[0] if last_commits else Commit(None)
         spread = last_commit.commit_spread
         self.assertEqual(
@@ -120,38 +122,43 @@ class GitalongCase(unittest.TestCase):
         self.repository.update_tracked_commits()
 
         # As a result it should be a commit we do no have locally.
-        last_commits = asyncio.run(batch.get_files_last_commits([staged_image_02_path]))
+        last_commits = asyncio.run(batch.get_files_last_commits([remote_path]))
         last_commit = last_commits[0] if last_commits else Commit(None)
         spread = last_commit.commit_spread
         self.assertEqual(CommitSpread.REMOTE_MATCHING_BRANCH, spread)
 
-        self.assertEqual(False, is_read_only(staged_image_01_path))
+        self.assertEqual(False, is_read_only(local_and_remote_path))
         self.assertEqual(False, is_read_only(self.repository.config_path))
 
-        self.repository.update_file_permissions(staged_image_01_path)
-        self.assertEqual(True, is_read_only(staged_image_01_path))
+        self.repository.update_file_permissions(local_and_remote_path)
+        self.assertEqual(True, is_read_only(local_and_remote_path))
 
         self.repository.update_file_permissions(self.repository.config_path)
         self.assertEqual(False, is_read_only(self.repository.config_path))
 
         self.repository.update_tracked_commits()
 
+        # Testing claiming files.
         claims = asyncio.run(
-            batch.claim_files([staged_image_01_path, staged_image_02_path])
+            batch.claim_files([uncommitted_path, local_and_remote_path, remote_path])
         )
-        missing_commit = claims[0]
-        self.assertEqual(False, bool(missing_commit))
-        missing_commit = claims[1]
-        self.assertEqual(True, bool(missing_commit))
+        blocking_commit = claims[0]
+        self.assertEqual(True, bool(blocking_commit))
+        blocking_commit = claims[1]
+        self.assertEqual(False, bool(blocking_commit))
+        blocking_commit = claims[2]
+        self.assertEqual(True, bool(blocking_commit))
 
-        # Testing the release mechanism
+        # Testing the release mechanism.
         releases = asyncio.run(
-            batch.release_files([staged_image_01_path, staged_image_02_path])
+            batch.release_files([uncommitted_path, local_and_remote_path, remote_path])
         )
-        missing_commit = releases[0]
-        self.assertEqual(False, bool(missing_commit))
-        missing_commit = releases[1]
-        self.assertEqual(True, bool(missing_commit))
+        blocking_commit = releases[0]
+        self.assertEqual(True, bool(blocking_commit))
+        blocking_commit = claims[1]
+        self.assertEqual(False, bool(blocking_commit))
+        blocking_commit = releases[2]
+        self.assertEqual(True, bool(blocking_commit))
 
     def test_cli(self):
         working_dir = self._managed_clone.working_dir
@@ -180,30 +187,32 @@ class GitalongCase(unittest.TestCase):
         self.assertEqual(True, os.path.exists(config_path))
 
         # Testing detecting un-tracked files.
-        untracked_image_01 = os.path.join(working_dir, "untracked_image_01.jpg")
-        save_image(untracked_image_01)
+        uncommitted_path = os.path.join(working_dir, "uncommitted.jpg")
+        save_image(uncommitted_path)
 
         result = runner.invoke(cli.update, obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
 
-        result = runner.invoke(cli.status, [untracked_image_01], obj=obj)
+        # Testing status.
+        result = runner.invoke(cli.status, [uncommitted_path], obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
         host = socket.gethostname()
         user = getpass.getuser()
-        output = f"+------- {untracked_image_01} - - - {host} {user}\n"
+        output = f"+--------- {uncommitted_path} - - - {host} {user}\n"
         self.assertEqual(output, result.output)
 
-        result = runner.invoke(cli.claim, [untracked_image_01], obj=obj)
+        # Testing claiming.
+        result = runner.invoke(cli.claim, [uncommitted_path], obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
         host = socket.gethostname()
         user = getpass.getuser()
-        output = f"-------- {untracked_image_01} - - - - -\n"
+        output = f"+--------- {uncommitted_path} - - - {host} {user}\n"
         self.assertEqual(output, result.output)
 
         # Testing the release mechanism via CLI
-        result = runner.invoke(cli.release, [untracked_image_01], obj=obj)
+        result = runner.invoke(cli.release, [uncommitted_path], obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
-        output = f"-------- {untracked_image_01} - - - - -\n"
+        output = f"+--------- {uncommitted_path} - - - {host} {user}\n"
         self.assertEqual(output, result.output)
 
     def tearDown(self):

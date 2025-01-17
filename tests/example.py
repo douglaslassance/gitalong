@@ -106,10 +106,10 @@ def example():
         repository.batch.claim_files([uncommitted, local, remote, untracked])
     )
 
-    # Failed claims will return the commit that prevented the claim.
-    # In other words a successful claim will evaluate to False.
-    assert bool(claims[0]) is False
-    assert bool(claims[1]) is False
+    # Failed claims will return a valid commit that prevented the claim.
+    # In other words a successful claim will return an invalid commit.
+    assert bool(claims[0]) is True
+    assert bool(claims[1]) is True
     assert bool(claims[2]) is True
     assert bool(claims[3]) is False
 
@@ -119,10 +119,10 @@ def example():
         repository.batch.release_files([uncommitted, local, remote, untracked])
     )
 
-    # Failed release will return the commit that prevented the release.
-    # In other words a successful release will evaluate to False.
-    assert bool(releases[0]) is False
-    assert bool(releases[1]) is False
+    # Failed releases will return a valid commit that prevented the release.
+    # In other words a successful release will return an invalid commit.
+    assert bool(releases[0]) is True
+    assert bool(releases[1]) is True
     assert bool(releases[2]) is True
     assert bool(releases[3]) is False
 

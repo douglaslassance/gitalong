@@ -68,7 +68,7 @@ gitalong -C project update
 # Each status will show <spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>.
 # Spread flags represent where the commit live.
 # It will be displayed in the following order:
-# <local-uncommitted><local-active-branch><local-other-branch><remote-matching-branch><remote-other-branch><clone-other-branch><clone-matching-branch><clone-uncomitted>
+# <mine-uncommitted><mine-claimed><mine-active-branch><mine-other-branch><remote-matching-branch><remote-other-branch><other-other-branch><other-matching-branch><other-claimed><other-uncomitted>
 # A `+` sign means is true, while a `-` sign means false or unknown.
 gitalong -C project status uncommited.jpg local.gif remote.jpg untracked.txt
 
