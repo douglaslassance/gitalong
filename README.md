@@ -132,7 +132,8 @@ Setup a Python virtual environment and run the following command.
 ```shell
 python -m venv .venv
 source .venv/bin/activate
-pip install --editable .[ci]
+pip install --editable .
+pip install -r requirements-ci.txt
 ```
 
 ### Testing
