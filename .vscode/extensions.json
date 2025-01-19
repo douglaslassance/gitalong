@@ -6,7 +6,6 @@
         "ms-python.black-formatter",
         "yardensachs.copy-python-path",
         "benspaulding.python-manifest-template",
-        "ms-python.flake8",
         "njpwerner.autodocstring",
         "stkb.rewrap",
         "ms-python.pylint",
