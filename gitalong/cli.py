@@ -9,20 +9,16 @@ from .enums import CommitSpread
 from .repository import Repository
 from .batch import get_files_last_commits
 
-# from .batch import claim_files, release_files
-
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
     """Generate a status string for a file and its commit."""
     prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
-    # prop += "+" if spread & CommitSpread.MINE_CLAIMED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
-    # prop += "+" if spread & CommitSpread.THEIR_CLAIMED else "-"
     prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
     splits = [
         prop,
@@ -121,50 +117,6 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
         spread = commit.commit_spread if repository else 0
         file_status.append(get_status_string(absolute_filename, commit, spread))
     click.echo("\n".join(file_status), err=False)
-
-
-# @click.command(
-#     help=(
-#         "Reserve files preventing others from editing them. "
-#         "Make provided files writable if possible."
-#     )
-# )
-# @click.argument("filename", nargs=-1)
-# @click.pass_context
-# def claim(ctx, filename):  # pylint: disable=missing-function-docstring
-#     statuses = []
-#     blocking_commits = asyncio.run(claim_files(filename))
-#     for _filename, commit in zip(filename, blocking_commits):
-#         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
-#         absolute_filename = (
-#             repository.get_absolute_path(_filename) if repository else _filename
-#         )
-#         spread = commit.commit_spread if repository else 0
-#         statuses.append(get_status_string(absolute_filename, commit, spread))
-#     if statuses:
-#         click.echo("\n".join(statuses))
-
-
-# @click.command(
-#     help=(
-#         "Release claimed files allowing others to edit them. "
-#         "Make provided files read-only."
-#     )
-# )
-# @click.argument("filename", nargs=-1)
-# @click.pass_context
-# def release(ctx, filename):  # pylint: disable=missing-function-docstring
-#     statuses = []
-#     blocking_commits = asyncio.run(release_files(filename))
-#     for _filename, commit in zip(filename, blocking_commits):
-#         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
-#         absolute_filename = (
-#             repository.get_absolute_path(_filename) if repository else _filename
-#         )
-#         spread = commit.commit_spread if repository else 0
-#         statuses.append(get_status_string(absolute_filename, commit, spread))
-#     if statuses:
-#         click.echo("\n".join(statuses))
 
 
 @click.command(help="Setup Gitalong in a repository.")
@@ -305,8 +257,6 @@ def cli(ctx, repository, git_binary):  # pylint: disable=missing-function-docstr
 
 cli.add_command(config)
 cli.add_command(update)
-# cli.add_command(claim)
-# cli.add_command(release)
 cli.add_command(setup)
 cli.add_command(status)
 cli.add_command(version)
