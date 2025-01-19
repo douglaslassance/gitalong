@@ -1,0 +1,64 @@
+[project]
+name = "gitalong"
+version = "0.0.0"
+description = """
+Gitalong is a tool for Git repositories that prevents conflicts between files
+when working with a team.
+"""
+authors = [
+    {name = "Douglas Lassance", email = "douglassance@gmail.com"}
+]
+dependencies = [
+    "click~=8.1",
+    "dictdiffer~=0.9",
+    "gitdb~=4.0",
+    "GitPython~=3.1",
+    "requests~=2.31",
+]
+requires-python = ">=3.7"
+license = {text = "MIT"}
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "black~=24.0",
+    "python-semantic-release~=9.0",
+]
+ci = [
+    "black~=24.0",
+    "flake8~=7.0",
+    "pep8-naming~=0.13",
+    "Pillow~=10.4",
+    "pylint~=3.0",
+    "pytest-cov~=4.1",
+    "pytest-html~=4.1",
+    "pytest-profiling~=1.7",
+    "responses~=0.24",
+    "setuptools~=69.0",
+    "sphinx-markdown-tables~=0.0",
+    "sphinx-rtd-theme~=2.0",
+    "sphinxcontrib-apidoc~=0.5",
+    "Sphinx~=7.2",
+    "twine~=4.0",
+    "wheel~=0.42",
+]
+
+[project.scripts]
+gitalong = "gitalong.cli:main"
+
+[project.gui-scripts]
+gitalong-gui = "gitalong.cli:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["gitalong"]
+
+[tool.semantic_release]
+version_variable = "gitalong/__info__.py:__version__"
+version_toml  = ["pyproject.toml:project.version"]
+
+[tool.semantic_release.remote]
+ignore_token_for_push = true
