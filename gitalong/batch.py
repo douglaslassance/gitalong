@@ -1,20 +1,28 @@
 import os
+import stat
 import asyncio
-import datetime
 
+# import datetime
+
+# from turtle import write
 from typing import List, Coroutine
+
+# from unittest import result
 
 import git
 import git.exc
 
+# from more_itertools import last
+
 from .enums import CommitSpread
 from .repository import Repository
 from .commit import Commit
-from .functions import set_read_only
+
+# from .functions import is_binary_file
 from .exceptions import CommandError
 
 
-async def run_command(args: List[str], safe: bool = False) -> str:
+async def _run_command(args: List[str], safe: bool = False) -> str:
     """
     Args:
         args (List[str]): The command to run.
@@ -58,7 +66,12 @@ async def get_files_last_commits(
     for filename in filenames:
         repository = Repository.from_filename(os.path.dirname(filename))
         last_commit = Commit(repository)
+
         if not repository:
+            last_commits.append(last_commit)
+            continue
+
+        if not repository.is_file_tracked(filename):
             last_commits.append(last_commit)
             continue
 
@@ -98,8 +111,6 @@ async def get_files_last_commits(
             # have never been removed from our tracked commits. To cover for this case
             # we are checking if this commit is on remote and modify it, so it's
             # conform to a remote commit.
-
-            # TODO: We likely want to batch this part.
             branches_list = await get_commits_branches([last_commit], remote=True)
             if "sha" in last_commit and branches_list[0]:
                 tracked_commits.remove(last_commit)
@@ -163,22 +174,27 @@ async def get_commits_branches(
     tasks = []
     for commit in commits:
         if "sha" not in commit:
-            branches_list.append([])
-            continue
-        args = ["git", "-C", commit.repository.working_dir, "branch"]
-        if remote:
-            args += ["--remote"]
-        args += ["--contains", commit.get("sha", "")]
-        tasks.append(run_command(args, safe=True))
+            # We are going to run a fake task to keep the order of the results.
+            task = asyncio.sleep(0)
+        else:
+            args = ["git", "-C", commit.repository.working_dir, "branch"]
+            if remote:
+                args += ["--remote"]
+            args += ["--contains", commit.get("sha", "")]
+            task = _run_command(args, safe=True)
+        tasks.append(task)
     results = await asyncio.gather(*tasks)
-    for result in results:
-        branches = result.replace("*", "")
-        branches = branches.replace(" ", "")
-        branches = branches.split("\n") if branches else []
-        branch_names = set()
-        for branch in branches:
-            branch_names.add(branch.split("/")[-1])
-        branches_list.append(list(branch_names))
+    for commit, result in zip(commits, results):
+        if "sha" not in commit:
+            branches_list.append([])
+        else:
+            branches = result.replace("*", "")
+            branches = branches.replace(" ", "")
+            branches = branches.split("\n") if branches else []
+            branch_names = set()
+            for branch in branches:
+                branch_names.add(branch.split("/")[-1])
+            branches_list.append(list(branch_names))
     return branches_list
 
 
@@ -231,7 +247,7 @@ async def get_commits_changes(commits: List[Commit]) -> List[str]:
                 "-r",
                 sha,
             ]
-        tasks.append(run_command(args))
+        tasks.append(_run_command(args))
         changes_list.append((None))
 
     results = await asyncio.gather(*tasks)
@@ -243,88 +259,153 @@ async def get_commits_changes(commits: List[Commit]) -> List[str]:
     return changes_list
 
 
-async def update_claims(
-    filenames: List[str], prune: bool = True, release: bool = False
-) -> List[Commit]:
-    """
-    Args:
-        filenames (List[str]): The absolute filenames to the files to update.
-        prune (bool, optional): Prune branches if a fetch is necessary.
-        release (bool, optional): Whether to release the claims instead of claiming.
+async def update_files_permissions(filenames: List[str]):
+    """Updates the permissions of a file weather or not they can be changed.
 
-    Returns:
-        List[Commit]: The commits that we are missing.
+    Args:
+        filename (str): The relative or absolute filename to update permissions for.
     """
-    blocking_commits = []
-    last_commits = await get_files_last_commits(filenames, prune=prune)
-    updates_by_repository = {}
+    tasks = []
+    last_commits = await get_files_last_commits(filenames)
+    write_permissions = []
     for filename, last_commit in zip(filenames, last_commits):
         repository = Repository.from_filename(os.path.dirname(filename))
-        config = repository.config if repository else {}
-        modify_permissions = config.get("modify_permissions")
         spread = last_commit.commit_spread if repository else 0
-        is_claimed = spread & CommitSpread.MINE_CLAIMED == CommitSpread.MINE_CLAIMED
-        if release:
-            can_update = is_claimed
-        else:
-            is_mine_active_branch = (
-                spread & CommitSpread.MINE_ACTIVE_BRANCH
-                == CommitSpread.MINE_ACTIVE_BRANCH
-            )
-            is_remote_active_branch = (
-                spread & CommitSpread.REMOTE_MATCHING_BRANCH
-                == CommitSpread.REMOTE_MATCHING_BRANCH
-            )
-            can_update = (
-                is_mine_active_branch and is_remote_active_branch
-            ) or is_claimed
-        blocking_commit = None if can_update else last_commit
-        if repository and can_update:
-            updates_by_repository.setdefault(repository, []).append(
-                repository.get_relative_path(filename)
-            )
-        if not blocking_commit and modify_permissions:
-            set_read_only(filename, bool(blocking_commit), check_exists=True)
-        blocking_commits.append(blocking_commit)
-    for repository, updated_filenames in updates_by_repository.items():
-        update_commit = Commit(repository)
-        update_commit.update(
-            {
-                "remote": repository.remote.url,
-                "date": str(datetime.datetime.now()),
-            }
+        if not spread:
+            continue
+        is_uncommitted = (
+            spread & CommitSpread.MINE_UNCOMMITTED == CommitSpread.MINE_UNCOMMITTED
         )
-        update_commit.update_context()
-        commits_to_store = []
-        for commit in repository.store.commits:
-            if "claims" in commit and commit.is_issued_commit():
-                update_commit = commit
-            else:
-                commits_to_store.append(commit)
-        for filename in updated_filenames:
-            if release:
-                if filename in update_commit.setdefault("claims", []):
-                    update_commit["claims"].remove(filename)
-            elif filename not in update_commit.get("claims", []):
-                update_commit.setdefault("claims", []).append(filename)
-            # We only store this commit if it has claims.
-            if update_commit.setdefault("claims", []):
-                commits_to_store.append(update_commit)
-        repository.store.commits = commits_to_store
-    return blocking_commits
+        is_local = (
+            spread & CommitSpread.MINE_ACTIVE_BRANCH == CommitSpread.MINE_ACTIVE_BRANCH
+        )
+        is_current = (
+            spread
+            & (CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH)
+            == CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH
+        )
+        write_permission = is_uncommitted or is_local or is_current
+        write_permissions.append(write_permission)
+        tasks.append(_set_write_permission(filename, write_permission))
+    await asyncio.gather(*tasks)
 
 
-async def claim_files(
-    filenames: List[str],
-    prune: bool = True,
-) -> List[Commit]:
-    """Claim files for the current context."""
-    return await update_claims(filenames, prune=prune)
+async def _set_write_permission(
+    filename: str, write_permission: bool, safe: bool = False
+) -> bool:
+    """
+    Set the write permission of a file asynchronously.
+
+    Args:
+        filename (str): The path to the file.
+        write_permission (bool): Whether to make the file writable.
+        safe (bool): Won't raise an exceptions if the file doesn't exist or is
+        not accessible.
+
+    Returns:
+        bool: Whether the file ends in the desired state.
+    """
+    try:
+        if write_permission:
+            os.chmod(filename, stat.S_IWRITE)
+        else:
+            os.chmod(filename, stat.S_IREAD)
+    except FileNotFoundError:
+        if safe:
+            # If the file doesn't exist we can't set it's permissions.
+            return False
+        raise
+    except PermissionError:
+        if safe:
+            if write_permission:
+                return False
+            return True
+        raise
+    return True
 
 
-async def release_files(
-    filenames: List[str],
-    prune: bool = True,
-) -> List[Commit]:
-    """Release files for the current context."""
-    return await update_claims(filenames, prune=prune, release=True)
+# async def update_claims(
+#     filenames: List[str], prune: bool = True, release: bool = False
+# ) -> List[Commit]:
+#     """
+#     Args:
+#         filenames (List[str]): The absolute filenames to the files to update.
+#         prune (bool, optional): Prune branches if a fetch is necessary.
+#         release (bool, optional): Whether to release the claims instead of claiming.
+
+#     Returns:
+#         List[Commit]: The commits that we are missing.
+#     """
+#     blocking_commits = []
+#     last_commits = await get_files_last_commits(filenames, prune=prune)
+#     updates_by_repository = {}
+#     for filename, last_commit in zip(filenames, last_commits):
+#         repository = Repository.from_filename(os.path.dirname(filename))
+#         config = repository.config if repository else {}
+#         modify_permissions = config.get("modify_permissions")
+#         spread = last_commit.commit_spread if repository else 0
+#         is_claimed = spread & CommitSpread.MINE_CLAIMED == CommitSpread.MINE_CLAIMED
+#         if release:
+#             can_update = is_claimed
+#         else:
+#             is_mine_active_branch = (
+#                 spread & CommitSpread.MINE_ACTIVE_BRANCH
+#                 == CommitSpread.MINE_ACTIVE_BRANCH
+#             )
+#             is_remote_active_branch = (
+#                 spread & CommitSpread.REMOTE_MATCHING_BRANCH
+#                 == CommitSpread.REMOTE_MATCHING_BRANCH
+#             )
+#             can_update = (
+#                 is_mine_active_branch and is_remote_active_branch
+#             ) or is_claimed
+#         blocking_commit = None if can_update else last_commit
+#         if repository and can_update:
+#             updates_by_repository.setdefault(repository, []).append(
+#                 repository.get_relative_path(filename)
+#             )
+#         if not blocking_commit and modify_permissions:
+#             set_read_only(filename, bool(blocking_commit), check_exists=True)
+#         blocking_commits.append(blocking_commit)
+#     for repository, updated_filenames in updates_by_repository.items():
+#         update_commit = Commit(repository)
+#         update_commit.update(
+#             {
+#                 "remote": repository.remote.url,
+#                 "date": str(datetime.datetime.now()),
+#             }
+#         )
+#         update_commit.update_context()
+#         commits_to_store = []
+#         for commit in repository.store.commits:
+#             if "claims" in commit and commit.is_issued_commit():
+#                 update_commit = commit
+#             else:
+#                 commits_to_store.append(commit)
+#         for filename in updated_filenames:
+#             if release:
+#                 if filename in update_commit.setdefault("claims", []):
+#                     update_commit["claims"].remove(filename)
+#             elif filename not in update_commit.get("claims", []):
+#                 update_commit.setdefault("claims", []).append(filename)
+#             # We only store this commit if it has claims.
+#             if update_commit.setdefault("claims", []):
+#                 commits_to_store.append(update_commit)
+#         repository.store.commits = commits_to_store
+#     return blocking_commits
+
+
+# async def claim_files(
+#     filenames: List[str],
+#     prune: bool = True,
+# ) -> List[Commit]:
+#     """Claim files for the current context."""
+#     return await update_claims(filenames, prune=prune)
+
+
+# async def release_files(
+#     filenames: List[str],
+#     prune: bool = True,
+# ) -> List[Commit]:
+#     """Release files for the current context."""
+#     return await update_claims(filenames, prune=prune, release=True)

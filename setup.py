@@ -7,7 +7,9 @@ from setuptools import setup
 
 dirname = os.path.dirname(__file__)
 info = {}
-with open(os.path.join(dirname, "gitalong", "__info__.py"), mode="r") as f:
+with open(
+    os.path.join(dirname, "gitalong", "__info__.py"), mode="r", encoding="utf-8"
+) as f:
     exec(f.read(), info)  # pylint: disable=W0122
 
 # Get the long description from the README file.

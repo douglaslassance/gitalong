@@ -22,7 +22,6 @@ from .exceptions import RepositoryNotSetup, RepositoryInvalidConfig
 from .functions import (
     get_real_path,
     is_binary_file,
-    set_read_only,
     pulled_within,
 )
 
@@ -313,6 +312,7 @@ class Repository:
         uncommitted_changes = self._uncommitted_changes
         if not uncommitted_changes:
             return {}
+
         commit = {
             "remote": self._remote.url,
             "changes": self._uncommitted_changes,
@@ -424,12 +424,14 @@ class Repository:
         try:
             # TODO: HEAD might not be safe. The user could checkout an earlier commit.
             filenames = git_cmd.ls_tree(full_tree=True, name_only=True, r="HEAD")
+            if not filenames:
+                return []
             return filenames.split("\n")
         except git.exc.GitCommandError:
             return []
 
     @property
-    def locally_changed_files(self) -> list:
+    def _locally_changed_files(self) -> list:
         """
         Returns:
             list:
@@ -441,32 +443,7 @@ class Repository:
             local_changes = local_changes.union(commit.get("changes", []))
         return list(local_changes)
 
-    def update_file_permissions(
-        self, filename: str, locally_changed_files: Optional[List[str]] = None
-    ) -> tuple:
-        """Updates the permissions of a file based on them being locally changed.
-
-        Args:
-            filename (str): The relative or absolute filename to update permissions for.
-            locally_changed_files (list, optional):
-                For optimization’s sake you can pass the locally changed files if you
-                already have them. Default will compute them.
-
-        Returns:
-            tuple: A tuple featuring the permission and the filename.
-        """
-        locally_changed_files = locally_changed_files or self.locally_changed_files
-        if self._is_file_tracked(filename):
-            read_only = self.get_relative_path(filename) not in locally_changed_files
-            if set_read_only(
-                self.get_absolute_path(filename),
-                read_only=read_only,
-                check_exists=False,
-            ):
-                return "R" if read_only else "W", filename
-        return ()
-
-    def _is_file_tracked(self, filename: str) -> bool:
+    def is_file_tracked(self, filename: str) -> bool:
         """
         Args:
             filename (str): The absolute or relative file or folder path to check for.
@@ -480,8 +457,10 @@ class Repository:
         if os.path.splitext(filename)[-1] in tracked_extensions:
             return True
         # The binary check is expensive, so doing it last.
+        # TODO: If we check for a file that does not exist locally if will return False.
+        # That file technically could be a tracked binary modifed somewhere else.
         return self.config.get("track_binaries", False) and is_binary_file(
-            self.get_absolute_path(filename)
+            self.get_absolute_path(filename), safe=True
         )
 
     @property
@@ -495,6 +474,11 @@ class Repository:
     def update_tracked_commits(self):
         """Pulls the tracked commits from the store and updates them."""
         self._store.commits = self._get_updated_tracked_commits()
+        if self.config.get("modify_permissions"):
+            absolute_filenames = []
+            for filename in self.files:
+                absolute_filenames.append(self.get_absolute_path(filename))
+            asyncio.run(self.batch.update_files_permissions(absolute_filenames))
 
     def _get_updated_tracked_commits(self) -> list:
         """

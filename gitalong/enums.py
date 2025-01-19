@@ -19,12 +19,12 @@ class CommitSpread(IntFlag):
     """
 
     MINE_UNCOMMITTED = auto()
-    MINE_CLAIMED = auto()
+    # MINE_CLAIMED = auto()
     MINE_ACTIVE_BRANCH = auto()
     MINE_OTHER_BRANCH = auto()
     REMOTE_MATCHING_BRANCH = auto()
     REMOTE_OTHER_BRANCH = auto()
     THEIR_OTHER_BRANCH = auto()
     THEIR_MATCHING_BRANCH = auto()
-    THEIR_CLAIMED = auto()
+    # THEIR_CLAIMED = auto()
     THEIR_UNCOMMITTED = auto()
