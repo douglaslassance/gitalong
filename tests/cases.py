@@ -174,28 +174,6 @@ class GitalongCase(unittest.TestCase):
         self.assertEqual(True, is_writeable(self.repository.config_path))
         self.assertEqual(False, is_writeable(image_path))
 
-        # # Testing claiming files.
-        # claims = asyncio.run(
-        #     batch.claim_files([uncommitted_path, local_and_remote_path, remote_path])
-        # )
-        # blocking_commit = claims[0]
-        # self.assertEqual(True, bool(blocking_commit))
-        # blocking_commit = claims[1]
-        # self.assertEqual(False, bool(blocking_commit))
-        # blocking_commit = claims[2]
-        # self.assertEqual(True, bool(blocking_commit))
-
-        # # Testing the release mechanism.
-        # releases = asyncio.run(
-        #     batch.release_files([uncommitted_path, local_and_remote_path, remote_path])
-        # )
-        # blocking_commit = releases[0]
-        # self.assertEqual(True, bool(blocking_commit))
-        # blocking_commit = claims[1]
-        # self.assertEqual(False, bool(blocking_commit))
-        # blocking_commit = releases[2]
-        # self.assertEqual(True, bool(blocking_commit))
-
     def test_cli(self):
         working_dir = self._managed_clone.working_dir
         obj = {"REPOSITORY": working_dir}
@@ -238,20 +216,6 @@ class GitalongCase(unittest.TestCase):
         user = getpass.getuser()
         output = f"+------- {image_path} - - - {host} {user}\n"
         self.assertEqual(output, result.output)
-
-        # # Testing claiming.
-        # result = runner.invoke(cli.claim, [image_path], obj=obj)
-        # self.assertEqual(0, result.exit_code, result.output)
-        # host = socket.gethostname()
-        # user = getpass.getuser()
-        # output = f"+--------- {image_path} - - - {host} {user}\n"
-        # self.assertEqual(output, result.output)
-
-        # # Testing the release mechanism via CLI
-        # result = runner.invoke(cli.release, [image_path], obj=obj)
-        # self.assertEqual(0, result.exit_code, result.output)
-        # output = f"+--------- {image_path} - - - {host} {user}\n"
-        # self.assertEqual(output, result.output)
 
     def tearDown(self):
         try:
