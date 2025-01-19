@@ -491,7 +491,11 @@ class Repository:
         for commit in self._store.commits:
             remote = self._remote.url
             is_other_remote = commit.get("remote") != remote
-            if is_other_remote or not commit.is_issued_commit():
+            if (
+                "claims" in commit.keys()
+                or is_other_remote
+                or not commit.is_issued_commit()
+            ):
                 tracked_commits.append(commit)
                 continue
 

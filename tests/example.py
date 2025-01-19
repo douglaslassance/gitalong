@@ -102,6 +102,34 @@ def example():
     assert remote_spread == CommitSpread.REMOTE_MATCHING_BRANCH
     assert untracked_spread == 0
 
+    # # We also provide a way to claim files so no one else can edit them.
+    # # If you installed with `--modify-permissions` it will make the files writable.
+    # claims = asyncio.run(
+    #     repository.batch.claim_files([untracked, uncommitted, local, current, remote])
+    # )
+
+    # # Failed claims will return a valid commit that prevented the claim.
+    # # In other words a successful claim will return an invalid commit.
+    # assert bool(claims[0]) is True
+    # assert bool(claims[1]) is True
+    # assert bool(claims[2]) is True
+    # assert bool(claims[3]) is False
+    # assert bool(claims[4]) is True
+
+    # # You can also release these claims.
+    # # If you installed with `--modify-permissions` it will make the files read-only.
+    # releases = asyncio.run(
+    #     repository.batch.release_files([untracked, uncommitted, local, current, remote])
+    # )
+
+    # # Failed releases will return a valid commit that prevented the release.
+    # # In other words a successful release will return an invalid commit.
+    # assert bool(releases[0]) is True
+    # assert bool(releases[1]) is True
+    # assert bool(releases[2]) is True
+    # assert bool(releases[3]) is False
+    # assert bool(releases[4]) is True
+
 
 if __name__ == "__main__":
     example()

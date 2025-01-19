@@ -69,9 +69,19 @@ gitalong -C project update
 # Each status will show <spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>.
 # Spread flags represent where the commit live.
 # It will be displayed in the following order:
-# <mine-uncommitted><mine-active-branch><mine-other-branch><remote-matching-branch><remote-other-branch><other-other-branch><other-matching-branch><other-uncomitted>
+# <mine-uncommitted><mine-claimed><mine-active-branch><mine-other-branch><remote-matching-branch><remote-other-branch><other-other-branch><other-matching-branch><other-claimed><other-uncomitted>
 # A `+` sign means is true, while a `-` sign means false or unknown.
 gitalong -C project untracked.txt status uncommited.png local.png current.jpg remote.jpg
+
+# We also provide a way to claim files so no one else can edit them.
+# If you installed with `--modify-permissions` it will make the files writable.
+# Each claim will show a non valid commit status if the claim was successful and a valid one if a commit prevented the claim.
+gitalong -C project claim untracked.txt uncommited.png local.png current.jpg remote.jpg
+
+# You can also release these claims.
+# If you installed with `--modify-permissions` it will make the files read-only.
+# Each release will show a non valid commit status if the release was successful and a valid one if a commit prevented the release.
+gitalong -C project release untracked.txt uncommited.png local.png current.jpg remote.jpg
 ```
 
 ### Python
