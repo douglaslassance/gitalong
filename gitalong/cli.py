@@ -191,7 +191,7 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     help="Hooks should be updated with Gitalong logic.",
 )
 @click.pass_context
-def setup(
+def setup(  # pylint: disable=too-many-positional-arguments
     ctx,
     store_url,
     store_header,

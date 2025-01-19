@@ -51,6 +51,6 @@ class JsonbinStoreTestCase(GitalongCase):
         return mock_response
 
     def tearDown(self):
-        super(JsonbinStoreTestCase, self).tearDown()
+        super().tearDown()
         self._get_patcher.stop()
         self._put_patcher.stop()

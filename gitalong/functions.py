@@ -64,7 +64,7 @@ def get_real_path(filename: str) -> str:
     # On Windows, this private function is available and will return the real path
     # for a subst location.
     if hasattr(os.path, "_getfinalpathname"):
-        filename = os.path._getfinalpathname(  # pylint: disable=protected-access,line-too-long # pyright: ignore[reportAttributeAccessIssue] # noqa: E501
+        filename = os.path._getfinalpathname(  # pylint: disable=protected-access,line-too-long # pyright: ignore[reportAttributeAccessIssue]
             filename
         )
         filename = str(pathlib.Path(filename).resolve())

@@ -71,12 +71,7 @@ class GitStore(Store):
         if os.path.exists(self._local_json_path):
             with open(self._local_json_path, "r", encoding="utf-8") as _file:
                 serializable_commits = json.loads(_file.read())
-        commits = []
-        for serializable_commit in serializable_commits:
-            commit = Commit(self._managed_repository)
-            commit.update(serializable_commit)
-            commits.append(commit)
-        return commits
+        return self._serializeables_to_commits(serializable_commits)
 
     @commits.setter
     def commits(self, commits: typing.List[Commit]):

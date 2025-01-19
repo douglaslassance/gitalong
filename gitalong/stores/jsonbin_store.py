@@ -40,12 +40,7 @@ class JsonbinStore(Store):
             raise StoreNotReachable(response.status_code, response.text)
         serializable_commits = response.json()["record"]
         self._write_local_json(serializable_commits)
-        commits = []
-        for serializable_commit in serializable_commits:
-            commit = Commit(self._managed_repository)
-            commit.update(serializable_commit)
-            commits.append(commit)
-        return commits
+        return self._serializeables_to_commits(serializable_commits)
 
     @commits.setter
     def commits(self, commits: typing.List[Commit]):

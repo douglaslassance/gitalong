@@ -26,7 +26,7 @@ from .functions import (
 )
 
 
-class Repository:
+class Repository:  # pylint: disable=too-many-public-methods
     """Aggregates all the Gitalong actions that can happen on a Git repository.
 
     Raises:
@@ -87,7 +87,7 @@ class Repository:
             config_writer.release()
 
     @classmethod
-    def setup(
+    def setup(  # pylint: disable=too-many-positional-arguments
         cls,
         store_url: str,
         store_headers: Optional[dict] = None,

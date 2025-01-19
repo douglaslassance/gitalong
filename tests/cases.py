@@ -17,7 +17,7 @@ from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
 from gitalong.functions import is_writeable
 
 # Deliberately import the module to avoid circular imports.
-import gitalong.batch as batch
+import gitalong.batch as batch  # pylint: disable=consider-using-from-import
 
 from .functions import save_image
 
@@ -62,7 +62,7 @@ class GitalongCase(unittest.TestCase):
             os.path.normpath(config.get("store_url", "")),
         )
 
-    def test_lib(self):
+    def test_lib(self):  # pylint: disable=too-many-statements
         local_only_commits = self.repository.get_local_only_commits()
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(2, len(local_only_commits[0]["changes"]))

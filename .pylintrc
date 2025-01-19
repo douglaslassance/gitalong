@@ -1,13 +1,14 @@
 [MASTER]
 
-ignore=docs, __pycache__
+ignore=docs, __pycache__, .venv
 disable=
-	no-member,
-	too-many-arguments,
-	too-few-public-methods,
+	cyclic-import,
+	fixme,
 	logging-format-interpolation,
 	missing-module-docstring,
-	fixme
+	no-member,
+	too-few-public-methods,
+	too-many-arguments
 	
 
 [FORMAT]

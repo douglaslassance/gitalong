@@ -53,3 +53,12 @@ class Store(ABC):
         Args: commits (list, optional): The commits to update the store with.
         """
         pass  # pylint: disable=unnecessary-pass
+
+    def _serializeables_to_commits(self, serializable_commits):
+        """Turn serializable commits into Commit objects."""
+        commits = []
+        for serializable_commit in serializable_commits:
+            commit = Commit(self._managed_repository)
+            commit.update(serializable_commit)
+            commits.append(commit)
+        return commits

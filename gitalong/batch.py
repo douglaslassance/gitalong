@@ -49,7 +49,7 @@ async def _run_command(args: List[str], safe: bool = False) -> str:
     return stdout.decode().strip()
 
 
-async def get_files_last_commits(
+async def get_files_last_commits(  # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     filenames: List[str], prune: bool = True
 ) -> List[Commit]:
     """Get the last commit for a list of files.
