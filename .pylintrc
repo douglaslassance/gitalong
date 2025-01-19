@@ -6,8 +6,9 @@ disable=
 	too-many-arguments,
 	too-few-public-methods,
 	logging-format-interpolation,
-	missing-module-docstring
-
+	missing-module-docstring,
+	fixme
+	
 
 [FORMAT]
 

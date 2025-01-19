@@ -13,7 +13,7 @@ import asyncio
 from click.testing import CliRunner
 from git.repo import Repo
 
-from gitalong import Repository, CommitSpread, Commit, RepositoryNotSetup, cli
+from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
 from gitalong.functions import is_writeable
 
 # Deliberately import the module to avoid circular imports.
