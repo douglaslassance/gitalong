@@ -298,10 +298,11 @@ async def _set_write_permission(
         bool: Whether the file ends in the desired state.
     """
     try:
+        current_permissions = os.stat(filename).st_mode
         if write_permission:
-            os.chmod(filename, stat.S_IWRITE)
+            os.chmod(filename, current_permissions | stat.S_IWRITE)
         else:
-            os.chmod(filename, stat.S_IREAD)
+            os.chmod(filename, current_permissions & ~stat.S_IWRITE)
     except FileNotFoundError:
         if safe:
             # If the file doesn't exist we can't set it's permissions.
