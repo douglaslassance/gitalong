@@ -39,23 +39,24 @@ git init --bare store.git
 # Setting up Gitalong in your project repository.
 # This will clone the store repository in an ignored `.gitalong` folder.
 # It will also start tracking a `.gitalong.json` configuration file.
-gitalong -C project setup store.git --modify-permissions --tracked-extensions .jpg,.gif,.png --track-uncommitted --update-gitignore --update-hooks
+gitalong -C project setup store.git --modify-permissions --tracked-extensions .jpg,.png --track-uncommitted --update-gitignore --update-hooks
 
 # Creating some files.
-touch project/uncommitted.png
-touch project/local.gif
-touch project/remote.jpg
 touch project/untracked.txt
+touch project/uncommitted.png
+touch project/local.png
+touch project/current.jpg
+touch project/remote.jpg
 
 # Spreading them across branches.
-git -C project add untracked.txt
-git -C project commit -m "Add untracked.txt"
+git -C project add current.jpg
+git -C project commit -m "Add current.jpg"
 git -C project add remote.jpg
 git -C project commit -m "Add remote.jpg"
 git -C project push
 git -C project reset --hard HEAD^
-git -C project add local.gif
-git -C project commit -m "Add local.gif"
+git -C project add local.png
+git -C project commit -m "Add local.png"
 
 # Updating tracked commits with current local changes.
 # Because we specified `track_uncommitted`. Uncommitted changes will be stored as sha-less commit.
@@ -70,17 +71,17 @@ gitalong -C project update
 # It will be displayed in the following order:
 # <mine-uncommitted><mine-claimed><mine-active-branch><mine-other-branch><remote-matching-branch><remote-other-branch><other-other-branch><other-matching-branch><other-claimed><other-uncomitted>
 # A `+` sign means is true, while a `-` sign means false or unknown.
-gitalong -C project status uncommited.jpg local.gif remote.jpg untracked.txt
+gitalong -C project untracked.txt status uncommited.png local.png current.jpg remote.jpg
 
 # We also provide a way to claim files so no one else can edit them.
 # If you installed with `--modify-permissions` it will make the files writable.
 # Each claim will show a non valid commit status if the claim was successful and a valid one if a commit prevented the claim.
-gitalong -C project claim uncommited.jpg local.gif remote.jpg untracked.txt
+gitalong -C project claim untracked.txt uncommited.png local.png current.jpg remote.jpg
 
 # You can also release these claims.
 # If you installed with `--modify-permissions` it will make the files read-only.
 # Each release will show a non valid commit status if the release was successful and a valid one if a commit prevented the release.
-gitalong -C project release uncommited.jpg local.gif remote.jpg untracked.txt
+gitalong -C project release untracked.txt uncommited.png local.png current.jpg remote.jpg
 ```
 
 ### Python

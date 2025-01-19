@@ -8,6 +8,7 @@ import git
 
 from git import Repo
 
+
 from .functions import get_real_path
 from .enums import CommitSpread
 
@@ -135,22 +136,18 @@ class Commit(dict):
     @property
     def commit_spread(self) -> int:
         """
+        Args:
+            commit (int): The commit to check for.
+
         Returns:
-            int:
-                A bit flag representing where the commit is spread.
-                The commit spread allows to determine where this commit lives across
-                branches and clones.
+            dict:
+                A dictionary of commit spread information containing all
+                information about where this commit lives across branches and clones.
         """
         commit_spread = 0
         active_branch = self._repository.active_branch_name
         if self.get("user", ""):
             is_issued = self.is_issued_commit()
-            if "claims" in self:
-                commit_spread |= (
-                    CommitSpread.MINE_CLAIMED
-                    if is_issued
-                    else CommitSpread.THEIR_CLAIMED
-                )
             if "sha" in self:
                 if active_branch in self.get("branches", {}).get("local", []):
                     commit_spread |= (

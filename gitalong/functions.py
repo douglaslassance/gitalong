@@ -10,7 +10,7 @@ from git.repo import Repo
 MOVE_STRING_REGEX = re.compile("{(.*)}")
 
 
-def is_binary_file(filename: str) -> bool:
+def is_binary_file(filename: str, safe: bool = False) -> bool:
     """
     Args:
         filename (str): The path to the file to analyze.
@@ -18,9 +18,15 @@ def is_binary_file(filename: str) -> bool:
     Returns:
         bool: Whether the file is a binary.
     """
-    with open(filename, "rb") as fle:
-        return is_binary_string(fle.read(1024))  # pyright: ignore[reportArgumentType]
-    return False
+    try:
+        with open(filename, "rb") as fle:
+            return is_binary_string(
+                fle.read(1024)  # pyright: ignore[reportArgumentType]
+            )
+    except (IsADirectoryError, FileNotFoundError):
+        if safe:
+            return False
+        raise
 
 
 def is_binary_string(string: str) -> bool:
@@ -35,7 +41,7 @@ def is_binary_string(string: str) -> bool:
     return bool(string.translate(None, textchars))  # pyright: ignore[reportCallIssue]
 
 
-def is_read_only(filename: str) -> bool:
+def is_writeable(filename: str) -> bool:
     """
     Args:
         filename (str): The absolute filename of the file to check.
@@ -43,30 +49,8 @@ def is_read_only(filename: str) -> bool:
     Returns:
         bool: Whether the file is read only.
     """
-    _stat = os.stat(filename)
-    return not _stat.st_mode & stat.S_IWUSR
-
-
-def set_read_only(
-    filename: str, read_only: bool = True, check_exists: bool = True
-) -> bool:
-    """Sets the file read-only state.
-
-    Args:
-        filename (str): The absolute filename of the file we want to set.
-        read_only (bool, optional): Whether read-only should be true of false.
-        check_exists (bool, optional): Whether we are guarding from non existing files.
-
-        Returns:
-            str: Whether the file was set to the provided permission.
-    """
-    if check_exists and not os.path.exists(filename):
-        return False
-    if read_only:
-        os.chmod(filename, stat.S_IREAD)
-        return True
-    os.chmod(filename, stat.S_IWRITE)
-    return True
+    stat_ = os.stat(filename)
+    return bool(stat_.st_mode & stat.S_IWUSR)
 
 
 def get_real_path(filename: str) -> str:

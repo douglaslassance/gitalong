@@ -1,4 +1,3 @@
-import os
 import asyncio
 
 import click
@@ -8,20 +7,22 @@ import git.exc
 from .__info__ import __version__
 from .enums import CommitSpread
 from .repository import Repository
-from .batch import get_files_last_commits, claim_files, release_files
+from .batch import get_files_last_commits
+
+# from .batch import claim_files, release_files
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
     """Generate a status string for a file and its commit."""
     prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
-    prop += "+" if spread & CommitSpread.MINE_CLAIMED else "-"
+    # prop += "+" if spread & CommitSpread.MINE_CLAIMED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_MATCHING_BRANCH else "-"
     prop += "+" if spread & CommitSpread.REMOTE_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
     prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.THEIR_CLAIMED else "-"
+    # prop += "+" if spread & CommitSpread.THEIR_CLAIMED else "-"
     prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
     splits = [
         prop,
@@ -75,22 +76,7 @@ def update(ctx):
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
     if not repository:
         return
-    working_dir = repository.working_dir
     repository.update_tracked_commits()
-    locally_changed = {}
-    permission_changes = []
-    if repository.config.get("modify_permissions"):
-        for filename in repository.files:
-            if os.path.isfile(repository.get_absolute_path(filename)):
-                if working_dir not in locally_changed:
-                    locally_changed[working_dir] = repository.locally_changed_files
-                perm_change = repository.update_file_permissions(
-                    filename, locally_changed[working_dir]
-                )
-                if perm_change:
-                    permission_changes.append(f"{' '.join(perm_change)}")
-    if permission_changes:
-        click.echo("\n".join(permission_changes))
 
 
 @click.command(
@@ -137,48 +123,48 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     click.echo("\n".join(file_status), err=False)
 
 
-@click.command(
-    help=(
-        "Reserve files preventing others from editing them. "
-        "Make provided files writable if possible."
-    )
-)
-@click.argument("filename", nargs=-1)
-@click.pass_context
-def claim(ctx, filename):  # pylint: disable=missing-function-docstring
-    statuses = []
-    blocking_commits = asyncio.run(claim_files(filename))
-    for _filename, commit in zip(filename, blocking_commits):
-        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
-        absolute_filename = (
-            repository.get_absolute_path(_filename) if repository else _filename
-        )
-        spread = commit.commit_spread if repository else 0
-        statuses.append(get_status_string(absolute_filename, commit, spread))
-    if statuses:
-        click.echo("\n".join(statuses))
+# @click.command(
+#     help=(
+#         "Reserve files preventing others from editing them. "
+#         "Make provided files writable if possible."
+#     )
+# )
+# @click.argument("filename", nargs=-1)
+# @click.pass_context
+# def claim(ctx, filename):  # pylint: disable=missing-function-docstring
+#     statuses = []
+#     blocking_commits = asyncio.run(claim_files(filename))
+#     for _filename, commit in zip(filename, blocking_commits):
+#         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
+#         absolute_filename = (
+#             repository.get_absolute_path(_filename) if repository else _filename
+#         )
+#         spread = commit.commit_spread if repository else 0
+#         statuses.append(get_status_string(absolute_filename, commit, spread))
+#     if statuses:
+#         click.echo("\n".join(statuses))
 
 
-@click.command(
-    help=(
-        "Release claimed files allowing others to edit them. "
-        "Make provided files read-only."
-    )
-)
-@click.argument("filename", nargs=-1)
-@click.pass_context
-def release(ctx, filename):  # pylint: disable=missing-function-docstring
-    statuses = []
-    blocking_commits = asyncio.run(release_files(filename))
-    for _filename, commit in zip(filename, blocking_commits):
-        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
-        absolute_filename = (
-            repository.get_absolute_path(_filename) if repository else _filename
-        )
-        spread = commit.commit_spread if repository else 0
-        statuses.append(get_status_string(absolute_filename, commit, spread))
-    if statuses:
-        click.echo("\n".join(statuses))
+# @click.command(
+#     help=(
+#         "Release claimed files allowing others to edit them. "
+#         "Make provided files read-only."
+#     )
+# )
+# @click.argument("filename", nargs=-1)
+# @click.pass_context
+# def release(ctx, filename):  # pylint: disable=missing-function-docstring
+#     statuses = []
+#     blocking_commits = asyncio.run(release_files(filename))
+#     for _filename, commit in zip(filename, blocking_commits):
+#         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
+#         absolute_filename = (
+#             repository.get_absolute_path(_filename) if repository else _filename
+#         )
+#         spread = commit.commit_spread if repository else 0
+#         statuses.append(get_status_string(absolute_filename, commit, spread))
+#     if statuses:
+#         click.echo("\n".join(statuses))
 
 
 @click.command(help="Setup Gitalong in a repository.")
@@ -218,7 +204,7 @@ def release(ctx, filename):  # pylint: disable=missing-function-docstring
     "--track-binaries",
     is_flag=True,
     help=(
-        "Gitalong should track all auto-detected binary files "
+        "Gitalong can track all auto-detected binary files "
         "to prevent conflicts on them. There is a performance cost to this feature so "
         "it's always better if you can specify the extensions you care about tracking "
         "using --tracked-extensions."
@@ -319,7 +305,8 @@ def cli(ctx, repository, git_binary):  # pylint: disable=missing-function-docstr
 
 cli.add_command(config)
 cli.add_command(update)
-cli.add_command(claim)
+# cli.add_command(claim)
+# cli.add_command(release)
 cli.add_command(setup)
 cli.add_command(status)
 cli.add_command(version)
