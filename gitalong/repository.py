@@ -150,7 +150,7 @@ class Repository:  # pylint: disable=too-many-public-methods
         cls._write_config_file(config, config_path)
         gitalong = cls(repository=str(managed_repo.working_dir))
         if modify_permissions:
-            managed_repo.config_writer().set_value("core", "fileMode", "false")
+            managed_repo.config_writer().set_value("core", "fileMode", "true").release()
         if update_gitignore:
             gitalong.update_gitignore()
         if update_hooks:
