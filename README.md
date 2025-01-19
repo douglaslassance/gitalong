@@ -250,6 +250,12 @@ sphinx-build ./docs/source ./docs/build
 python setup.py sdist bdist_wheel
 ```
 
+### Semantic Release
+
+```shell
+semantic-release version
+```
+
 ### Publishing
 
 ```shell
