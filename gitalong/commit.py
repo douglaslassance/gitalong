@@ -5,6 +5,7 @@ from typing import List
 
 import dictdiffer
 import git
+import git.exc
 
 from git import Repo
 
@@ -50,8 +51,10 @@ class Commit(dict):
 
         if not self._repository:
             return
-
-        git_commit = Repo(self._repository.working_dir).commit(sha)
+        try:
+            git_commit = Repo(self._repository.working_dir).commit(sha)
+        except git.exc.BadName:
+            git_commit = None
         if git_commit:
             self.update_with_git_commit(git_commit)
 
