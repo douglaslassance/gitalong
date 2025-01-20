@@ -56,10 +56,7 @@ setup(
     entry_points={
         "console_scripts": [
             "gitalong = gitalong.cli:main",
-        ],
-        "gui_scripts": [
-            "gitalong-gui = gitalong.cli:main",
-        ],
+        ]
     },
     include_package_data=True,
     python_require="~=3.7",
