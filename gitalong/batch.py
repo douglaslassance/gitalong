@@ -123,7 +123,16 @@ async def get_files_last_commits(  # pylint: disable=too-many-branches,too-many-
                 except git.exc.GitCommandError:
                     pass
 
-            args = ["--all", "--remotes", '--pretty=format:"%H"', "--", filename]
+            args = [
+                "--all",
+                "--remotes",
+                '--pretty=format:"%H"',
+                # TODO: It is said that the chronological order of commits in the commit
+                # history does not necessarily reflect the order of their commit dates.
+                "--date-order",
+                "--",
+                filename,
+            ]
             output = repository.git.log(*args)
             file_commits = output.replace('"', "").split("\n") if output else []
             sha = file_commits[0] if file_commits else ""
