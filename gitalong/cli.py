@@ -1,33 +1,17 @@
-import os
-import sys
-import pstats
-import cProfile
+import asyncio
 
 import click
 import git
-from click.decorators import pass_context
+import git.exc
 
 from .__info__ import __version__
 from .enums import CommitSpread
-from .exceptions import RepositoryNotSetup
 from .repository import Repository
-from .functions import set_read_only
+from .batch import get_files_last_commits
 
 
-def get_repository(  # pylint: disable=missing-function-docstring
-    repository: str,
-) -> Repository:
-    try:
-        # Initializing Gitalong for each file allows to handle files from multiple
-        # repository. This is especially import to support submodules.
-        return Repository(repository=repository, use_cached_instances=True)
-    except RepositoryNotSetup:
-        return None
-
-
-def get_status(repository, filename, commit) -> str:
-    """TODO: Add proper offline support."""
-    spread = repository.get_commit_spread(commit) if repository else 0
+def get_status_string(filename: str, commit: dict, spread: int) -> str:
+    """Generate a status string for a file and its commit."""
     prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
     prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
     prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
@@ -63,63 +47,32 @@ def version():  # pylint: disable=missing-function-docstring
 
 
 @click.command(help="Prints the requested configuration property value.")
-@click.argument(
-    "prop",
-    # help="The configuration property key to look for."
-)
+@click.argument("prop")
 @click.pass_context
 def config(ctx, prop):  # pylint: disable=missing-function-docstring
-    repository = get_repository(ctx.obj.get("REPOSITORY", ""))
-    if repository:
-        repository_config = repository.config
-        prop = prop.replace("-", "_")
-        if prop in repository_config:
-            value = repository_config[prop]
-            if isinstance(value, bool):
-                value = str(value).lower()
-            click.echo(value)
+    repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
+    repository_config = repository.config if repository else {}
+    prop = prop.replace("-", "_")
+    if prop in repository_config:
+        value = repository_config[prop]
+        if isinstance(value, bool):
+            value = str(value).lower()
+        click.echo(value)
 
 
 @click.command(
     help=(
         "Update tracked commits with the local changes of this clone. echo a list of "
-        "files that were made "
+        "files their permissions changed."
     )
 )
-@click.argument(
-    "repository",
-    nargs=-1,
-    # help="The path to the file that should be made writable."
-)
 @click.pass_context
-def update(ctx, repository):
-    """TODO: Improve error handling."""
-    repositories = repository or []
-    repositories = list(repositories)
-    repositories.insert(0, ctx.obj.get("REPOSITORY", ""))
-    synced = set()
-    perm_changes = []
-    locally_changed = {}
-    for repo_filename in repositories:
-        repository = get_repository(repo_filename)
-        root = repository.working_dir if repository else ""
-        # We are not syncing the same repository twice.
-        if not root or root in synced:
-            continue
-        repository.update_tracked_commits()
-        synced.add(root)
-        if repository.config.get("modify_permissions"):
-            for filename in repository.files:
-                if os.path.isfile(repository.get_absolute_path(filename)):
-                    if root not in locally_changed:
-                        locally_changed[root] = repository.locally_changed_files
-                    perm_change = repository.update_file_permissions(
-                        filename, locally_changed[root]
-                    )
-                    if perm_change:
-                        perm_changes.append(f"{' '.join(perm_change)}")
-    if perm_changes:
-        click.echo("\n".join(perm_changes))
+def update(ctx):
+    """Update tracked commits with local changes."""
+    repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
+    if not repository:
+        return
+    repository.update_tracked_commits()
 
 
 @click.command(
@@ -127,23 +80,24 @@ def update(ctx, repository):
         "Prints missing commits in this local branch for each filename. "
         "Format: `<spread> <filename> <commit> <local-branches> "
         "<remote-branches> <host> <author>`"
-        # noqa: E501 pylint: disable=line-too-long
     )
 )
-@click.argument(
-    "filename",
-    nargs=-1,
-    # help="The path to the file that should be made writable."
-)
+@click.argument("filename", nargs=-1)
 @click.option(
     "-p",
     "--profile",
     is_flag=True,
-    help="Will generate a profile file in the current workin directory.",
+    help=(
+        "Will generate a profile file in the current working directory."
+        "The file can be opened in a profiler like snakeviz."
+    ),
 )
 @click.pass_context
 def status(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
     if profile:
+        import cProfile  # pylint: disable=import-outside-toplevel
+        import pstats  # pylint: disable=import-outside-toplevel
+
         with cProfile.Profile() as pr:
             run_status(ctx, filename)
         results = pstats.Stats(pr)
@@ -153,72 +107,25 @@ def status(ctx, filename, profile=False):  # pylint: disable=missing-function-do
 
 
 def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
-    statuses = []
-    repo_filename = ctx.obj.get("REPOSITORY", "")
-    for _filename in filename:
-        repo_filename = repo_filename or _filename
-        commit = {}
-        repository = get_repository(repo_filename)
-        if repository:
-            commit = repository.get_file_last_commit(_filename)
-        statuses.append(get_status(repository, _filename, commit))
-    click.echo("\n".join(statuses), err=False)
-
-
-@click.command(
-    help=(
-        "Make provided files writeable if possible. Return error code 1 if one or more "
-        "files cannot be made writeable."
-    )
-)
-@click.argument(
-    "filename",
-    nargs=-1,
-    # help="The path to the file that should be made writable."
-)
-@pass_context
-def claim(ctx, filename):  # pylint: disable=missing-function-docstring
-    repo_filename = ctx.obj.get("REPOSITORY", "")
-    statuses = []
-    claimables = []
-    error = False
-    for _filename in filename:
-        commit = {}
-        repo_filename = repo_filename or _filename
-        repository = get_repository(repo_filename)
-        if repository:
-            commit = repository.make_file_writable(_filename)
-        statuses.append(get_status(repository, _filename, commit))
-        claimables.append(_filename)
-        if commit:
-            error = True
-    if statuses:
-        click.echo("\n".join(statuses))
-    if error:
-        sys.exit(1)
-    repository.update_tracked_commits(claims=claimables)
-    if repository.config.get("modify_permissions"):
-        if os.path.isfile(repository.get_absolute_path(filename)):
-            set_read_only(
-                repository.get_absolute_path(filename),
-                read_only=False,
-            )
+    file_status = []
+    commits = asyncio.run(get_files_last_commits(filename))
+    for _filename, commit in zip(filename, commits):
+        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
+        absolute_filename = (
+            repository.get_absolute_path(_filename) if repository else _filename
+        )
+        spread = commit.commit_spread if repository else 0
+        file_status.append(get_status_string(absolute_filename, commit, spread))
+    click.echo("\n".join(file_status), err=False)
 
 
 @click.command(help="Setup Gitalong in a repository.")
-@click.argument(
-    "store-url",
-    # help="The URL or path to the repository or REST API endpoint that will store the
-    # Gitalong data.",
-    required=True,
-)
+@click.argument("store-url", required=True)
 @click.option(
     "-sh",
     "--store-header",
     callback=validate_key_value,
-    help=(
-        "If using JSONBin.io as a store, the headers used to connect the" "end point."
-    ),
+    help="If using JSONBin.io as a store, the headers used to connect the endpoint.",
     required=False,
     multiple=True,
 )
@@ -229,7 +136,7 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     help=(
         "Whether or not Gitalong should affect file permissions of tracked files "
         "to prevent editing of files that are modified elsewhere. This is too "
-        "expensive option for repositories with many files and should should be "
+        "expensive an option for repositories with many files and should be "
         "enabled."
     ),
 )
@@ -238,9 +145,9 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     "--pull-threshold",
     default=60,
     help=(
-        "Time in seconds that need to pass before Gitalong pulls again. Defaults to 10"
-        "seconds. This is for optimization sake as pull and fetch operation are "
-        "expensive. Defaults to 60 seconds."
+        "Time in seconds that need to pass before Gitalong pulls again. Defaults to 60"
+        "seconds. This is for optimization sake as pull and fetch operations are "
+        "expensive."
     ),
     required=False,
 )
@@ -249,7 +156,7 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     "--track-binaries",
     is_flag=True,
     help=(
-        "Gitalong should track all auto-detected binary files "
+        "Gitalong can track all auto-detected binary files "
         "to prevent conflicts on them. There is a performance cost to this feature so "
         "it's always better if you can specify the extensions you care about tracking "
         "using --tracked-extensions."
@@ -261,7 +168,7 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     "--track-uncommitted",
     is_flag=True,
     help=(
-        "Track uncommitted changes. Better for collaboration but requires to push"
+        "Track uncommitted changes. Better for collaboration but requires pushing"
         "tracked commits after each file system operation."
     ),
 )
@@ -269,27 +176,22 @@ def claim(ctx, filename):  # pylint: disable=missing-function-docstring
     "-te",
     "--tracked-extensions",
     default="",
-    help=(
-        "A comma separated list of extensions to track to prevent conflicts. "
-        "to prevent conflicts on them."
-    ),
+    help=("A comma-separated list of extensions to track to prevent conflicts."),
 )
 @click.option(
     "-ug",
     "--update-gitignore",
     is_flag=True,
-    help=(
-        ".gitignore should be modified in the repository to ignore " "Gitalong files."
-    ),
+    help=(".gitignore should be modified in the repository to ignore Gitalong files."),
 )
 @click.option(
-    "-ug",
+    "-uh",
     "--update-hooks",
     is_flag=True,
     help="Hooks should be updated with Gitalong logic.",
 )
 @click.pass_context
-def setup(
+def setup(  # pylint: disable=too-many-positional-arguments
     ctx,
     store_url,
     store_header,
@@ -301,7 +203,7 @@ def setup(
     update_gitignore,
     update_hooks,
 ):
-    """TODO: Add support for branch groups."""
+    """Setup Gitalong in a repository."""
     Repository.setup(
         store_url=store_url,
         store_headers=store_header,
@@ -355,14 +257,13 @@ def cli(ctx, repository, git_binary):  # pylint: disable=missing-function-docstr
 
 cli.add_command(config)
 cli.add_command(update)
-cli.add_command(claim)
 cli.add_command(setup)
 cli.add_command(status)
 cli.add_command(version)
 
 
 def main():
-    """This main function will be register as the console script when installing the
+    """This main function will be registered as the console script when installing the
     package.
     """
     cli(obj={})  # pylint: disable=unexpected-keyword-arg,no-value-for-parameter

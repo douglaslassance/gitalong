@@ -8,3 +8,7 @@ class RepositoryInvalidConfig(Exception):
 
 class StoreNotReachable(Exception):
     """Error for when the store is not reachable."""
+
+
+class CommandError(Exception):
+    """Error for when running a command."""

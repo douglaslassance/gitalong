@@ -6,6 +6,7 @@ import requests
 from ..exceptions import StoreNotReachable, RepositoryInvalidConfig
 from ..functions import modified_within
 from ..store import Store
+from ..commit import Commit
 
 
 class JsonbinStore(Store):
@@ -26,22 +27,23 @@ class JsonbinStore(Store):
         )
 
     @property
-    def commits(self) -> typing.List[dict]:
+    def commits(self) -> typing.List[Commit]:
         headers = {}
         for key, value in self._headers.items():
             headers[key] = os.path.expandvars(value)
         pull_threshold = self._managed_repository.config.get("pull_threshold", 60)
+        serializable_commits = []
         if modified_within(self._local_json_path, pull_threshold):
-            return self._read_local_json()
+            serializable_commits = self._read_local_json()
         response = requests.get(self._url, headers=headers, timeout=self._timeout)
-        if response.status_code == 200:
-            commits = response.json()["record"]
-            self._write_local_json(commits)
-            return commits
-        raise StoreNotReachable(response.status_code, response.text)
+        if response.status_code != 200:
+            raise StoreNotReachable(response.status_code, response.text)
+        serializable_commits = response.json()["record"]
+        self._write_local_json(serializable_commits)
+        return self._serializeables_to_commits(serializable_commits)
 
     @commits.setter
-    def commits(self, commits: typing.List[dict]):
+    def commits(self, commits: typing.List[Commit]):
         headers = {}
         for key, value in self._headers.items():
             headers[key] = os.path.expandvars(value)
