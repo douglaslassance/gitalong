@@ -2,7 +2,6 @@ from enum import IntFlag, auto
 
 
 class CommitSpread(IntFlag):
-
     """A combinable enumerator to represent where the commit spreads across branches
     and clones.
 
