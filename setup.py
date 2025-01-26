@@ -7,7 +7,9 @@ from setuptools import setup
 
 dirname = os.path.dirname(__file__)
 info = {}
-with open(os.path.join(dirname, "gitalong", "__info__.py"), mode="r") as f:
+with open(
+    os.path.join(dirname, "gitalong", "__info__.py"), mode="r", encoding="utf-8"
+) as f:
     exec(f.read(), info)  # pylint: disable=W0122
 
 # Get the long description from the README file.
@@ -35,7 +37,6 @@ setup(
     extras_require={
         "ci": [
             "black",
-            "flake8~=7.0",
             "pep8-naming~=0.13",
             "Pillow~=10.4",
             "pylint~=3.0",
@@ -55,10 +56,7 @@ setup(
     entry_points={
         "console_scripts": [
             "gitalong = gitalong.cli:main",
-        ],
-        "gui_scripts": [
-            "gitalong-gui = gitalong.cli:main",
-        ],
+        ]
     },
     include_package_data=True,
     python_require="~=3.7",
