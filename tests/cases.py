@@ -1,15 +1,24 @@
+# pylint: disable=missing-function-docstring
+# pylint: disable=missing-class-docstring
+# pylint: disable=attribute-defined-outside-init
+
 import getpass
 import logging
 import os
 import shutil
 import socket
 import unittest
+import asyncio
 
 from click.testing import CliRunner
 from git.repo import Repo
 
 from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
-from gitalong.functions import is_read_only
+from gitalong.functions import is_writeable
+
+# Deliberately import the module to avoid circular imports.
+import gitalong.batch as batch  # pylint: disable=consider-using-from-import
+
 from .functions import save_image
 
 
@@ -36,7 +45,7 @@ class GitalongCase(unittest.TestCase):
         self.repository = Repository.setup(
             store_url=store_url,
             store_headers=store_headers,
-            managed_repository=self._managed_clone.working_dir,
+            managed_repository=str(self._managed_clone.working_dir),
             modify_permissions=True,
             track_binaries=True,
             track_uncommitted=True,
@@ -50,89 +59,120 @@ class GitalongCase(unittest.TestCase):
         config = self.repository.config
         self.assertEqual(
             os.path.normpath(self._store_url),
-            os.path.normpath(config.get("store_url")),
+            os.path.normpath(config.get("store_url", "")),
         )
 
-    def test_lib(self):
+    def test_lib(self):  # pylint: disable=too-many-statements
         local_only_commits = self.repository.get_local_only_commits()
-        working_dir = self._managed_clone.working_dir
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(2, len(local_only_commits[0]["changes"]))
 
-        # Testing detecting un-tracked files.
-        save_image(os.path.join(working_dir, "untracked_image_01.jpg"))
+        # Make an initial commit.
+        self._managed_clone.index.add(".gitignore")
+        self._managed_clone.index.add(".gitalong.json")
+        self._managed_clone.index.commit(message="Initial commit")
 
-        # Testing detecting staged files.
-        staged_image_01_path = os.path.join(working_dir, "staged_image_01.jpg")
-        save_image(staged_image_01_path)
-        self._managed_clone.index.add(staged_image_01_path)
-        self.assertEqual(4, len(self.repository.get_local_only_commits()[0]["changes"]))
+        # Simulating a post commit update.
+        self.repository.update_tracked_commits()
 
-        commit = self._managed_clone.index.commit(message="Add staged_image.jpg")
-        local_only_commits = self.repository.get_local_only_commits()
-        self.assertEqual(2, len(local_only_commits))
-        self.assertEqual(3, len(local_only_commits[0]["changes"]))
-        self.assertEqual(1, len(local_only_commits[1]["changes"]))
-
-        self._managed_clone.remote().push()
+        # Checking commits.
         local_only_commits = self.repository.get_local_only_commits()
         self.assertEqual(1, len(local_only_commits))
-        self.assertEqual(3, len(local_only_commits[0]["changes"]))
 
-        image_path = os.path.join(working_dir, "staged_image_02.jpg")
+        # Make a new binary file.
+        working_dir = self._managed_clone.working_dir
+        image_name = "image.jpg"
+        image_path = os.path.join(working_dir, image_name)
         save_image(image_path)
-        # Simulating the application syncing when saving the file.
-        self.repository.update_tracked_commits()
-        # print("POST-SAVE TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
+        # Simulating a post save update.
+        self.repository.update_tracked_commits()
+        local_only_commits = self.repository.get_local_only_commits()
+        self.assertEqual(2, len(local_only_commits))
+        # The fist local only commit is always the one holding uncommitted changes.
+        self.assertEqual(1, len(self.repository.get_local_only_commits()[0]["changes"]))
+
+        # Staging the file.
         self._managed_clone.index.add(image_path)
-        self._managed_clone.index.commit(message="Add staged_image_02.jpg")
+
+        # Simulating a post stage update.
+        self.repository.update_tracked_commits()
+
+        # Checking commits.
+        self.assertEqual(2, len(local_only_commits))
+        # The fist local only commit is always the one holding uncommitted changes.
+        self.assertEqual(1, len(self.repository.get_local_only_commits()[0]["changes"]))
+        last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
+        self.assertEqual(1, len(last_commits))
+        last_commit = last_commits[0]
+        self.assertEqual(CommitSpread.MINE_UNCOMMITTED, last_commit.commit_spread)
+
+        # Checking permissions.
+        self.assertEqual(True, is_writeable(self.repository.config_path))
+        self.assertEqual(True, is_writeable(image_path))
+
+        # Committing the file.
+        add_image_commit = self._managed_clone.index.commit(message=f"Add {image_name}")
+
         # Simulating the post-commit hook.
         self.repository.update_tracked_commits()
-        # print("POST-COMMIT TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
+        # Checking commits.
+        local_only_commits = self.repository.get_local_only_commits()
+        self.assertEqual(2, len(local_only_commits))
+        self.assertEqual(1, len(local_only_commits[0]["changes"]))
+        self.assertEqual(2, len(local_only_commits[1]["changes"]))
+        last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
+        self.assertEqual(1, len(last_commits))
+        self.assertEqual(CommitSpread.MINE_ACTIVE_BRANCH, last_commits[0].commit_spread)
+
+        # Checking permissions.
+        self.assertEqual(True, is_writeable(self.repository.config_path))
+        self.assertEqual(True, is_writeable(image_path))
+
+        # Pushing the change.
         self._managed_clone.remote().push()
+
         # Simulating a post-push hook.
         # It could only be implemented server-side as it's not an actual Git hook.
         self.repository.update_tracked_commits()
-        # print("POST-PUSH TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
-        # We just pushed the changes therefore there should be no missing commit.
-        last_commit = self.repository.get_file_last_commit("staged_image_02.jpg")
-        spread = self.repository.get_commit_spread(last_commit)
+        # Checking commits.
+        local_only_commits = self.repository.get_local_only_commits()
+        self.assertEqual(0, len(local_only_commits))
+        last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
+        self.assertEqual(1, len(last_commits))
         self.assertEqual(
             CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH,
-            spread,
+            last_commits[0].commit_spread,
         )
 
-        # We are dropping the last commit locally.
-        self._managed_clone.git.reset("--hard", commit.hexsha)
+        # Checking permissions.
+        self.assertEqual(True, is_writeable(self.repository.config_path))
+        self.assertEqual(True, is_writeable(image_path))
+
+        # Modifying and committing and pushing the change.
+        save_image(image_path, color=(255, 255, 255))
+        self._managed_clone.index.add(image_path)
+        self._managed_clone.index.commit(message=f"Modify {image_name}")
+        self._managed_clone.remote().push()
+
+        # Dropping the last commit.
+        self._managed_clone.git.reset("--hard", add_image_commit.hexsha)
+
         # Simulating the post-checkout hook.
         self.repository.update_tracked_commits()
-        # print("POST-CHECKOUT TRACKED COMMITS")
-        # pprint(self.repository.get_tracked_commits())
 
-        # As a result it should be a commit we do no have locally.
-        last_commit = self.repository.get_file_last_commit("staged_image_02.jpg")
-        spread = self.repository.get_commit_spread(last_commit)
-        self.assertEqual(CommitSpread.REMOTE_MATCHING_BRANCH, spread)
+        # Checking commits.
+        last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
+        self.assertEqual(1, len(last_commits))
+        self.assertEqual(
+            CommitSpread.REMOTE_MATCHING_BRANCH, last_commits[0].commit_spread
+        )
 
-        self.assertEqual(False, is_read_only(staged_image_01_path))
-        self.assertEqual(False, is_read_only(self.repository.config_path))
-        self.repository.update_file_permissions(staged_image_01_path)
-        self.assertEqual(True, is_read_only(staged_image_01_path))
-        self.repository.update_file_permissions(self.repository.config_path)
-        self.assertEqual(False, is_read_only(self.repository.config_path))
-
-        self.repository.update_tracked_commits()
-
-        missing_commit = self.repository.make_file_writable(staged_image_01_path)
-        self.assertEqual(False, bool(missing_commit))
-        missing_commit = self.repository.make_file_writable(image_path)
-        self.assertEqual(True, bool(missing_commit))
+        # Checking permissions.
+        self.assertEqual(True, is_writeable(self.repository.config_path))
+        self.assertEqual(False, is_writeable(image_path))
 
     def test_cli(self):
         working_dir = self._managed_clone.working_dir
@@ -157,21 +197,24 @@ class GitalongCase(unittest.TestCase):
         )
         self.assertEqual(0, result.exit_code, result.output)
 
+        # Testing configuration.
         config_path = os.path.join(working_dir, ".gitalong.json")
         self.assertEqual(True, os.path.exists(config_path))
 
-        # Testing detecting un-tracked files.
-        untracked_image_01 = os.path.join(working_dir, "untracked_image_01.jpg")
-        save_image(untracked_image_01)
+        # Creating binary file.
+        image_path = os.path.join(working_dir, "image.jpg")
+        save_image(image_path)
 
+        # Testing update.
         result = runner.invoke(cli.update, obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
 
-        result = runner.invoke(cli.status, [untracked_image_01], obj=obj)
+        # Testing status.
+        result = runner.invoke(cli.status, [image_path], obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
         host = socket.gethostname()
         user = getpass.getuser()
-        output = f"+------- {untracked_image_01} - - - {host} {user}\n"
+        output = f"+------- {image_path} - - - {host} {user}\n"
         self.assertEqual(output, result.output)
 
     def tearDown(self):

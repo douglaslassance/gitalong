@@ -6,5 +6,6 @@
     "python.testing.pytestArgs": ["."],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.analysis.autoImportCompletions": true
+    "python.analysis.autoImportCompletions": true,
+    "pylint.importStrategy": "fromEnvironment"
 }
