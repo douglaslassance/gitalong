@@ -149,7 +149,12 @@ class GitalongCase(unittest.TestCase):
 
         # Checking permissions.
         self.assertEqual(True, is_writeable(self.repository.config_path))
-        self.assertEqual(True, is_writeable(image_path))
+        self.assertEqual(False, is_writeable(image_path))
+
+        # Claim the file for changes.
+        blocking_commits = asyncio.run(batch.claim_files([image_path]))
+        self.assertEqual(1, len(blocking_commits))
+        self.assertEqual(False, bool(blocking_commits[0]))
 
         # Modifying and committing and pushing the change.
         save_image(image_path, color=(255, 255, 255))

@@ -366,18 +366,30 @@ class Repository:  # pylint: disable=too-many-public-methods
             "clone": get_real_path(self.working_dir),
         }
 
-    def get_local_only_commits(self) -> list:
+    def get_local_only_commits(self, claims: Optional[List[str]] = None) -> list:
         """
         Returns:
             list:
                 Commits that are not on remote branches. Includes a commit that
                 represents uncommitted changes.
+            claims (list, optional):
+                List of files that we want to claim.
+                They'll be store as uncommitted changes.
         """
         local_commits = []
         for branch in self._managed_repository.branches:
             self._accumulate_local_only_commits(branch.commit, local_commits)
         if self.config.get("track_uncommitted"):
             uncommitted_changes_commit = self.uncommitted_changes_commit
+
+            # Adding file we want to claim to the uncommitted changes commit.
+            for claim in claims or []:
+                claim = self.get_absolute_path(claim)
+                if os.path.isfile(claim):
+                    uncommitted_changes_commit.setdefault("changes", []).append(
+                        self.get_relative_path(claim).replace("\\", "/")
+                    )
+
             if uncommitted_changes_commit:
                 local_commits.insert(0, uncommitted_changes_commit)
         local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
@@ -473,16 +485,18 @@ class Repository:  # pylint: disable=too-many-public-methods
         """
         return str(self._managed_repository.working_dir)
 
-    def update_tracked_commits(self):
+    def update_tracked_commits(
+        self, claims: Optional[List[str]] = None, update_permissions=True
+    ):
         """Pulls the tracked commits from the store and updates them."""
-        self._store.commits = self._get_updated_tracked_commits()
-        if self.config.get("modify_permissions"):
-            absolute_filenames = []
-            for filename in self.files:
-                absolute_filenames.append(self.get_absolute_path(filename))
+        self._store.commits = self._get_updated_tracked_commits(claims=claims)
+        absolute_filenames = []
+        for filename in self.files:
+            absolute_filenames.append(self.get_absolute_path(filename))
+        if update_permissions:
             asyncio.run(self.batch.update_files_permissions(absolute_filenames))
 
-    def _get_updated_tracked_commits(self) -> list:
+    def _get_updated_tracked_commits(self, claims: Optional[List[str]] = None) -> list:
         """
         Returns:
             list:
@@ -497,7 +511,7 @@ class Repository:  # pylint: disable=too-many-public-methods
                 tracked_commits.append(commit)
                 continue
 
-        for commit in self.get_local_only_commits():
+        for commit in self.get_local_only_commits(claims=claims):
             tracked_commits.append(commit)
         return tracked_commits
 

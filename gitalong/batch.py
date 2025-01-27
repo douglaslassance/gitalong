@@ -271,21 +271,16 @@ async def update_files_permissions(filenames: List[str]):
     write_permissions = []
     for filename, last_commit in zip(filenames, last_commits):
         repository = Repository.from_filename(os.path.dirname(filename))
-        spread = last_commit.commit_spread if repository else 0
+        if not repository:
+            continue
+        if not repository.config.get("modify_permissions"):
+            continue
+        spread = last_commit.commit_spread
         if not spread:
             continue
-        is_uncommitted = (
-            spread & CommitSpread.MINE_UNCOMMITTED == CommitSpread.MINE_UNCOMMITTED
-        )
-        is_local = (
-            spread & CommitSpread.MINE_ACTIVE_BRANCH == CommitSpread.MINE_ACTIVE_BRANCH
-        )
-        is_current = (
-            spread
-            & (CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH)
-            == CommitSpread.MINE_ACTIVE_BRANCH | CommitSpread.REMOTE_MATCHING_BRANCH
-        )
-        write_permission = is_uncommitted or is_local or is_current
+        is_uncommitted = spread == CommitSpread.MINE_UNCOMMITTED
+        is_local = spread == CommitSpread.MINE_ACTIVE_BRANCH
+        write_permission = is_uncommitted or is_local
         write_permissions.append(write_permission)
         tasks.append(_set_write_permission(filename, write_permission))
     await asyncio.gather(*tasks)
@@ -294,8 +289,7 @@ async def update_files_permissions(filenames: List[str]):
 async def _set_write_permission(
     filename: str, write_permission: bool, safe: bool = False
 ) -> bool:
-    """
-    Set the write permission of a file asynchronously.
+    """Set the write permission of a file asynchronously.
 
     Args:
         filename (str): The path to the file.
@@ -324,3 +318,51 @@ async def _set_write_permission(
             return True
         raise
     return True
+
+
+async def claim_files(
+    filenames: List[str],
+    prune: bool = True,
+) -> List[Commit]:
+    """If the file is available for changes, temporarily communicates files as changed.
+    By communicate we mean the file will be marked as a local change until the next
+    update of the tracked commits. Also makes the files writable if the configured is
+    set to affect permissions.
+
+    Args:
+        filename (str):
+            A list of absolute filenames to claim.
+        prune (bool, optional): Prune branches if a fetch is necessary.
+
+    Returns:
+        List[Commit]: The blocking commits for the file we want to claim.
+    """
+    blocking_commits = []
+    last_commits = await get_files_last_commits(filenames, prune=prune)
+    for last_commit in last_commits:
+        spread = last_commit.commit_spread
+        is_local_commit = (
+            spread & CommitSpread.MINE_ACTIVE_BRANCH == CommitSpread.MINE_ACTIVE_BRANCH
+        )
+        is_uncommitted = (
+            spread & CommitSpread.MINE_UNCOMMITTED == CommitSpread.MINE_UNCOMMITTED
+        )
+        blocking_commits.append(
+            Commit(None) if is_local_commit or is_uncommitted else last_commit
+        )
+
+    # Collect all repositories and corresponding file updates.
+    filenames_by_repository = {}
+    for filename_ in filenames:
+        repository = Repository.from_filename(filename_)
+        filenames_by_repository.setdefault(repository, []).append(filename_)
+
+    # Updating the tracked commits for each repository affected.
+    for repository in filenames_by_repository:
+        if repository:
+            repository.update_tracked_commits(
+                claims=filenames_by_repository.get(repository, []),
+                update_permissions=False,
+            )
+    asyncio.run(update_files_permissions(filenames))
+    return blocking_commits
