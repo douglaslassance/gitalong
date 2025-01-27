@@ -486,15 +486,15 @@ class Repository:  # pylint: disable=too-many-public-methods
         return str(self._managed_repository.working_dir)
 
     def update_tracked_commits(
-        self, claims: Optional[List[str]] = None, update_permissions=True
+        self,
+        claims: Optional[List[str]] = None,
     ):
         """Pulls the tracked commits from the store and updates them."""
         self._store.commits = self._get_updated_tracked_commits(claims=claims)
         absolute_filenames = []
         for filename in self.files:
             absolute_filenames.append(self.get_absolute_path(filename))
-        if update_permissions:
-            asyncio.run(self.batch.update_files_permissions(absolute_filenames))
+        asyncio.run(self.batch.update_files_permissions(absolute_filenames))
 
     def _get_updated_tracked_commits(self, claims: Optional[List[str]] = None) -> list:
         """

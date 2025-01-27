@@ -72,10 +72,10 @@ gitalong -C project update
 # A `+` sign means is true, while a `-` sign means false or unknown.
 gitalong -C project status untracked.txt uncommited.png local.png current.jpg remote.jpg
 
-# Now let's claim these files because we want to modify them.
+# Claiming the files to modify them.
 # If the file cannot be claimed the "blocking" commit will be returned.
 # Since we passed `--modify-permissions`, the claimed file will be made writeable.
-# These claims will be released automatically on the next update if not modified.
+# These claimed files will be released automatically on the next update if not modified.
 gitalong -C project claim untracked.txt uncommited.png local.png current.jpg remote.jpg
 ```
 
