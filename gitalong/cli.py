@@ -7,7 +7,7 @@ import git.exc
 from .__info__ import __version__
 from .enums import CommitSpread
 from .repository import Repository
-from .batch import get_files_last_commits, claim_files, update_files_permissions
+from .batch import get_files_last_commits, claim_files, update_tracked_commits
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
@@ -70,9 +70,8 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
 def update(ctx):
     """Update tracked commits with local changes."""
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
-    if not repository:
-        return
-    repository.update_tracked_commits()
+    if repository:
+        asyncio.run(update_tracked_commits(repository))
 
 
 @click.command(

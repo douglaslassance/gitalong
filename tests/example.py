@@ -6,7 +6,7 @@ import logging
 import asyncio
 
 from git.repo import Repo
-from gitalong import Repository, RepositoryNotSetup, CommitSpread, functions
+from gitalong import Repository, RepositoryNotSetup, CommitSpread, functions, batch
 
 
 def example():
@@ -69,15 +69,13 @@ def example():
     # Because we specificed `update_permissions` to `True`, the file permissions will be updated.
     # When setting `update_hooks` to 'True', the update will happen automatically on the following hooks:
     # applypatch, post-checkout, post-commit, post-rewrite.
-    repository.update_tracked_commits()
+    asyncio.run(batch.update_tracked_commits(repository))
 
     # Checking the status for the files we created.
     # For that purpose, we'll get the last commit for our files.
     # Because we have set `track_uncomitted` to True, this will return a dummy commit for any uncommitted changes.
     last_commits = asyncio.run(
-        repository.batch.get_files_last_commits(
-            [untracked, uncommitted, local, current, remote]
-        )
+        batch.get_files_last_commits([untracked, uncommitted, local, current, remote])
     )
     untracked_last_commit = last_commits[0]
     uncommitted_last_commit = last_commits[1]

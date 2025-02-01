@@ -5,7 +5,7 @@ import asyncio
 # import datetime
 
 # from turtle import write
-from typing import List, Coroutine
+from typing import List, Coroutine, Optional
 
 # from unittest import result
 
@@ -47,6 +47,68 @@ async def _run_command(args: List[str], safe: bool = False) -> str:
         error = stderr.decode().strip()
         raise CommandError(f"Command {' '.join(args)} failed with error: {error}")
     return stdout.decode().strip()
+
+
+async def get_local_only_commits(
+    repository: Repository, claims: Optional[List[str]] = None
+) -> list:
+    """
+    Returns:
+        list:
+            Commits that are not on remote branches. Includes a commit that
+            represents uncommitted changes.
+        claims (list, optional):
+            List of files that we want to claim.
+            They'll be store as uncommitted changes.
+    """
+    local_commits = []
+    for branch in repository.branches:
+        await accumulate_local_only_commits(repository, branch.commit, local_commits)
+    if repository.config.get("track_uncommitted"):
+        uncommitted_changes_commit = repository.uncommitted_changes_commit
+
+        # Adding file we want to claim to the uncommitted changes commit.
+        for claim in claims or []:
+            claim = repository.get_absolute_path(claim)
+            if os.path.isfile(claim):
+                uncommitted_changes_commit.setdefault("changes", []).append(
+                    repository.get_relative_path(claim).replace("\\", "/")
+                )
+
+        if uncommitted_changes_commit:
+            local_commits.insert(0, uncommitted_changes_commit)
+    local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
+    return local_commits
+
+
+async def accumulate_local_only_commits(
+    repository, start: git.Commit, local_commits: List[dict]
+):
+    """Accumulates a list of local only commit starting from the provided commit.
+
+    Args:
+        local_commits (list): The accumulated local commits.
+        start (git.objects.Commit):
+            The commit that we start peeling from last commit.
+    """
+    if repository.is_remote_commit(start.hexsha):
+        return
+
+    commit = Commit(repository)
+    commit.update_with_sha(start.hexsha)
+    commit.update_context()
+
+    changes = await get_commits_changes([commit])
+    commit["changes"] = changes[0]
+
+    branches_list = await get_commits_branches([commit])
+    branches = branches_list[0] if branches_list else []
+    commit["branches"] = {"local": branches}
+
+    if commit not in local_commits:
+        local_commits.append(commit)
+    for parent in start.parents:
+        await accumulate_local_only_commits(repository, parent, local_commits)
 
 
 async def get_files_last_commits(  # pylint: disable=too-many-branches,too-many-locals,too-many-statements
@@ -320,6 +382,41 @@ async def _set_write_permission(
     return True
 
 
+async def get_updated_tracked_commits(
+    repository: Repository, claims: Optional[List[str]] = None
+) -> list:
+    """
+    Returns:
+        list:
+            Local commits for all clones with local commits and uncommitted changes
+            from this clone.
+    """
+    tracked_commits = []
+    for commit in repository.store.commits:
+        remote = repository.remote.url
+        is_other_remote = commit.get("remote") != remote
+        if is_other_remote or not commit.is_issued_commit():
+            tracked_commits.append(commit)
+            continue
+
+    for commit in await get_local_only_commits(repository, claims=claims):
+        tracked_commits.append(commit)
+    return tracked_commits
+
+
+async def update_tracked_commits(
+    repository: Repository, claims: Optional[List[str]] = None
+):
+    """Pulls the tracked commits from the store and updates them."""
+    repository.store.commits = await get_updated_tracked_commits(
+        repository, claims=claims
+    )
+    absolute_filenames = []
+    for filename in repository.files:
+        absolute_filenames.append(repository.get_absolute_path(filename))
+    await repository.batch.update_files_permissions(absolute_filenames)
+
+
 async def claim_files(
     filenames: List[str],
     prune: bool = True,
@@ -360,9 +457,8 @@ async def claim_files(
     # Updating the tracked commits for each repository affected.
     for repository in filenames_by_repository:
         if repository:
-            repository.update_tracked_commits(
+            await update_tracked_commits(
+                repository,
                 claims=filenames_by_repository.get(repository, []),
-                update_permissions=False,
             )
-    asyncio.run(update_files_permissions(filenames))
     return blocking_commits

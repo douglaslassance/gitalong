@@ -13,7 +13,7 @@ import asyncio
 from click.testing import CliRunner
 from git.repo import Repo
 
-from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli
+from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli, batch
 from gitalong.functions import is_writeable
 
 # Deliberately import the module to avoid circular imports.
@@ -63,7 +63,7 @@ class GitalongCase(unittest.TestCase):
         )
 
     def test_lib(self):  # pylint: disable=too-many-statements
-        local_only_commits = self.repository.get_local_only_commits()
+        local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
         self.assertEqual(1, len(local_only_commits))
         self.assertEqual(2, len(local_only_commits[0]["changes"]))
 
@@ -73,10 +73,10 @@ class GitalongCase(unittest.TestCase):
         self._managed_clone.index.commit(message="Initial commit")
 
         # Simulating a post commit update.
-        self.repository.update_tracked_commits()
+        asyncio.run(batch.update_tracked_commits(self.repository))
 
         # Checking commits.
-        local_only_commits = self.repository.get_local_only_commits()
+        local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
         self.assertEqual(1, len(local_only_commits))
 
         # Make a new binary file.
@@ -86,22 +86,32 @@ class GitalongCase(unittest.TestCase):
         save_image(image_path)
 
         # Simulating a post save update.
-        self.repository.update_tracked_commits()
-        local_only_commits = self.repository.get_local_only_commits()
+        asyncio.run(batch.update_tracked_commits(self.repository))
+        local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
         self.assertEqual(2, len(local_only_commits))
         # The fist local only commit is always the one holding uncommitted changes.
-        self.assertEqual(1, len(self.repository.get_local_only_commits()[0]["changes"]))
+        self.assertEqual(
+            1,
+            len(
+                asyncio.run(batch.get_local_only_commits(self.repository))[0]["changes"]
+            ),
+        )
 
         # Staging the file.
         self._managed_clone.index.add(image_path)
 
         # Simulating a post stage update.
-        self.repository.update_tracked_commits()
+        asyncio.run(batch.update_tracked_commits(self.repository))
 
         # Checking commits.
         self.assertEqual(2, len(local_only_commits))
         # The fist local only commit is always the one holding uncommitted changes.
-        self.assertEqual(1, len(self.repository.get_local_only_commits()[0]["changes"]))
+        self.assertEqual(
+            1,
+            len(
+                asyncio.run(batch.get_local_only_commits(self.repository))[0]["changes"]
+            ),
+        )
         last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
         self.assertEqual(1, len(last_commits))
         last_commit = last_commits[0]
@@ -115,10 +125,10 @@ class GitalongCase(unittest.TestCase):
         add_image_commit = self._managed_clone.index.commit(message=f"Add {image_name}")
 
         # Simulating the post-commit hook.
-        self.repository.update_tracked_commits()
+        asyncio.run(batch.update_tracked_commits(self.repository))
 
         # Checking commits.
-        local_only_commits = self.repository.get_local_only_commits()
+        local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
         self.assertEqual(2, len(local_only_commits))
         self.assertEqual(1, len(local_only_commits[0]["changes"]))
         self.assertEqual(2, len(local_only_commits[1]["changes"]))
@@ -135,10 +145,10 @@ class GitalongCase(unittest.TestCase):
 
         # Simulating a post-push hook.
         # It could only be implemented server-side as it's not an actual Git hook.
-        self.repository.update_tracked_commits()
+        asyncio.run(batch.update_tracked_commits(self.repository))
 
         # Checking commits.
-        local_only_commits = self.repository.get_local_only_commits()
+        local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
         self.assertEqual(0, len(local_only_commits))
         last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
         self.assertEqual(1, len(last_commits))
@@ -166,7 +176,7 @@ class GitalongCase(unittest.TestCase):
         self._managed_clone.git.reset("--hard", add_image_commit.hexsha)
 
         # Simulating the post-checkout hook.
-        self.repository.update_tracked_commits()
+        asyncio.run(batch.update_tracked_commits(self.repository))
 
         # Checking commits.
         last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
