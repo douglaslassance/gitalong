@@ -65,7 +65,9 @@ async def get_local_only_commits(
     for branch in repository.branches:
         await accumulate_local_only_commits(repository, branch.commit, local_commits)
     if repository.config.get("track_uncommitted"):
-        uncommitted_changes_commit = repository.uncommitted_changes_commit
+        uncommitted_changes_commit = repository.get_uncommitted_changes_commit(
+            claims=claims
+        )
 
         # Adding file we want to claim to the uncommitted changes commit.
         for claim in claims or []:

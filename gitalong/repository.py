@@ -304,16 +304,16 @@ class Repository:  # pylint: disable=too-many-public-methods
             return filename
         return os.path.join(self.working_dir, filename)
 
-    @property
-    def uncommitted_changes_commit(self) -> dict:
+    def get_uncommitted_changes_commit(
+        self, claims: Optional[List[str]] = None
+    ) -> dict:
         """
         Returns:
             dict: Returns a commit dictionary representing uncommitted changes.
         """
-        uncommitted_changes = self._uncommitted_changes
+        uncommitted_changes = self._uncommitted_changes + (claims or [])
         if not uncommitted_changes:
             return {}
-
         commit = {
             "remote": self._remote.url,
             "changes": self._uncommitted_changes,
@@ -347,7 +347,7 @@ class Repository:  # pylint: disable=too-many-public-methods
         return self._managed_repository.branches
 
     @property
-    def _uncommitted_changes(self) -> list:
+    def _uncommitted_changes(self) -> List[str]:
         """
         Returns:
             list: A list of unique relative filenames that feature uncommitted changes.

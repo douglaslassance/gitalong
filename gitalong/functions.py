@@ -41,7 +41,7 @@ def is_binary_string(string: str) -> bool:
     return bool(string.translate(None, textchars))  # pyright: ignore[reportCallIssue]
 
 
-def is_writeable(filename: str) -> bool:
+def is_writeable(filename: str, safe=True) -> bool:
     """
     Args:
         filename (str): The absolute filename of the file to check.
@@ -49,8 +49,13 @@ def is_writeable(filename: str) -> bool:
     Returns:
         bool: Whether the file is read only.
     """
-    stat_ = os.stat(filename)
-    return bool(stat_.st_mode & stat.S_IWUSR)
+    try:
+        stat_ = os.stat(filename)
+        return bool(stat_.st_mode & stat.S_IWUSR)
+    except FileNotFoundError:
+        if safe:
+            return False
+        raise
 
 
 def get_real_path(filename: str) -> str:
