@@ -1,4 +1,4 @@
-# pylint: disable=too-many-locals, too-many-statements, consider-using-with
+# pylint: disable=too-many-locals, too-many-statements, consider-using-with, line-too-long
 
 import os
 import tempfile
@@ -6,7 +6,7 @@ import logging
 import asyncio
 
 from git.repo import Repo
-from gitalong import Repository, RepositoryNotSetup, CommitSpread
+from gitalong import Repository, RepositoryNotSetup, CommitSpread, functions, batch
 
 
 def example():
@@ -24,8 +24,7 @@ def example():
 
     except RepositoryNotSetup:
         # Creating a repository that Gitalong will use to store and share local changes.
-        # You would normally host this somewhere like GitHub so your entire team has
-        # access to it.
+        # You would normally host this somewhere like GitHub so your entire team has access to it.
         store = Repo.init(path=os.path.join(dirname, "store.git"), bare=True)
 
         # Setting up Gitalong in your project repository.
@@ -64,20 +63,19 @@ def example():
     project_clone.index.add("local.png")
     project_clone.index.commit(message="Add local.png")
 
-    # Updating tracked commits with current local changes. Because we specified
-    # `track_uncommitted`. Uncommitted changes will be stored as sha-less commit.
-    # File permissions of files will also be updated.
-    # This is expensive so only use that feature if you really need it.
-    repository.update_tracked_commits()
+    # Updating tracked commits with current local changes. Because we set
+    # `track_uncommitted` to `True`, uncommitted changes will be stored as sha-less commit.
+    # Because we specificed `update_permissions` to `True`, the file permissions will be updated.
+    # When setting `update_hooks` to 'True', the update will happen automatically on the following hooks:
+    # applypatch, post-checkout, post-commit, post-rewrite.
+    asyncio.run(batch.update_tracked_commits(repository))
 
+    # Checking the status for the files we created.
+    # For that purpose, we'll get the last commit for our files.
+    # Because we have set `track_uncomitted` to True, this will return a dummy commit for any uncommitted changes.
     last_commits = asyncio.run(
-        repository.batch.get_files_last_commits(
-            [untracked, uncommitted, local, current, remote]
-        )
+        batch.get_files_last_commits([untracked, uncommitted, local, current, remote])
     )
-
-    # Now we'll get the last commit for our files.
-    # This could return a dummy commit representing uncommitted changes.
     untracked_last_commit = last_commits[0]
     uncommitted_last_commit = last_commits[1]
     local_last_commit = last_commits[2]
@@ -92,7 +90,7 @@ def example():
     current_spread = current_last_commit.commit_spread
     remote_spread = remote_last_commit.commit_spread
 
-    # Checking that the spread flags are correct.
+    # Checking the resulting spreads.
     assert uncommitted_spread == CommitSpread.MINE_UNCOMMITTED
     assert local_spread == CommitSpread.MINE_ACTIVE_BRANCH
     assert (
@@ -101,6 +99,31 @@ def example():
     )
     assert remote_spread == CommitSpread.REMOTE_MATCHING_BRANCH
     assert untracked_spread == 0
+
+    # Claiming the files to modify them.
+    # If the file cannot be claimed the "blocking" commit will be returned.
+    # Since we have set `modify_permissions` to True, the claimed file will be made writeable.
+    # These claimed files will be released automatically on the next update if not modified.
+    blocking_commits = asyncio.run(
+        repository.batch.claim_files([untracked, uncommitted, local, current, remote])
+    )
+
+    # Checking that we get the expected blocking commits.
+    # The remote file is the only one that we are technically not allowed to change
+    # since we don't have that change.
+    assert not blocking_commits[0]
+    assert not blocking_commits[1]
+    assert not blocking_commits[2]
+    assert not blocking_commits[3]
+    assert blocking_commits[4]
+
+    # Checking the write permissions.
+    # Only the remote file should remain read-only.
+    assert functions.is_writeable(untracked)
+    assert functions.is_writeable(uncommitted)
+    assert functions.is_writeable(local)
+    assert functions.is_writeable(current)
+    assert not functions.is_writeable(remote)
 
 
 if __name__ == "__main__":
