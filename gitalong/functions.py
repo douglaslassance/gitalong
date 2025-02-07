@@ -137,6 +137,8 @@ def touch_file(filename: str) -> None:
     Args:
         filename (str): The file to touch.
     """
+    if not os.path.exists(os.path.dirname(filename)):
+        os.makedirs(os.path.dirname(filename))
     with open(filename, "a", encoding="utf-8"):
         pass
     os.utime(filename)
