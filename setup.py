@@ -36,7 +36,7 @@ setup(
     ],
     extras_require={
         "ci": [
-            "black",
+            "black~=24.10",
             "pep8-naming~=0.13",
             "Pillow~=10.4",
             "pylint~=3.0",

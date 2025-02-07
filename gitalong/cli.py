@@ -7,21 +7,21 @@ import git.exc
 from .__info__ import __version__
 from .enums import CommitSpread
 from .repository import Repository
-from .batch import get_files_last_commits
+from .batch import get_files_last_commits, claim_files, update_tracked_commits
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
     """Generate a status string for a file and its commit."""
-    prop = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
-    prop += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.REMOTE_MATCHING_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.REMOTE_OTHER_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
-    prop += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
+    spread_string = "+" if spread & CommitSpread.MINE_UNCOMMITTED else "-"
+    spread_string += "+" if spread & CommitSpread.MINE_ACTIVE_BRANCH else "-"
+    spread_string += "+" if spread & CommitSpread.MINE_OTHER_BRANCH else "-"
+    spread_string += "+" if spread & CommitSpread.REMOTE_MATCHING_BRANCH else "-"
+    spread_string += "+" if spread & CommitSpread.REMOTE_OTHER_BRANCH else "-"
+    spread_string += "+" if spread & CommitSpread.THEIR_OTHER_BRANCH else "-"
+    spread_string += "+" if spread & CommitSpread.THEIR_MATCHING_BRANCH else "-"
+    spread_string += "+" if spread & CommitSpread.THEIR_UNCOMMITTED else "-"
     splits = [
-        prop,
+        spread_string,
         filename,
         commit.get("sha", "-"),
         ",".join(commit.get("branches", {}).get("local", ["-"])) or "-",
@@ -70,9 +70,8 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
 def update(ctx):
     """Update tracked commits with local changes."""
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
-    if not repository:
-        return
-    repository.update_tracked_commits()
+    if repository:
+        asyncio.run(update_tracked_commits(repository))
 
 
 @click.command(
@@ -107,16 +106,47 @@ def status(ctx, filename, profile=False):  # pylint: disable=missing-function-do
 
 
 def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
-    file_status = []
-    commits = asyncio.run(get_files_last_commits(filename))
-    for _filename, commit in zip(filename, commits):
-        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", _filename))
-        absolute_filename = (
-            repository.get_absolute_path(_filename) if repository else _filename
+    absolute_filenames = []
+    for filename_ in filename:
+        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", filename_))
+        absolute_filenames.append(
+            repository.get_absolute_path(filename_) if repository else filename_
         )
-        spread = commit.commit_spread if repository else 0
-        file_status.append(get_status_string(absolute_filename, commit, spread))
-    click.echo("\n".join(file_status), err=False)
+    file_statuses = []
+    last_commits = asyncio.run(get_files_last_commits(absolute_filenames))
+    for filename_, last_commit in zip(filename, last_commits):
+        file_statuses.append(
+            get_status_string(filename_, last_commit, last_commit.commit_spread)
+        )
+    click.echo("\n".join(file_statuses), err=False)
+
+
+@click.command(
+    help=(
+        "Make provided files writeable if possible. Return error code 1 if one or more "
+        "files cannot be made writeable."
+    )
+)
+@click.argument(
+    "filename",
+    nargs=-1,
+    # help="The path to the file that should be made writable."
+)
+@click.pass_context
+def claim(ctx, filename):  # pylint: disable=missing-function-docstring
+    absolute_filenames = []
+    for filename_ in filename:
+        repository = Repository.from_filename(ctx.obj.get("REPOSITORY", filename_))
+        absolute_filenames.append(
+            repository.get_absolute_path(filename_) if repository else filename_
+        )
+    file_statuses = []
+    blocking_commits = asyncio.run(claim_files(absolute_filenames))
+    for filename_, blocking_commit in zip(filename, blocking_commits):
+        file_statuses.append(
+            get_status_string(filename_, blocking_commit, blocking_commit.commit_spread)
+        )
+    click.echo("\n".join(file_statuses), err=False)
 
 
 @click.command(help="Setup Gitalong in a repository.")
@@ -259,6 +289,7 @@ cli.add_command(config)
 cli.add_command(update)
 cli.add_command(setup)
 cli.add_command(status)
+cli.add_command(claim)
 cli.add_command(version)
 
 
