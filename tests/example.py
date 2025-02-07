@@ -1,4 +1,4 @@
-# pylint: disable=too-many-locals, too-many-statements, consider-using-with
+# pylint: disable=too-many-locals, too-many-statements, consider-using-with, line-too-long
 
 import os
 import tempfile
@@ -24,8 +24,7 @@ def example():
 
     except RepositoryNotSetup:
         # Creating a repository that Gitalong will use to store and share local changes.
-        # You would normally host this somewhere like GitHub so your entire team has
-        # access to it.
+        # You would normally host this somewhere like GitHub so your entire team has access to it.
         store = Repo.init(path=os.path.join(dirname, "store.git"), bare=True)
 
         # Setting up Gitalong in your project repository.
@@ -64,8 +63,8 @@ def example():
     project_clone.index.add("local.png")
     project_clone.index.commit(message="Add local.png")
 
-    # Updating tracked commits with current local changes.
-    # Because we set `track_uncommitted` to `True`, uncommitted changes will be stored as sha-less commit.
+    # Updating tracked commits with current local changes. Because we set
+    # `track_uncommitted` to `True`, uncommitted changes will be stored as sha-less commit.
     # Because we specificed `update_permissions` to `True`, the file permissions will be updated.
     # When setting `update_hooks` to 'True', the update will happen automatically on the following hooks:
     # applypatch, post-checkout, post-commit, post-rewrite.
