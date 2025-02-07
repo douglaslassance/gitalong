@@ -130,3 +130,13 @@ def get_filenames_from_move_string(move_string: str) -> tuple:
             rights.append(splits[-1])
     pair = {move_string.format(*lefts), move_string.format(*rights)}
     return tuple(sorted(pair))
+
+
+def touch_file(filename: str) -> None:
+    """
+    Args:
+        filename (str): The file to touch.
+    """
+    with open(filename, "a", encoding="utf-8"):
+        pass
+    os.utime(filename)

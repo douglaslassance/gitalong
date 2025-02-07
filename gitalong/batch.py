@@ -337,8 +337,6 @@ async def update_files_permissions(filenames: List[str]):
         repository = Repository.from_filename(os.path.dirname(filename))
         if not repository:
             continue
-        if not repository.config.get("modify_permissions"):
-            continue
         spread = last_commit.commit_spread
         if not spread:
             continue
@@ -414,9 +412,11 @@ async def update_tracked_commits(
         repository, claims=claims
     )
     absolute_filenames = []
-    for filename in repository.files:
-        absolute_filenames.append(repository.get_absolute_path(filename))
-    await repository.batch.update_files_permissions(absolute_filenames)
+    if repository.config.get("modify_permissions"):
+        print("Updating permissions")
+        for filename in repository.files:
+            absolute_filenames.append(repository.get_absolute_path(filename))
+        await repository.batch.update_files_permissions(absolute_filenames)
 
 
 async def claim_files(
