@@ -16,9 +16,6 @@ from git.repo import Repo
 from gitalong import Repository, CommitSpread, RepositoryNotSetup, cli, batch
 from gitalong.functions import is_writeable
 
-# Deliberately import the module to avoid circular imports.
-import gitalong.batch as batch  # pylint: disable=consider-using-from-import
-
 from .functions import save_image
 
 
