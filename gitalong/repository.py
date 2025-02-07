@@ -6,7 +6,6 @@ import logging
 import os
 import shutil
 import socket
-import asyncio
 
 from typing import Optional, List
 
@@ -305,16 +304,16 @@ class Repository:  # pylint: disable=too-many-public-methods
             return filename
         return os.path.join(self.working_dir, filename)
 
-    @property
-    def uncommitted_changes_commit(self) -> dict:
+    def get_uncommitted_changes_commit(
+        self, claims: Optional[List[str]] = None
+    ) -> dict:
         """
         Returns:
             dict: Returns a commit dictionary representing uncommitted changes.
         """
-        uncommitted_changes = self._uncommitted_changes
+        uncommitted_changes = self._uncommitted_changes + (claims or [])
         if not uncommitted_changes:
             return {}
-
         commit = {
             "remote": self._remote.url,
             "changes": self._uncommitted_changes,
@@ -322,37 +321,6 @@ class Repository:  # pylint: disable=too-many-public-methods
         }
         commit.update(self.context_dict)
         return commit
-
-    def _accumulate_local_only_commits(
-        self, start: git.Commit, local_commits: List[dict]
-    ):
-        """Accumulates a list of local only commit starting from the provided commit.
-
-        Args:
-            local_commits (list): The accumulated local commits.
-            start (git.objects.Commit):
-                The commit that we start peeling from last commit.
-        """
-        from .commit import Commit  # pylint: disable=import-outside-toplevel
-
-        if self._managed_repository.git.branch("--remotes", "--contains", start.hexsha):
-            return
-
-        commit = Commit(self)
-        commit.update_with_sha(start.hexsha)
-        commit.update_context()
-
-        changes = asyncio.run(self.batch.get_commits_changes([commit]))
-        commit["changes"] = changes[0]
-
-        branches_list = asyncio.run(self.batch.get_commits_branches([commit]))
-        branches = branches_list[0] if branches_list else []
-        commit["branches"] = {"local": branches}
-
-        if commit not in local_commits:
-            local_commits.append(commit)
-        for parent in start.parents:
-            self._accumulate_local_only_commits(parent, local_commits)
 
     @property
     def context_dict(self) -> dict:
@@ -366,25 +334,20 @@ class Repository:  # pylint: disable=too-many-public-methods
             "clone": get_real_path(self.working_dir),
         }
 
-    def get_local_only_commits(self) -> list:
-        """
-        Returns:
-            list:
-                Commits that are not on remote branches. Includes a commit that
-                represents uncommitted changes.
-        """
-        local_commits = []
-        for branch in self._managed_repository.branches:
-            self._accumulate_local_only_commits(branch.commit, local_commits)
-        if self.config.get("track_uncommitted"):
-            uncommitted_changes_commit = self.uncommitted_changes_commit
-            if uncommitted_changes_commit:
-                local_commits.insert(0, uncommitted_changes_commit)
-        local_commits.sort(key=lambda commit: commit.get("date"), reverse=True)
-        return local_commits
+    def is_remote_commit(self, hexsha: str) -> bool:
+        """Whether a commit is on a remote branch."""
+        return self._managed_repository.git.branch("--remotes", "--contains", hexsha)
 
     @property
-    def _uncommitted_changes(self) -> list:
+    def branches(self) -> List[git.Head]:
+        """
+        Returns:
+            list: A list of branches in the managed repository.
+        """
+        return self._managed_repository.branches
+
+    @property
+    def _uncommitted_changes(self) -> List[str]:
         """
         Returns:
             list: A list of unique relative filenames that feature uncommitted changes.
@@ -432,19 +395,6 @@ class Repository:  # pylint: disable=too-many-public-methods
         except git.exc.GitCommandError:
             return []
 
-    @property
-    def _locally_changed_files(self) -> list:
-        """
-        Returns:
-            list:
-                The relative filenames that have been changed by local commits or
-                uncommitted changes.
-        """
-        local_changes = set()
-        for commit in self.get_local_only_commits():
-            local_changes = local_changes.union(commit.get("changes", []))
-        return list(local_changes)
-
     def is_file_tracked(self, filename: str) -> bool:
         """
         Args:
@@ -472,34 +422,6 @@ class Repository:  # pylint: disable=too-many-public-methods
             str: The working directory of the managed repository.
         """
         return str(self._managed_repository.working_dir)
-
-    def update_tracked_commits(self):
-        """Pulls the tracked commits from the store and updates them."""
-        self._store.commits = self._get_updated_tracked_commits()
-        if self.config.get("modify_permissions"):
-            absolute_filenames = []
-            for filename in self.files:
-                absolute_filenames.append(self.get_absolute_path(filename))
-            asyncio.run(self.batch.update_files_permissions(absolute_filenames))
-
-    def _get_updated_tracked_commits(self) -> list:
-        """
-        Returns:
-            list:
-                Local commits for all clones with local commits and uncommitted changes
-                from this clone.
-        """
-        tracked_commits = []
-        for commit in self._store.commits:
-            remote = self._remote.url
-            is_other_remote = commit.get("remote") != remote
-            if is_other_remote or not commit.is_issued_commit():
-                tracked_commits.append(commit)
-                continue
-
-        for commit in self.get_local_only_commits():
-            tracked_commits.append(commit)
-        return tracked_commits
 
     def pulled_within(self, seconds: float) -> bool:
         """
