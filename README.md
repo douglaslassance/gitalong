@@ -59,19 +59,24 @@ git -C project add local.png
 git -C project commit -m "Add local.png"
 
 # Updating tracked commits with current local changes.
-# Because we specified `track_uncommitted`. Uncommitted changes will be stored as sha-less commit.
-# Update permissions of all files based on track commits.
-# Because `modify_permssions` was passed this will update all permissions of tracked files.
-# Permission updates currently comes at high performance cost and is not recommended.
+# Because we passed `--track-uncommitted`, uncommitted changes will be stored as sha-less commit.
+# Because we passed `--modify-permssions` the file permissions will be updated.
+# When passing `--update-hooks`, the update will happen automatically on the following hooks:
+# applypatch, post-checkout, post-commit, post-rewrite.
 gitalong -C project update
 
 # Checking the status for the files we created.
 # Each status will show <spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>.
-# Spread flags represent where the commit live.
-# It will be displayed in the following order:
+# Spread flags represent where the commit lives. It will be displayed in the following order:
 # <mine-uncommitted><mine-active-branch><mine-other-branch><remote-matching-branch><remote-other-branch><other-other-branch><other-matching-branch><other-uncomitted>
 # A `+` sign means is true, while a `-` sign means false or unknown.
-gitalong -C project untracked.txt status uncommited.png local.png current.jpg remote.jpg
+gitalong -C project status untracked.txt uncommited.png local.png current.jpg remote.jpg
+
+# Claiming the files to modify them.
+# If the file cannot be claimed the "blocking" commit will be returned.
+# Since we passed `--modify-permissions`, the claimed file will be made writeable.
+# These claimed files will be released automatically on the next update if not modified.
+gitalong -C project claim untracked.txt uncommited.png local.png current.jpg remote.jpg
 ```
 
 ### Python
