@@ -7,6 +7,7 @@ import git.exc
 from .__info__ import __version__
 from .enums import CommitSpread
 from .repository import Repository
+from .contexts import ProfileContext
 from .batch import get_files_last_commits, claim_files, update_tracked_commits
 
 
@@ -66,9 +67,25 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
         "files their permissions changed."
     )
 )
+@click.option(
+    "-p",
+    "--profile",
+    is_flag=True,
+    help=(
+        "Will generate a profile file in the current working directory."
+        "The file can be opened in a profiler like snakeviz."
+    ),
+)
 @click.pass_context
-def update(ctx):
-    """Update tracked commits with local changes."""
+def update(ctx, profile=False):  # pylint: disable=missing-function-docstring
+    if profile:
+        with ProfileContext():
+            run_update(ctx)
+        return
+    run_update(ctx)
+
+
+def run_update(ctx):  # pylint: disable=missing-function-docstring
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
     if repository:
         asyncio.run(update_tracked_commits(repository))
@@ -94,13 +111,8 @@ def update(ctx):
 @click.pass_context
 def status(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
     if profile:
-        import cProfile  # pylint: disable=import-outside-toplevel
-        import pstats  # pylint: disable=import-outside-toplevel
-
-        with cProfile.Profile() as pr:
+        with ProfileContext():
             run_status(ctx, filename)
-        results = pstats.Stats(pr)
-        results.dump_stats("gitalong.prof")
         return
     run_status(ctx, filename)
 
@@ -132,8 +144,25 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     nargs=-1,
     # help="The path to the file that should be made writable."
 )
+@click.option(
+    "-p",
+    "--profile",
+    is_flag=True,
+    help=(
+        "Will generate a profile file in the current working directory."
+        "The file can be opened in a profiler like snakeviz."
+    ),
+)
 @click.pass_context
-def claim(ctx, filename):  # pylint: disable=missing-function-docstring
+def claim(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
+    if profile:
+        with ProfileContext():
+            run_claim(ctx, filename)
+        return
+    run_claim(ctx, filename)
+
+
+def run_claim(ctx, filename):  # pylint: disable=missing-function-docstring
     absolute_filenames = []
     for filename_ in filename:
         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", filename_))

@@ -148,7 +148,7 @@ class Commit(dict):
                 information about where this commit lives across branches and clones.
         """
         commit_spread = 0
-        active_branch = self._repository.active_branch_name
+        active_branch = self._repository.active_branch_name if self._repository else ""
         if self.get("user", ""):
             is_issued = self.is_issued_commit()
             if "sha" in self:
