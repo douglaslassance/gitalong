@@ -413,7 +413,6 @@ async def update_tracked_commits(
     )
     absolute_filenames = []
     if repository.config.get("modify_permissions"):
-        print("Updating permissions")
         for filename in repository.files:
             absolute_filenames.append(repository.get_absolute_path(filename))
         await repository.batch.update_files_permissions(absolute_filenames)
