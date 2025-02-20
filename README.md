@@ -131,6 +131,14 @@ source .venv/bin/activate
 pip install -e ".[ci]"
 ```
 
+### Branching strategy
+
+The `main` branch is used for development and integration of new features. Major an minor releases (e.g. `0.1.0`) are tagged from this branch.
+
+When a new minor version is released, a new release branch is created from `main` and used for maintaining and patching the release. Patch versions (e.g. `0.1.1`) are tagged from this branch.
+
+Feature branches are created from `main` and squash merged via pull requests, making the history cleaner and easier to follow.
+
 ### Testing
 
 ```shell
