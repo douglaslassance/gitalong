@@ -162,6 +162,20 @@ def claim(ctx, filename, profile=False):  # pylint: disable=missing-function-doc
     run_claim(ctx, filename)
 
 
+@click.command(
+    help=("Make Gitalong forget a bout files that it was potentially trackings.")
+)
+@click.argument(
+    "filename",
+    nargs=-1,
+    # help="The path to the file that Gitalong should forget about."
+)
+@click.pass_context
+def forget(ctx, filename):  # pylint: disable=missing-function-docstring
+    repository = Repository.from_filename(ctx.obj.get("REPOSITORY", filename_))
+    respository.forget_files(filename)
+
+
 def run_claim(ctx, filename):  # pylint: disable=missing-function-docstring
     absolute_filenames = []
     for filename_ in filename:
