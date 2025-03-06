@@ -398,7 +398,7 @@ class Repository:  # pylint: disable=too-many-public-methods
     def is_file_tracked(self, filename: str) -> bool:
         """
         Args:
-            filename (str): The absolute or relative file or folder path to check for.
+            filename (str): Absolute or relative file or folder path to check for.
 
         Returns:
             bool: Whether the file is tracked by Gitalong.
@@ -466,3 +466,37 @@ class Repository:  # pylint: disable=too-many-public-methods
             str: The name of the active branch.
         """
         return self._managed_repository.active_branch.name
+
+    def forget_files(self, filenames):
+        """Forget about files that Gitalong is tracking.
+        Args:
+           filenames (list): Absolute or relative filenames to forget about.
+        """
+        relative_filenames = [
+            self.get_relative_path(filename) for filename in filenames
+        ]
+        commits = self.store.commits
+
+        for commit in commits:
+            if commit.get("remote") != self._remote.url:
+                continue
+            pruned_changes = []
+            for change in commit.get("changes", []):
+                if change in relative_filenames:
+                    continue
+                pruned_changes.append(change)
+            commit["changes"] = pruned_changes
+
+            pruned_claims = []
+            for claim in commit.get("claims", []):
+                if claim in relative_filenames:
+                    continue
+                pruned_claims.append(claim)
+            commit["claims"] = pruned_changes
+
+        pruned_commits = []
+        for commit in commits:
+            if not commit.get("changes") and not commit.get("claims"):
+                pruned_commits.append(commit)
+
+        self.store.commits = pruned_commits
