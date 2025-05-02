@@ -8,7 +8,7 @@ from .__info__ import __version__
 from .enums import CommitSpread
 from .repository import Repository
 from .contexts import ProfileContext
-from .batch import get_files_last_commits, claim_files, update_tracked_commits
+from .batch import get_files_last_commits, claim_files, sync_tracked_commits
 
 
 def get_status_string(filename: str, commit: dict, spread: int) -> str:
@@ -63,8 +63,8 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
 
 @click.command(
     help=(
-        "Update tracked commits with the local changes of this clone. echo a list of "
-        "files their permissions changed."
+        "Push and pull local changes. echo a list of "
+        "files which permissions changed."
     )
 )
 @click.option(
@@ -77,18 +77,18 @@ def config(ctx, prop):  # pylint: disable=missing-function-docstring
     ),
 )
 @click.pass_context
-def update(ctx, profile=False):  # pylint: disable=missing-function-docstring
+def sync(ctx, profile=False):  # pylint: disable=missing-function-docstring
     if profile:
         with ProfileContext():
-            run_update(ctx)
+            run_sync(ctx)
         return
-    run_update(ctx)
+    run_sync(ctx)
 
 
-def run_update(ctx):  # pylint: disable=missing-function-docstring
+def run_sync(ctx):  # pylint: disable=missing-function-docstring
     repository = Repository.from_filename(ctx.obj.get("REPOSITORY", ""))
     if repository:
-        asyncio.run(update_tracked_commits(repository))
+        asyncio.run(sync_tracked_commits(repository))
 
 
 @click.command(
@@ -145,6 +145,12 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     # help="The path to the file that should be made writable."
 )
 @click.option(
+    "-e",
+    "--error",
+    is_flag=True,
+    help=("Will return an error code 1 if one or more files cannot be claimed."),
+)
+@click.option(
     "-p",
     "--profile",
     is_flag=True,
@@ -154,15 +160,20 @@ def run_status(ctx, filename):  # pylint: disable=missing-function-docstring
     ),
 )
 @click.pass_context
-def claim(ctx, filename, profile=False):  # pylint: disable=missing-function-docstring
+def claim(
+    ctx,
+    filename,
+    error=False,
+    profile=False,
+):  # pylint: disable=missing-function-docstring
     if profile:
         with ProfileContext():
-            run_claim(ctx, filename)
+            run_claim(ctx, filename, error)
         return
-    run_claim(ctx, filename)
+    run_claim(ctx, filename, error)
 
 
-def run_claim(ctx, filename):  # pylint: disable=missing-function-docstring
+def run_claim(ctx, filename, error=False):  # pylint: disable=missing-function-docstring
     absolute_filenames = []
     for filename_ in filename:
         repository = Repository.from_filename(ctx.obj.get("REPOSITORY", filename_))
@@ -170,12 +181,20 @@ def run_claim(ctx, filename):  # pylint: disable=missing-function-docstring
             repository.get_absolute_path(filename_) if repository else filename_
         )
     file_statuses = []
+    error_messages = []
     blocking_commits = asyncio.run(claim_files(absolute_filenames))
     for filename_, blocking_commit in zip(filename, blocking_commits):
+        if blocking_commit:
+            user = blocking_commit.get("user", "an unknown user")
+            author = blocking_commit.get("author", user)
+            error_message = f"{filename_} is already claimed by {author}"
+            error_messages.append(error_message)
         file_statuses.append(
             get_status_string(filename_, blocking_commit, blocking_commit.commit_spread)
         )
     click.echo("\n".join(file_statuses), err=False)
+    if error and error_messages:
+        raise click.ClickException("\n".join(error_messages))
 
 
 @click.command(help="Setup Gitalong in a repository.")
@@ -315,7 +334,7 @@ def cli(ctx, repository, git_binary):  # pylint: disable=missing-function-docstr
 
 
 cli.add_command(config)
-cli.add_command(update)
+cli.add_command(sync)
 cli.add_command(setup)
 cli.add_command(status)
 cli.add_command(claim)

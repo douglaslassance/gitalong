@@ -70,7 +70,7 @@ class GitalongCase(unittest.TestCase):
         self._managed_clone.index.commit(message="Initial commit")
 
         # Simulating a post commit update.
-        asyncio.run(batch.update_tracked_commits(self.repository))
+        asyncio.run(batch.sync_tracked_commits(self.repository))
 
         # Checking commits.
         local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
@@ -83,7 +83,7 @@ class GitalongCase(unittest.TestCase):
         save_image(image_path)
 
         # Simulating a post save update.
-        asyncio.run(batch.update_tracked_commits(self.repository))
+        asyncio.run(batch.sync_tracked_commits(self.repository))
         local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
         self.assertEqual(2, len(local_only_commits))
         # The fist local only commit is always the one holding uncommitted changes.
@@ -98,7 +98,7 @@ class GitalongCase(unittest.TestCase):
         self._managed_clone.index.add(image_path)
 
         # Simulating a post stage update.
-        asyncio.run(batch.update_tracked_commits(self.repository))
+        asyncio.run(batch.sync_tracked_commits(self.repository))
 
         # Checking commits.
         self.assertEqual(2, len(local_only_commits))
@@ -122,7 +122,7 @@ class GitalongCase(unittest.TestCase):
         add_image_commit = self._managed_clone.index.commit(message=f"Add {image_name}")
 
         # Simulating the post-commit hook.
-        asyncio.run(batch.update_tracked_commits(self.repository))
+        asyncio.run(batch.sync_tracked_commits(self.repository))
 
         # Checking commits.
         local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
@@ -142,7 +142,7 @@ class GitalongCase(unittest.TestCase):
 
         # Simulating a post-push hook.
         # It could only be implemented server-side as it's not an actual Git hook.
-        asyncio.run(batch.update_tracked_commits(self.repository))
+        asyncio.run(batch.sync_tracked_commits(self.repository))
 
         # Checking commits.
         local_only_commits = asyncio.run(batch.get_local_only_commits(self.repository))
@@ -173,7 +173,7 @@ class GitalongCase(unittest.TestCase):
         self._managed_clone.git.reset("--hard", add_image_commit.hexsha)
 
         # Simulating the post-checkout hook.
-        asyncio.run(batch.update_tracked_commits(self.repository))
+        asyncio.run(batch.sync_tracked_commits(self.repository))
 
         # Checking commits.
         last_commits = asyncio.run(batch.get_files_last_commits([image_path]))
@@ -218,16 +218,87 @@ class GitalongCase(unittest.TestCase):
         save_image(image_path)
 
         # Testing update.
-        result = runner.invoke(cli.update, obj=obj)
+        result = runner.invoke(cli.sync, obj=obj)
         self.assertEqual(0, result.exit_code, result.output)
 
-        # Testing status.
-        result = runner.invoke(cli.status, [image_path], obj=obj)
-        self.assertEqual(0, result.exit_code, result.output)
         host = socket.gethostname()
         user = getpass.getuser()
-        output = f"+------- {image_path} - - - {host} {user}\n"
+        author = str(self._managed_clone.config_reader().get_value("user", "name"))
+
+        self._assert_cli_status(
+            runner, image_path, obj, f"+------- {image_path} - - - {host} {user}\n"
+        )
+
+        self._assert_cli_claim(
+            runner, image_path, obj, f"-------- {image_path} - - - - -\n"
+        )
+
+        # Commit the file with Git.
+        self._managed_clone.git.add(image_path)
+        self._managed_clone.git.commit("-m", "Add image.jpg")
+
+        # Modify the image.
+        save_image(image_path, color=(255, 255, 255))
+        self._managed_clone.git.add(image_path)
+        self._managed_clone.git.commit("-m", "Modify image.jpg")
+        hexsha = self._managed_clone.head.commit.hexsha
+        runner.invoke(cli.sync, obj=obj)
+
+        # self._assert_cli_status(
+        #     runner,
+        #     image_path,
+        #     obj,
+        #     f"-+------ {image_path} {hexsha} master - {host} {author}\n",
+        # )
+
+        # Pushing the commit to the remote.
+        self._managed_clone.git.push("origin", "master")
+        runner.invoke(cli.sync, obj=obj)
+
+        # self._assert_cli_status(
+        #     runner,
+        #     image_path,
+        #     obj,
+        #     f"-+-+---- {image_path} {hexsha} master master - {author}\n",
+        # )
+        self._assert_cli_claim(
+            runner, image_path, obj, f"-------- {image_path} - - - - -\n"
+        )
+
+        # Revert the last commit locally.
+        self._managed_clone.git.reset("--hard", "HEAD~1")
+        runner.invoke(cli.sync, obj=obj)
+
+        self._assert_cli_status(
+            runner,
+            image_path,
+            obj,
+            f"---+---- {image_path} {hexsha} - - - {author}\n",
+        )
+
+        # self._assert_cli_claim(
+        #     runner,
+        #     image_path,
+        #     obj,
+        #     f"---+---- {image_path} {hexsha} - - - {author}\n",
+        #     error=True,
+        # )
+
+    def _assert_cli_status(self, runner, image_path: str, obj, output: str):
+        result = runner.invoke(cli.status, [image_path], obj=obj)
+        self.assertEqual(0, result.exit_code, result.output)
         self.assertEqual(output, result.output)
+
+    def _assert_cli_claim(
+        self, runner, image_path: str, obj, output: str, error: bool = False
+    ):
+        result = runner.invoke(cli.claim, [image_path], obj=obj)
+        self.assertEqual(0, result.exit_code, result.output)
+        self.assertEqual(output, result.output)
+
+        # Testing claim with error.
+        result = runner.invoke(cli.claim, ["--error", image_path], obj=obj)
+        self.assertEqual(1 if error else 0, result.exit_code)
 
     def tearDown(self):
         try:

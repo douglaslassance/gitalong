@@ -149,6 +149,7 @@ class Commit(dict):
         """
         commit_spread = 0
         active_branch = self._repository.active_branch_name if self._repository else ""
+        # Commits with a user key are representing local uncommited changes.
         if self.get("user", ""):
             is_issued = self.is_issued_commit()
             if "sha" in self:
