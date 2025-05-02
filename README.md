@@ -4,7 +4,7 @@
 [![Documentation Status](https://readthedocs.org/projects/gitalong/badge/?version=latest)](https://gitalong.readthedocs.io/en/latest)
 [![codecov](https://codecov.io/gh/douglaslassance/gitalong/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong)
 
-Gitalong is a tool for Git repositories that seek to prevent conflicts between files when working with a team.
+Gitalong is a companion for Git clients designed to prevent conflicts between files when working with a team.
 It uses hooks and a store to communicate local changes across all clones of a given remote.
 In turns this information can be leveraged by integrations to prevent modifying files that are already changed
 elsewhere.
@@ -39,7 +39,7 @@ git init --bare store.git
 # Setting up Gitalong in your project repository.
 # This will clone the store repository in an ignored `.gitalong` folder.
 # It will also start tracking a `.gitalong.json` configuration file.
-gitalong -C project setup store.git --modify-permissions --tracked-extensions .jpg,.png --track-uncommitted --update-gitignore --update-hooks
+gitalong -C project setup store.git --modify-permissions --tracked-extensions .jpg,.png --track-uncommitted --update-gitignore
 
 # Creating some files.
 touch project/untracked.txt
@@ -58,12 +58,10 @@ git -C project reset --hard HEAD^
 git -C project add local.png
 git -C project commit -m "Add local.png"
 
-# Updating tracked commits with current local changes.
+# Synchronizing tracked commits with current local changes.
 # Because we passed `--track-uncommitted`, uncommitted changes will be stored as sha-less commit.
 # Because we passed `--modify-permssions` the file permissions will be updated.
-# When passing `--update-hooks`, the update will happen automatically on the following hooks:
-# applypatch, post-checkout, post-commit, post-rewrite.
-gitalong -C project update
+gitalong -C project sync
 
 # Checking the status for the files we created.
 # Each status will show <spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>.
@@ -75,13 +73,20 @@ gitalong -C project status untracked.txt uncommited.png local.png current.jpg re
 # Claiming the files to modify them.
 # If the file cannot be claimed the "blocking" commit will be returned.
 # Since we passed `--modify-permissions`, the claimed file will be made writeable.
-# These claimed files will be released automatically on the next update if not modified.
+# These claimed files will be released automatically on the next synchronization if not modified.
 gitalong -C project claim untracked.txt uncommited.png local.png current.jpg remote.jpg
+
+# For more information.
+gitalong --help
 ```
 
 ### Python
 
 You can find a usage example in [example.py](https://github.com/douglaslassance/gitalong/blob/main/tests/example.py).
+
+## Hooks
+
+If `--update-hooks` is used with the `setup` command, the `post-commit`, `post-checkout`, `post-applypatch`, and `post-rewrite` hooks will be synchronizing local changes with the store using the `sync` command. The `pre-commit` hook will check if all staged files can be modified using the `claim` command.
 
 ## Stores
 
@@ -102,13 +107,13 @@ This method is used in the usage examples above.
 You will get faster operations with this option but it may come at a [cost](https://jsonbin.io/pricing) depending on
 your usage. See how to set this up below.
 
-### Shell
+#### Shell
 
 ```azure
 gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> --store-header X-Access-Key=<ACCESS_KEY> ...
 ```
 
-### Python
+#### Python
 
 ```python
 repository = Repository.setup(
@@ -117,13 +122,16 @@ repository = Repository.setup(
     ...
 ```
 
-Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS_KEY`.
+> [!TIP]
+> Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS_KEY`.
 
 ## Development
 
+Contributions are always appreciated. The repository comes with Visual Studio Code setting, that said, all manual operations are documnented below.
+
 ### Setting up
 
-Setup a Python virtual environment and run the following command.
+The fllowing command will create a virtual environment and install requirements.
 
 ```shell
 python -m venv .venv

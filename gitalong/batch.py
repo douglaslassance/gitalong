@@ -404,7 +404,7 @@ async def get_updated_tracked_commits(
     return tracked_commits
 
 
-async def update_tracked_commits(
+async def sync_tracked_commits(
     repository: Repository, claims: Optional[List[str]] = None
 ):
     """Pulls the tracked commits from the store and updates them."""
@@ -458,7 +458,7 @@ async def claim_files(
     # Updating the tracked commits for each repository affected.
     for repository in filenames_by_repository:
         if repository:
-            await update_tracked_commits(
+            await sync_tracked_commits(
                 repository,
                 claims=filenames_by_repository.get(repository, []),
             )

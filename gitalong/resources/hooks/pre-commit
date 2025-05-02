@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Gitalong
+if command -v gitalong
+then
+	# Check if all files staged for commit can succesfully be claimed.
+    staged_files=$(git diff --cached --name-only)
+    gitalong claim --error $staged_files
+else
+	echo "Gitalong CLI is not installed on this system."
+fi

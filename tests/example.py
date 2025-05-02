@@ -68,7 +68,7 @@ def example():
     # Because we specificed `update_permissions` to `True`, the file permissions will be updated.
     # When setting `update_hooks` to 'True', the update will happen automatically on the following hooks:
     # applypatch, post-checkout, post-commit, post-rewrite.
-    asyncio.run(batch.update_tracked_commits(repository))
+    asyncio.run(batch.sync_tracked_commits(repository))
 
     # Checking the status for the files we created.
     # For that purpose, we'll get the last commit for our files.
