@@ -244,12 +244,12 @@ class GitalongCase(unittest.TestCase):
         hexsha = self._managed_clone.head.commit.hexsha
         runner.invoke(cli.sync, obj=obj)
 
-        # self._assert_cli_status(
-        #     runner,
-        #     image_path,
-        #     obj,
-        #     f"-+------ {image_path} {hexsha} master - {host} {author}\n",
-        # )
+        self._assert_cli_status(
+            runner,
+            image_path,
+            obj,
+            f"-+------ {image_path} {hexsha} master - {host} {author}\n",
+        )
 
         # Pushing the commit to the remote.
         self._managed_clone.git.push("origin", "master")
