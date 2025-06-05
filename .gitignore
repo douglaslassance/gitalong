@@ -153,3 +153,4 @@ dmypy.json
 
 # Test data files
 /tests/*.json
+.aider*
