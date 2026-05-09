@@ -1,13 +1,11 @@
 name: ci
 
-# Auto-runs on push/PR are disabled while the Rust rewrite is still WIP.
-# Re-enable by restoring the push/pull_request triggers below.
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-  # push:
-  #   branches: [main, rust]
-  # pull_request:
-  #   branches: [main, rust]
 
 env:
   CARGO_TERM_COLOR: always
