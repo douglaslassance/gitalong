@@ -75,10 +75,14 @@ TARGETS=(
     "x86_64-unknown-linux-gnu"
 )
 
-declare -A SHA
+# macOS ships bash 3.2 which has no associative arrays, so we build the
+# per-target sed expressions inline as we walk the target list. Placeholder
+# names follow the convention `{{SHA256_<TARGET_UPPERCASE_UNDERSCORED>}}`.
 
 SCRATCH=$(mktemp -d)
 trap 'rm -rf "$SCRATCH"' EXIT
+
+SED_ARGS=("-e" "s|{{VERSION}}|${VERSION}|g")
 
 for target in "${TARGETS[@]}"; do
     archive="${REPO_NAME}-${VERSION}-${target}.tar.gz"
@@ -88,7 +92,9 @@ for target in "${TARGETS[@]}"; do
         echo "Error: could not fetch ${archive_url}. Has CD finished uploading version ${VERSION}?" >&2
         exit 1
     fi
-    SHA["$target"]=$(shasum -a 256 "${SCRATCH}/${archive}" | awk '{print $1}')
+    sha=$(shasum -a 256 "${SCRATCH}/${archive}" | awk '{print $1}')
+    placeholder=$(echo "$target" | tr 'a-z-' 'A-Z_')
+    SED_ARGS+=("-e" "s|{{SHA256_${placeholder}}}|${sha}|g")
 done
 
 # --- Render the formula from the template ---
@@ -99,12 +105,7 @@ if [[ ! -f "$TEMPLATE" ]]; then
 fi
 
 RENDERED=$(mktemp)
-sed \
-    -e "s|{{VERSION}}|${VERSION}|g" \
-    -e "s|{{SHA256_AARCH64_APPLE_DARWIN}}|${SHA["aarch64-apple-darwin"]}|g" \
-    -e "s|{{SHA256_AARCH64_UNKNOWN_LINUX_GNU}}|${SHA["aarch64-unknown-linux-gnu"]}|g" \
-    -e "s|{{SHA256_X86_64_UNKNOWN_LINUX_GNU}}|${SHA["x86_64-unknown-linux-gnu"]}|g" \
-    "$TEMPLATE" > "$RENDERED"
+sed "${SED_ARGS[@]}" "$TEMPLATE" > "$RENDERED"
 
 echo "--- Rendered Formula/${REPO_NAME}.rb ---"
 cat "$RENDERED"
