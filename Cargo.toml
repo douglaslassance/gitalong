@@ -1,0 +1,18 @@
+[package]
+name = "gitalong"
+version = "0.1.0"
+edition = "2024"
+authors = ["Douglas Lassance <douglassance@gmail.com>"]
+description = "Keep your team in sync on what's being worked on across Git clones."
+license = "MIT"
+repository = "https://github.com/douglaslassance/gitalong"
+homepage = "https://github.com/douglaslassance/gitalong"
+readme = "README.md"
+keywords = ["git", "vcs", "collaboration", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "gitalong"
+path = "src/main.rs"
+
+[dependencies]
