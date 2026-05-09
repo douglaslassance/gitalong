@@ -137,7 +137,7 @@ fi
 
 git commit -m "${REPO_NAME} ${VERSION}"
 git -c "url.https://x-access-token:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/.insteadOf=https://github.com/" \
-    push --force-with-lease origin "$BRANCH"
+    push --force origin "$BRANCH"
 
 # --- Open the PR (only if asked) ---
 if [ "$PULL_REQUEST" = true ]; then
