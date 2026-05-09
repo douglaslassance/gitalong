@@ -232,10 +232,10 @@ impl Repository {
         let target_oid = git2::Oid::from_str(sha)?;
         for entry in self.inner.branches(Some(git2::BranchType::Remote))? {
             let (branch, _) = entry?;
-            if let Some(oid) = branch.get().target() {
-                if oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)? {
-                    return Ok(true);
-                }
+            if let Some(oid) = branch.get().target()
+                && (oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)?)
+            {
+                return Ok(true);
             }
         }
         Ok(false)
@@ -251,10 +251,10 @@ impl Repository {
             let Some(oid) = branch.get().target() else {
                 continue;
             };
-            if oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)? {
-                if let Some(name) = branch.name()? {
-                    hits.push(name.to_string());
-                }
+            if (oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)?)
+                && let Some(name) = branch.name()?
+            {
+                hits.push(name.to_string());
             }
         }
         Ok(hits)
@@ -271,12 +271,11 @@ impl Repository {
             let Some(oid) = branch.get().target() else {
                 continue;
             };
-            if oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)? {
-                if let Some(name) = branch.name()?
-                    && let Some((_remote, short)) = name.split_once('/')
-                {
-                    hits.push(short.to_string());
-                }
+            if (oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)?)
+                && let Some(name) = branch.name()?
+                && let Some((_remote, short)) = name.split_once('/')
+            {
+                hits.push(short.to_string());
             }
         }
         Ok(hits)
