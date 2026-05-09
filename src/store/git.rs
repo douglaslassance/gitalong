@@ -43,9 +43,7 @@ impl GitStore {
                     .ok_or_else(|| Error::InvalidConfig("non-UTF8 path".into()))?,
             ])
             .map_err(|e| {
-                Error::StoreUnreachable(format!(
-                    "failed to clone store from {store_url}: {e}"
-                ))
+                Error::StoreUnreachable(format!("failed to clone store from {store_url}: {e}"))
             })?;
         }
 
@@ -119,9 +117,8 @@ impl GitStore {
         if bytes.is_empty() {
             return Ok(Vec::new());
         }
-        let commits: Vec<Commit> = serde_json::from_slice(&bytes).map_err(|e| {
-            Error::InvalidConfig(format!("malformed {}: {e}", path.display()))
-        })?;
+        let commits: Vec<Commit> = serde_json::from_slice(&bytes)
+            .map_err(|e| Error::InvalidConfig(format!("malformed {}: {e}", path.display())))?;
         Ok(commits)
     }
 
@@ -159,7 +156,9 @@ fn check_status(output: &Output, args: &[&str]) -> Result<()> {
     }
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     let cmd = args.join(" ");
-    Err(Error::StoreUnreachable(format!("git {cmd} failed: {stderr}")))
+    Err(Error::StoreUnreachable(format!(
+        "git {cmd} failed: {stderr}"
+    )))
 }
 
 /// Set a fallback `user.name` / `user.email` on the store repo when the

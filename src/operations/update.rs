@@ -112,9 +112,7 @@ fn real_local_only_commits(
     for oid in walk {
         let oid = oid?;
         let git_commit = inner.find_commit(oid)?;
-        out.push(commit_from_git(
-            repo, &git_commit, context, remote_url,
-        )?);
+        out.push(commit_from_git(repo, &git_commit, context, remote_url)?);
     }
     Ok(out)
 }
@@ -231,8 +229,7 @@ fn uncommitted_changes_commit(
 /// Format a `git2::Time` as `YYYY-MM-DD HH:MM:SS+HH:MM` to match the Python
 /// `str(datetime)` output the on-disk `commits.json` is sorted by.
 fn format_git_time(t: git2::Time) -> Result<String> {
-    let offset = UtcOffset::from_whole_seconds(t.offset_minutes() * 60)
-        .unwrap_or(UtcOffset::UTC);
+    let offset = UtcOffset::from_whole_seconds(t.offset_minutes() * 60).unwrap_or(UtcOffset::UTC);
     let dt = OffsetDateTime::from_unix_timestamp(t.seconds())
         .map_err(|e| Error::InvalidConfig(format!("git commit timestamp: {e}")))?
         .to_offset(offset);
@@ -264,7 +261,11 @@ mod tests {
     }
 
     fn run(dir: &Path, args: &[&str]) {
-        let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+        let out = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
         assert!(
             out.status.success(),
             "git {} failed: {}",
@@ -295,7 +296,10 @@ mod tests {
                 managed.path().to_str().unwrap(),
             ],
         );
-        run(managed.path(), &["config", "user.email", "alice@example.com"]);
+        run(
+            managed.path(),
+            &["config", "user.email", "alice@example.com"],
+        );
         run(managed.path(), &["config", "user.name", "Alice"]);
 
         let cfg = Config {

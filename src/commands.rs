@@ -164,7 +164,10 @@ pub fn status(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()
     let active = repo.active_branch_name()?;
     let ctx = repo.context();
     for status in &statuses {
-        println!("{}", crate::operations::format_status(status, active.as_deref(), &ctx));
+        println!(
+            "{}",
+            crate::operations::format_status(status, active.as_deref(), &ctx)
+        );
     }
     Ok(())
 }

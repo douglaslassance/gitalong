@@ -86,7 +86,11 @@ mod tests {
     use tempfile::TempDir;
 
     fn run(dir: &Path, args: &[&str]) {
-        let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+        let out = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
         assert!(out.status.success(), "git {} failed", args.join(" "));
     }
 

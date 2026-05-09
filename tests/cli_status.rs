@@ -17,7 +17,11 @@ use tempfile::tempdir;
 const GITIGNORE_PATCH: &str = "# Gitalong\n/.gitalong/\n!/.gitalong.cfg\n";
 
 fn run(dir: &Path, args: &[&str]) {
-    let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
     assert!(
         out.status.success(),
         "git {} failed: {}",
@@ -42,7 +46,10 @@ fn fixture() -> (tempfile::TempDir, tempfile::TempDir, tempfile::TempDir) {
             managed.path().to_str().unwrap(),
         ],
     );
-    run(managed.path(), &["config", "user.email", "alice@example.com"]);
+    run(
+        managed.path(),
+        &["config", "user.email", "alice@example.com"],
+    );
     run(managed.path(), &["config", "user.name", "Alice"]);
 
     let cfg = format!(

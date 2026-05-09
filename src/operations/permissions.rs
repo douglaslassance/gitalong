@@ -36,8 +36,8 @@ pub fn update_files_permissions(repo: &Repository, files: &[String]) -> Result<V
         // the writable bits. A file with both MINE_ACTIVE_BRANCH and
         // REMOTE_MATCHING_BRANCH is treated as read-only because someone
         // else's branch could see it. Mirror that exactness.
-        let want_writable = spread == CommitSpread::MINE_UNCOMMITTED
-            || spread == CommitSpread::MINE_ACTIVE_BRANCH;
+        let want_writable =
+            spread == CommitSpread::MINE_UNCOMMITTED || spread == CommitSpread::MINE_ACTIVE_BRANCH;
         let abs = repo.absolute_path(Path::new(&status.filename));
         if !abs.is_file() {
             continue;
@@ -62,7 +62,11 @@ fn set_writable(path: &Path, writable: bool) -> Result<bool> {
     let mut perms = meta.permissions();
     let mode = perms.mode();
     let user_write = 0o200;
-    let next = if writable { mode | user_write } else { mode & !user_write };
+    let next = if writable {
+        mode | user_write
+    } else {
+        mode & !user_write
+    };
     if next == mode {
         return Ok(false);
     }
@@ -99,10 +103,16 @@ mod tests {
         // Drop write, verify it's gone, restore it, verify it's back.
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o444)).unwrap();
         assert!(set_writable(&p, true).unwrap());
-        assert_ne!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o200, 0);
+        assert_ne!(
+            std::fs::metadata(&p).unwrap().permissions().mode() & 0o200,
+            0
+        );
 
         assert!(set_writable(&p, false).unwrap());
-        assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o200, 0);
+        assert_eq!(
+            std::fs::metadata(&p).unwrap().permissions().mode() & 0o200,
+            0
+        );
     }
 
     #[test]

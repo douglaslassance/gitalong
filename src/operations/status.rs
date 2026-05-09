@@ -51,16 +51,11 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
             continue;
         }
 
-        let from_store = pick_latest_store_commit(
-            &store_commits,
-            &rel,
-            &remote_url,
-            track_uncommitted,
-        );
+        let from_store =
+            pick_latest_store_commit(&store_commits, &rel, &remote_url, track_uncommitted);
         let commit = match from_store {
             Some(c) => c.clone(),
-            None => last_commit_from_git(repo, &rel, &remote_url, &context)?
-                .unwrap_or_default(),
+            None => last_commit_from_git(repo, &rel, &remote_url, &context)?.unwrap_or_default(),
         };
 
         let commit = enrich_branches(repo, commit)?;
@@ -81,7 +76,11 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
 /// Empty commit yields `-------- <filename> - - - - -`. The 8-character
 /// spread bitstring is part of the wire contract — bit order and padding
 /// must match across versions for shell scripts that parse this output.
-pub fn format_status(status: &FileStatus, active_branch: Option<&str>, ctx: &crate::repository::Context) -> String {
+pub fn format_status(
+    status: &FileStatus,
+    active_branch: Option<&str>,
+    ctx: &crate::repository::Context,
+) -> String {
     let spread = status.commit.spread(active_branch, ctx);
     let sha = status.commit.sha.as_deref().unwrap_or("-");
     let local = csv_or_dash(&status.commit.branches.local);
@@ -135,8 +134,7 @@ fn pick_latest_store_commit<'a>(
             if !track_uncommitted && c.sha.is_none() {
                 return false;
             }
-            c.remote.as_deref() == Some(remote_url)
-                && c.changes.iter().any(|p| p == rel_path)
+            c.remote.as_deref() == Some(remote_url) && c.changes.iter().any(|p| p == rel_path)
         })
         .max_by(|a, b| a.date.cmp(&b.date))
 }
@@ -179,11 +177,7 @@ fn last_commit_from_git(
 /// git2 surfaces an early-exit as an EUSER error rather than a clean stop,
 /// so the simpler invariant is "always continue iterating, just record".
 /// Commit diffs are small enough that the extra scanning is free.
-fn commit_touches(
-    repo: &git2::Repository,
-    c: &git2::Commit<'_>,
-    target: &Path,
-) -> Result<bool> {
+fn commit_touches(repo: &git2::Repository, c: &git2::Commit<'_>, target: &Path) -> Result<bool> {
     let new_tree = c.tree()?;
     let old_tree = if c.parent_count() == 0 {
         None
@@ -234,7 +228,11 @@ mod tests {
     use tempfile::TempDir;
 
     fn run(dir: &Path, args: &[&str]) {
-        let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+        let out = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .output()
+            .unwrap();
         assert!(out.status.success(), "git {} failed", args.join(" "));
     }
 
@@ -255,7 +253,10 @@ mod tests {
                 managed.path().to_str().unwrap(),
             ],
         );
-        run(managed.path(), &["config", "user.email", "alice@example.com"]);
+        run(
+            managed.path(),
+            &["config", "user.email", "alice@example.com"],
+        );
         run(managed.path(), &["config", "user.name", "Alice"]);
 
         let cfg = Config {

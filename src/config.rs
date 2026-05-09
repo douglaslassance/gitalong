@@ -208,10 +208,7 @@ mod tests {
             ..Config::default()
         };
         assert_eq!(cfg.property("store-url").as_deref(), Some("x.git"));
-        assert_eq!(
-            cfg.property("modify-permissions").as_deref(),
-            Some("true")
-        );
+        assert_eq!(cfg.property("modify-permissions").as_deref(), Some("true"));
         assert_eq!(cfg.property("track-binaries").as_deref(), Some("false"));
         assert_eq!(cfg.property("pull-threshold").as_deref(), Some("42.5"));
         assert_eq!(

@@ -90,7 +90,11 @@ pub struct SetupArgs {
     pub modify_permissions: bool,
 
     /// Cache store pulls for this many seconds (network optimization).
-    #[arg(long = "pull-threshold", default_value_t = 60.0, value_name = "SECONDS")]
+    #[arg(
+        long = "pull-threshold",
+        default_value_t = 60.0,
+        value_name = "SECONDS"
+    )]
     pub pull_threshold: f64,
 
     /// Auto-detect and track all binary files in the repository.
