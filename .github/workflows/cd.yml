@@ -188,9 +188,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
-        run: ./scripts/upload_build.sh ${{ needs.detect-version.outputs.version }}
+        run: ./upload_build.sh ${{ needs.detect-version.outputs.version }}
 
       # Homebrew tap submission is intentionally not part of CD — it's a
       # local-only step you run from your laptop after the artifacts are in
-      # R2. See scripts/homebrew_pr.sh; it reads the .sha256 sidecars from
+      # R2. See submit_build.sh; it reads the .sha256 sidecars from
       # S3_PUBLIC_URL so no local build is needed.
