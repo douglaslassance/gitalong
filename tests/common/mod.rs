@@ -2,6 +2,12 @@
 //!
 //! Each integration test gets its own `tempdir()` working tree so the tests
 //! are independent and the host filesystem stays clean.
+//!
+//! Each integration test binary compiles this module independently and only
+//! sees the helpers it uses; `dead_code` is silenced so newly added helpers
+//! don't break unrelated test binaries.
+
+#![allow(dead_code)]
 
 use std::path::Path;
 use std::process::Command;
