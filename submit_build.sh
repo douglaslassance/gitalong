@@ -21,7 +21,7 @@ for arg in "$@"; do
         -h|--help)
             cat <<EOF
 submit_build.sh - Push (and optionally PR) the new formula to the Homebrew tap
-Usage: ./scripts/submit_build.sh [--pull-request] <version>
+Usage: ./submit_build.sh [--pull-request] <version>
 
 Run this locally after CI has uploaded the release to R2. Fetches each
 target's .sha256 sidecar over HTTPS, renders the formula template, and
