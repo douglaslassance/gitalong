@@ -13,6 +13,8 @@ use anyhow::{Result, bail};
 
 use crate::VERSION;
 use crate::cli::SetupArgs;
+use crate::config::Config;
+use crate::error::Error;
 
 /// Resolved global flags shared across subcommands.
 #[derive(Debug, Clone)]
@@ -44,8 +46,40 @@ pub fn version(_opts: &GlobalOpts) -> Result<()> {
 }
 
 /// Print a single property from `.gitalong.json`.
-pub fn config(_opts: &GlobalOpts, _property: &str) -> Result<()> {
-    bail!("`gitalong config` is not implemented yet");
+///
+/// Walks up from the resolved repository path looking for the config file. If
+/// gitalong is not set up (no config found) or the property is unknown, prints
+/// nothing and exits successfully — matching the Python behavior so existing
+/// shell scripts that conditionally check output keep working.
+pub fn config(opts: &GlobalOpts, property: &str) -> Result<()> {
+    let Some(config_path) = find_config_upwards(&opts.repository) else {
+        return Ok(());
+    };
+    let config = match Config::load(&config_path) {
+        Ok(c) => c,
+        // Race against the filesystem: config disappeared between find and
+        // load. Treat the same as "not set up".
+        Err(Error::NotSetup(_)) => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    if let Some(value) = config.property(property) {
+        println!("{value}");
+    }
+    Ok(())
+}
+
+/// Walk up from `start` looking for a directory containing `.gitalong.json`.
+/// Returns the path to the config file when found.
+fn find_config_upwards(start: &Path) -> Option<PathBuf> {
+    let mut cursor: Option<&Path> = Some(start);
+    while let Some(dir) = cursor {
+        let candidate = Config::path_for(dir);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        cursor = dir.parent();
+    }
+    None
 }
 
 /// Initialize gitalong in the repository: write config, clone the store, optionally install hooks.
