@@ -10,7 +10,7 @@ set -euo pipefail
 if [[ "${1-}" == "-h" || "${1-}" == "--help" ]]; then
     cat <<EOF
 upload_build.sh - Upload release artifacts to Cloudflare R2 and update KV
-Usage: ./scripts/upload_build.sh <version>
+Usage: ./upload_build.sh <version>
 
 Reads dist/gitalong-<version>-*.{tar.gz,zip}.
 EOF
