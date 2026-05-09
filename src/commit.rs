@@ -80,12 +80,26 @@ impl Commit {
         self.user.is_some()
     }
 
-    /// `true` when the issuing context (host/user/clone) matches the given
-    /// [`Context`]. The Python uses dictdiffer to compare the three context
-    /// keys; we do the equivalent direct check.
+    /// `true` when this record was contributed by the given clone, identified
+    /// by the canonicalized working-tree path stored in `clone`.
     ///
-    /// Real commits don't carry a `user`/`host`, so this returns `false` for
-    /// them — only uncommitted-changes commits can be "issued by" a clone.
+    /// Used by [`crate::operations::update_tracked_commits`] to drop our own
+    /// previous entries before re-emitting the live local view. Both real
+    /// commits (which carry `clone` via `git_commit.repo.working_dir`) and
+    /// uncommitted-changes records (stamped via [`Self::stamp_context`]) are
+    /// matched by this predicate.
+    pub fn is_ours(&self, ctx: &Context) -> bool {
+        let clone_str = ctx.clone.to_string_lossy();
+        self.clone.as_deref() == Some(clone_str.as_ref())
+    }
+
+    /// `true` when this record carries the full host/user/clone context of
+    /// the given clone — only uncommitted-changes commits ever satisfy this,
+    /// since real commits don't carry `host`/`user`.
+    ///
+    /// Used during [`Self::spread`] to distinguish `MINE_UNCOMMITTED` from
+    /// `THEIR_UNCOMMITTED`. The looser [`Self::is_ours`] is preferred for
+    /// store filtering.
     pub fn is_issued_by(&self, ctx: &Context) -> bool {
         let clone_str = ctx.clone.to_string_lossy();
         self.host.as_deref() == Some(ctx.host.as_str())

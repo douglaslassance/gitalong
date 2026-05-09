@@ -28,6 +28,7 @@ thiserror = "2.0"
 git2 = { version = "0.20", default-features = false }
 whoami = "1.5"
 bitflags = { version = "2.6", features = ["serde"] }
+time = { version = "0.3", features = ["formatting", "macros"] }
 
 [features]
 # Statically link libgit2. Used for distribution builds (Homebrew releases) so

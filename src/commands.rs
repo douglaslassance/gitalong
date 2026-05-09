@@ -139,8 +139,16 @@ fn parse_store_headers(raw: &[String]) -> Result<BTreeMap<String, String>> {
 }
 
 /// Push this clone's local changes to the store, refreshing tracked commits.
-pub fn update(_opts: &GlobalOpts, _profile: bool) -> Result<()> {
-    bail!("`gitalong update` is not implemented yet");
+///
+/// `--profile` is a no-op for now; it was wired in the Python CLI to
+/// dump a cProfile trace and there's no Rust equivalent on the hot path
+/// yet. The flag is kept on the CLI so existing scripts don't break.
+pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
+    let Some(repo) = Repository::discover(&opts.repository)? else {
+        bail!("not in a managed repository (no .gitalong.json found)");
+    };
+    crate::operations::update_tracked_commits(&repo, &[])?;
+    Ok(())
 }
 
 /// Print the tracking status (commit spread) for each given file.

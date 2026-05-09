@@ -186,6 +186,134 @@ impl Repository {
         cfg.set_bool("core.fileMode", false)?;
         Ok(())
     }
+
+    /// Local branch names. Returns an empty vec when the repo has no branches
+    /// yet (e.g. freshly initialized).
+    pub fn local_branches(&self) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for entry in self.inner.branches(Some(git2::BranchType::Local))? {
+            let (branch, _) = entry?;
+            if let Some(name) = branch.name()? {
+                names.push(name.to_string());
+            }
+        }
+        Ok(names)
+    }
+
+    /// Name of the currently checked-out branch, or `None` for detached HEAD.
+    pub fn active_branch_name(&self) -> Result<Option<String>> {
+        let head = match self.inner.head() {
+            Ok(h) => h,
+            // Unborn branch (no commits yet): no active branch to report.
+            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        if !head.is_branch() {
+            return Ok(None);
+        }
+        Ok(head.shorthand().map(str::to_string))
+    }
+
+    /// URL of the first configured remote (typically `origin`), or `None` when
+    /// the repo has no remotes.
+    pub fn remote_url(&self) -> Result<Option<String>> {
+        let remotes = self.inner.remotes()?;
+        let Some(name) = remotes.iter().next().flatten() else {
+            return Ok(None);
+        };
+        let remote = self.inner.find_remote(name)?;
+        Ok(remote.url().map(str::to_string))
+    }
+
+    /// `true` when `sha` is reachable from any remote-tracking branch. Used to
+    /// answer "do we still need to track this commit, or is it already on a
+    /// remote anyone else can see?"
+    pub fn is_remote_commit(&self, sha: &str) -> Result<bool> {
+        let target_oid = git2::Oid::from_str(sha)?;
+        for entry in self.inner.branches(Some(git2::BranchType::Remote))? {
+            let (branch, _) = entry?;
+            if let Some(oid) = branch.get().target() {
+                if oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)? {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Local branch names that contain `sha` (i.e. `git branch --contains`).
+    /// The names returned are the short forms (e.g. `main`, `feature/foo`).
+    pub fn local_branches_containing(&self, sha: &str) -> Result<Vec<String>> {
+        let target_oid = git2::Oid::from_str(sha)?;
+        let mut hits = Vec::new();
+        for entry in self.inner.branches(Some(git2::BranchType::Local))? {
+            let (branch, _) = entry?;
+            let Some(oid) = branch.get().target() else {
+                continue;
+            };
+            if oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)? {
+                if let Some(name) = branch.name()? {
+                    hits.push(name.to_string());
+                }
+            }
+        }
+        Ok(hits)
+    }
+
+    /// Remote-tracking branch names that contain `sha`. Names are the short
+    /// forms after the remote prefix (e.g. `main` for `origin/main`),
+    /// matching the Python implementation's normalization.
+    pub fn remote_branches_containing(&self, sha: &str) -> Result<Vec<String>> {
+        let target_oid = git2::Oid::from_str(sha)?;
+        let mut hits = Vec::new();
+        for entry in self.inner.branches(Some(git2::BranchType::Remote))? {
+            let (branch, _) = entry?;
+            let Some(oid) = branch.get().target() else {
+                continue;
+            };
+            if oid == target_oid || self.inner.graph_descendant_of(oid, target_oid)? {
+                if let Some(name) = branch.name()?
+                    && let Some((_remote, short)) = name.split_once('/')
+                {
+                    hits.push(short.to_string());
+                }
+            }
+        }
+        Ok(hits)
+    }
+
+    /// Files with uncommitted changes — union of untracked, unstaged, and
+    /// staged paths. Returns repo-relative paths with forward slashes (the
+    /// form `commits.json` stores).
+    pub fn uncommitted_change_paths(&self) -> Result<Vec<String>> {
+        let mut opts = git2::StatusOptions::new();
+        opts.include_untracked(true)
+            .recurse_untracked_dirs(true)
+            .exclude_submodules(false);
+
+        let statuses = self.inner.statuses(Some(&mut opts))?;
+        let dirty_mask = git2::Status::WT_NEW
+            | git2::Status::WT_MODIFIED
+            | git2::Status::WT_DELETED
+            | git2::Status::WT_RENAMED
+            | git2::Status::WT_TYPECHANGE
+            | git2::Status::INDEX_NEW
+            | git2::Status::INDEX_MODIFIED
+            | git2::Status::INDEX_DELETED
+            | git2::Status::INDEX_RENAMED
+            | git2::Status::INDEX_TYPECHANGE;
+
+        let mut seen = std::collections::BTreeSet::new();
+        for entry in statuses.iter() {
+            if !entry.status().intersects(dirty_mask) {
+                continue;
+            }
+            if let Some(path) = entry.path() {
+                seen.insert(path.replace('\\', "/"));
+            }
+        }
+        Ok(seen.into_iter().collect())
+    }
 }
 
 /// Resolve symlinks in `p`, falling back to `p` itself when canonicalization
