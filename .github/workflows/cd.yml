@@ -1,11 +1,14 @@
 name: cd
 
-# Auto-run on main is disabled while the Rust rewrite is WIP.
-# Re-enable by uncommenting the push trigger below.
+# Releases fire when a SemVer tag (no `v` prefix, e.g. 1.0.0 or 1.0.0-rc.1)
+# is pushed. workflow_dispatch is kept as a manual escape hatch — handy for
+# re-running a release that hit a transient failure, or for dry-running on
+# the current Cargo.toml version without cutting a tag.
 on:
+  push:
+    tags:
+      - '*.*.*'
   workflow_dispatch:
-  # push:
-  #   branches: [main]
 
 env:
   REPO_NAME: gitalong
@@ -20,7 +23,7 @@ jobs:
       should_release: ${{ steps.version.outputs.SHOULD_RELEASE }}
     steps:
       - uses: actions/checkout@v4
-      - name: Read version from Cargo.toml and check R2
+      - name: Resolve version and check R2
         id: version
         env:
           S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
@@ -28,9 +31,26 @@ jobs:
           S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
         run: |
-          VERSION=$(awk -F'"' '/^version =/ { print $2; exit }' Cargo.toml)
+          CARGO_VERSION=$(awk -F'"' '/^version =/ { print $2; exit }' Cargo.toml)
+
+          # Tag-triggered runs are the canonical release path. Read the
+          # version from the tag and require Cargo.toml to match exactly —
+          # otherwise the binary would print one version while the artifact
+          # filename and tap PR claim another. workflow_dispatch falls back
+          # to whatever Cargo.toml says, since there's no tag to consult.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_VERSION="${GITHUB_REF#refs/tags/}"
+            if [[ "$TAG_VERSION" != "$CARGO_VERSION" ]]; then
+              echo "::error::Tag '${TAG_VERSION}' does not match Cargo.toml version '${CARGO_VERSION}'. Bump Cargo.toml first, or retag."
+              exit 1
+            fi
+            VERSION="$TAG_VERSION"
+            echo "Tag-driven release: ${VERSION}"
+          else
+            VERSION="$CARGO_VERSION"
+            echo "Manual run: using Cargo.toml version ${VERSION}"
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Detected version: $VERSION"
 
           aws configure set aws_access_key_id "$S3_ACCESS_KEY_ID"
           aws configure set aws_secret_access_key "$S3_SECRET_ACCESS_KEY"
