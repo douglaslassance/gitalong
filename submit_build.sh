@@ -67,13 +67,13 @@ if [[ ! "$TAP_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
     exit 1
 fi
 
-# Targets that ship via Homebrew (macOS + Linux, both arches). Windows is
-# uploaded to R2 but isn't a Homebrew target.
+# Targets that ship via Homebrew. brew is the macOS distribution channel
+# only — Linux users `cargo install gitalong` and Windows users grab the
+# zip from R2. CD still builds and uploads all five targets, but the
+# formula only references the macOS ones.
 TARGETS=(
     "aarch64-apple-darwin"
     "x86_64-apple-darwin"
-    "aarch64-unknown-linux-gnu"
-    "x86_64-unknown-linux-gnu"
 )
 
 # macOS ships bash 3.2 which has no associative arrays, so we build the
