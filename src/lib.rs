@@ -8,8 +8,10 @@ pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod repository;
 
 pub use config::Config;
+pub use repository::{Context, Repository};
 
 pub use error::{Error, Result};
 

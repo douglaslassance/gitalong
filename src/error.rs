@@ -31,4 +31,8 @@ pub enum Error {
     /// JSON serialization or parsing failure.
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+
+    /// Underlying git operation failed.
+    #[error(transparent)]
+    Git(#[from] git2::Error),
 }

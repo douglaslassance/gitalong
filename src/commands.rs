@@ -13,8 +13,7 @@ use anyhow::{Result, bail};
 
 use crate::VERSION;
 use crate::cli::SetupArgs;
-use crate::config::Config;
-use crate::error::Error;
+use crate::repository::Repository;
 
 /// Resolved global flags shared across subcommands.
 #[derive(Debug, Clone)]
@@ -47,39 +46,17 @@ pub fn version(_opts: &GlobalOpts) -> Result<()> {
 
 /// Print a single property from `.gitalong.json`.
 ///
-/// Walks up from the resolved repository path looking for the config file. If
-/// gitalong is not set up (no config found) or the property is unknown, prints
-/// nothing and exits successfully — matching the Python behavior so existing
-/// shell scripts that conditionally check output keep working.
+/// If the path is not in a managed repository or the property is unknown,
+/// prints nothing and exits successfully — matching the Python behavior so
+/// shell scripts conditionally checking the output keep working.
 pub fn config(opts: &GlobalOpts, property: &str) -> Result<()> {
-    let Some(config_path) = find_config_upwards(&opts.repository) else {
+    let Some(repo) = Repository::discover(&opts.repository)? else {
         return Ok(());
     };
-    let config = match Config::load(&config_path) {
-        Ok(c) => c,
-        // Race against the filesystem: config disappeared between find and
-        // load. Treat the same as "not set up".
-        Err(Error::NotSetup(_)) => return Ok(()),
-        Err(e) => return Err(e.into()),
-    };
-    if let Some(value) = config.property(property) {
+    if let Some(value) = repo.config().property(property) {
         println!("{value}");
     }
     Ok(())
-}
-
-/// Walk up from `start` looking for a directory containing `.gitalong.json`.
-/// Returns the path to the config file when found.
-fn find_config_upwards(start: &Path) -> Option<PathBuf> {
-    let mut cursor: Option<&Path> = Some(start);
-    while let Some(dir) = cursor {
-        let candidate = Config::path_for(dir);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        cursor = dir.parent();
-    }
-    None
 }
 
 /// Initialize gitalong in the repository: write config, clone the store, optionally install hooks.

@@ -3,6 +3,7 @@
 mod common;
 
 use std::fs;
+use std::path::Path;
 
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
@@ -19,10 +20,17 @@ const SAMPLE_CONFIG: &str = r#"{
 }
 "#;
 
+/// Initialize a git repo at `path` and drop the sample config into it. Tests
+/// that don't want a config call `git2::Repository::init` directly instead.
+fn init_managed_repo(path: &Path) {
+    git2::Repository::init(path).unwrap();
+    fs::write(path.join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
+}
+
 #[test]
 fn outputs_value_for_known_property() {
     let dir = tempdir().unwrap();
-    fs::write(dir.path().join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
+    init_managed_repo(dir.path());
 
     common::gitalong_in(dir.path())
         .args(["config", "store-url"])
@@ -34,7 +42,7 @@ fn outputs_value_for_known_property() {
 #[test]
 fn renders_bool_as_lowercase() {
     let dir = tempdir().unwrap();
-    fs::write(dir.path().join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
+    init_managed_repo(dir.path());
 
     common::gitalong_in(dir.path())
         .args(["config", "modify-permissions"])
@@ -52,7 +60,7 @@ fn renders_bool_as_lowercase() {
 #[test]
 fn unknown_property_prints_nothing() {
     let dir = tempdir().unwrap();
-    fs::write(dir.path().join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
+    init_managed_repo(dir.path());
 
     common::gitalong_in(dir.path())
         .args(["config", "no-such-key"])
@@ -63,8 +71,23 @@ fn unknown_property_prints_nothing() {
 
 #[test]
 fn no_config_file_exits_silently() {
+    // Git repo exists but no .gitalong.json — like running on a repo that
+    // hasn't been set up yet.
     let dir = tempdir().unwrap();
-    // No .gitalong.json on disk.
+    git2::Repository::init(dir.path()).unwrap();
+
+    common::gitalong_in(dir.path())
+        .args(["config", "store-url"])
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
+fn non_git_path_exits_silently() {
+    // Outside any git repository entirely.
+    let dir = tempdir().unwrap();
+
     common::gitalong_in(dir.path())
         .args(["config", "store-url"])
         .assert()
@@ -75,7 +98,7 @@ fn no_config_file_exits_silently() {
 #[test]
 fn finds_config_in_parent_directory() {
     let root = tempdir().unwrap();
-    fs::write(root.path().join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
+    init_managed_repo(root.path());
 
     let nested = root.path().join("a").join("b");
     fs::create_dir_all(&nested).unwrap();
@@ -90,6 +113,7 @@ fn finds_config_in_parent_directory() {
 #[test]
 fn invalid_config_returns_error() {
     let dir = tempdir().unwrap();
+    git2::Repository::init(dir.path()).unwrap();
     fs::write(dir.path().join(".gitalong.json"), b"{ broken").unwrap();
 
     common::gitalong_in(dir.path())
@@ -103,7 +127,7 @@ fn invalid_config_returns_error() {
 fn explicit_repository_flag_overrides_cwd() {
     let cwd = tempdir().unwrap();
     let repo = tempdir().unwrap();
-    fs::write(repo.path().join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
+    init_managed_repo(repo.path());
 
     common::gitalong_in(cwd.path())
         .args(["-C", repo.path().to_str().unwrap(), "config", "store-url"])
