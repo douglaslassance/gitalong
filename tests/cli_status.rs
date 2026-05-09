@@ -52,11 +52,16 @@ fn fixture() -> (tempfile::TempDir, tempfile::TempDir, tempfile::TempDir) {
     );
     run(managed.path(), &["config", "user.name", "Alice"]);
 
-    let cfg = format!(
-        r#"{{"store_url":"file://{}","store_headers":{{}},"modify_permissions":false,"track_binaries":false,"tracked_extensions":[],"pull_threshold":0.0,"track_uncommitted":true}}"#,
-        store.path().display()
-    );
-    fs::write(managed.path().join(".gitalong.json"), cfg).unwrap();
+    // Round-trip through the real Config serializer so Windows paths get the
+    // backslashes JSON-escaped properly. Hand-formatting `r#"…{}…"#` with a
+    // raw `Path::display()` produces invalid escape sequences on Windows.
+    let cfg = gitalong::Config {
+        store_url: format!("file://{}", store.path().display()),
+        pull_threshold: 0.0,
+        track_uncommitted: true,
+        ..gitalong::Config::default()
+    };
+    cfg.save(&managed.path().join(".gitalong.json")).unwrap();
     fs::write(managed.path().join(".gitignore"), GITIGNORE_PATCH).unwrap();
     fs::write(managed.path().join("README"), b"hi").unwrap();
     run(
