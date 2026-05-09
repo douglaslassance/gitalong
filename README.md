@@ -1,156 +1,140 @@
 # gitalong
 
-[![PyPI version](https://badge.fury.io/py/gitalong.svg)](https://badge.fury.io/py/gitalong)
-[![Documentation Status](https://readthedocs.org/projects/gitalong/badge/?version=latest)](https://gitalong.readthedocs.io/en/latest)
-[![codecov](https://codecov.io/gh/douglaslassance/gitalong/branch/main/graph/badge.svg?token=5267NA3EQQ)](https://codecov.io/gh/douglaslassance/gitalong)
+Gitalong helps teams sharing a Git repository avoid stepping on each other's
+files. Each clone publishes the changes it has in flight (committed but
+unpushed work, plus uncommitted edits when the option is on) to a shared
+*store*, and the CLI lets anyone query "who's currently editing this file?"
+or "can I claim this file for editing?".
 
-Gitalong is a tool for Git repositories that seek to prevent conflicts between files when working with a team.
-It uses hooks and a store to communicate local changes across all clones of a given remote.
-In turns this information can be leveraged by integrations to prevent modifying files that are already changed
-elsewhere.
+> [!NOTE]
+> The `1.x` line is a complete rewrite in Rust, distributed as a single
+> binary. The Python `0.x` releases (and the `gitalong` PyPI package) live on
+> the [`python`](https://github.com/douglaslassance/gitalong/tree/python)
+> branch and are kept in maintenance mode for legacy users.
 
-## Pre-requisites
+## Install
 
-- [Python >=3.10](https://www.python.org/downloads/)
-- [Git >=2.35.1](https://git-scm.com/downloads)
+A single static binary, no Python runtime required.
 
-> [!TIP]
-> Setting up Python and Git can be intimidating on Windows. You can make your life easier by installing [Scoop](https://scoop.sh/) and running `scoop install python git` in a Windows command prompt.
+```shell
+# Homebrew (preferred)
+brew install douglaslassance/tap/gitalong
 
-## Installation
-
+# From source via Cargo
+cargo install gitalong
 ```
-pip install gitalong
-```
+
+Requires Git ≥ 2.35 on `PATH`.
 
 ## Usage
 
-### Shell
-
 ```shell
-# Creating a dummy project repository and its clone in current working directory.
+# Stand up a project repository and a clone of it.
 git init --bare project.git
 git clone project.git project
 
-# Creating a repository that Gitalong will use to store and share local changes.
-# You would normally host this somewhere like GitHub so your entire team has access to it.
+# Stand up the store gitalong will use to share local changes between clones.
+# In production this lives on GitHub or another shared remote.
 git init --bare store.git
 
-# Setting up Gitalong in your project repository.
-# This will clone the store repository in an ignored `.gitalong` folder.
-# It will also start tracking a `.gitalong.json` configuration file.
-gitalong -C project setup store.git --modify-permissions --tracked-extensions .jpg,.png --track-uncommitted --update-gitignore --update-hooks
+# Initialize gitalong in the project clone.
+gitalong -C project setup ./store.git \
+  --modify-permissions \
+  --tracked-extensions .jpg,.png \
+  --track-uncommitted \
+  --update-gitignore \
+  --update-hooks
 
-# Creating some files.
+# Make a few files spread across local, remote, and uncommitted state.
 touch project/untracked.txt
 touch project/uncommitted.png
 touch project/local.png
 touch project/current.jpg
 touch project/remote.jpg
 
-# Spreading them across branches.
-git -C project add current.jpg
-git -C project commit -m "Add current.jpg"
-git -C project add remote.jpg
-git -C project commit -m "Add remote.jpg"
+git -C project add current.jpg && git -C project commit -m "Add current.jpg"
+git -C project add remote.jpg  && git -C project commit -m "Add remote.jpg"
 git -C project push
 git -C project reset --hard HEAD^
-git -C project add local.png
-git -C project commit -m "Add local.png"
+git -C project add local.png   && git -C project commit -m "Add local.png"
 
-# Updating tracked commits with current local changes.
-# Because we passed `--track-uncommitted`, uncommitted changes will be stored as sha-less commit.
-# Because we passed `--modify-permssions` the file permissions will be updated.
-# When passing `--update-hooks`, the update will happen automatically on the following hooks:
-# applypatch, post-checkout, post-commit, post-rewrite.
+# Push this clone's view of the world to the store.
+# (The post-commit / post-checkout / post-rewrite hooks installed by
+# `--update-hooks` do this automatically.)
 gitalong -C project update
 
-# Checking the status for the files we created.
-# Each status will show <spread> <filename> <commit> <local-branches> <remote-branches> <host> <author>.
-# Spread flags represent where the commit lives. It will be displayed in the following order:
-# <mine-uncommitted><mine-active-branch><mine-other-branch><remote-matching-branch><remote-other-branch><other-other-branch><other-matching-branch><other-uncomitted>
-# A `+` sign means is true, while a `-` sign means false or unknown.
-gitalong -C project status untracked.txt uncommited.png local.png current.jpg remote.jpg
+# What's the situation for each file?
+gitalong -C project status untracked.txt uncommitted.png local.png current.jpg remote.jpg
 
-# Claiming the files to modify them.
-# If the file cannot be claimed the "blocking" commit will be returned.
-# Since we passed `--modify-permissions`, the claimed file will be made writeable.
-# These claimed files will be released automatically on the next update if not modified.
-gitalong -C project claim untracked.txt uncommited.png local.png current.jpg remote.jpg
+# Claim files for editing. Returns exit 1 when any are blocked.
+gitalong -C project claim untracked.txt uncommitted.png local.png current.jpg remote.jpg
 ```
 
-### Python
+### Status output
 
-You can find a usage example in [example.py](https://github.com/douglaslassance/gitalong/blob/main/tests/example.py).
+Each line is:
+
+```text
+<spread> <filename> <sha> <local-branches> <remote-branches> <host> <author>
+```
+
+`<spread>` is an eight-character `+`/`-` bitstring describing where this
+commit lives. The bits, in order, are:
+
+| # | Flag                       | Meaning |
+|---|----------------------------|---------|
+| 1 | `MINE_UNCOMMITTED`         | Uncommitted on this clone |
+| 2 | `MINE_ACTIVE_BRANCH`       | On this clone's active branch |
+| 3 | `MINE_OTHER_BRANCH`        | On a different local branch |
+| 4 | `REMOTE_MATCHING_BRANCH`   | On the remote branch matching the active one |
+| 5 | `REMOTE_OTHER_BRANCH`      | On a different remote branch |
+| 6 | `THEIR_OTHER_BRANCH`       | On someone else's non-matching branch |
+| 7 | `THEIR_MATCHING_BRANCH`    | On someone else's matching branch |
+| 8 | `THEIR_UNCOMMITTED`        | Uncommitted on someone else's clone |
 
 ## Stores
 
-As mentioned earlier, Gitalong needs an accessible place to store and share local changes with all clones of the managed
-repository.
-Multiple options are offered here.
-
 ### Git repository
 
-A Git repository can be used for this purpose.
-The advantage of this solution is that you won't need more infrastructure and security mechanisms than what is needed to
-access your project's repository. That said, pulling and pushing the data that way is pretty slow.
-This method is used in the usage examples above.
+The simplest backend: any git repository the team can read and push to. Set
+`store_url` to the clone URL ending in `.git` and gitalong will clone it into
+`<repo>/.gitalong/` on first use, then commit and push `commits.json` updates
+from there.
 
 ### JSONBin.io
 
-[JSONBin.io](https://jsonbin.io) is a simple JSON hosting service.
-You will get faster operations with this option but it may come at a [cost](https://jsonbin.io/pricing) depending on
-your usage. See how to set this up below.
+A hosted alternative for teams that don't want a second git repo. Set
+`store_url` to the bin URL and pass an access key via `--store-header`:
 
-### Shell
-
-```azure
-gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> --store-header X-Access-Key=<ACCESS_KEY> ...
+```shell
+gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> \
+  --store-header X-Access-Key=$ACCESS_KEY
 ```
 
-### Python
-
-```python
-repository = Repository.setup(
-    store_url="https://api.jsonbin.io/v3/b/<BIN_ID>",
-    store_headers={"X-Access-Key": "<ACCESS_KEY>"},
-    ...
-```
-
-Worth noting that `<ACCESS_KEY>` can be an environment variable such as `$ACCESS_KEY`.
+`$ACCESS_KEY` is expanded from the environment at request time, so the secret
+itself doesn't end up in the on-disk config.
 
 ## Development
 
-### Setting up
-
-Setup a Python virtual environment and run the following command.
-
 ```shell
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[ci]"
+# Build and test
+cargo build
+cargo test
+
+# Lint
+cargo clippy --all-targets -- -D warnings
+
+# Run the CLI from a checkout
+cargo run -- --help
 ```
 
-### Testing
+Distribution builds use the `vendored` feature so libgit2 is statically
+linked and the resulting binary is self-contained:
 
 ```shell
-pytest - -cov - report = html - -cov = gitalong - -profile - svg
+cargo build --release --features vendored
 ```
 
-### Documenting
+## License
 
-```shell
-sphinx-build ./docs/source ./docs/build
-```
-
-### Building
-
-```shell
-python setup.py sdist bdist_wheel
-```
-
-### Publishing
-
-```shell
-twine upload --username __token__ --verbose dist/*
-```
+[MIT](LICENSE)

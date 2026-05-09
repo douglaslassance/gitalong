@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed by `gitalong setup --update-hooks`.
+
+# Gitalong
+if command -v gitalong >/dev/null 2>&1; then
+	gitalong update
+else
+	echo "gitalong is not installed; skipping tracked-commits update." >&2
+fi

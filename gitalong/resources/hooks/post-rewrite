@@ -1,9 +1,0 @@
-#!/bin/sh
-
-# Gitalong
-if command -v gitalong
-then
-	gitalong sync
-else
-	echo "Gitalong CLI is not installed on this system."
-fi

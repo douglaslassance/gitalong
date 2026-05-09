@@ -1,0 +1,19 @@
+#!/bin/sh
+# Installed by `gitalong setup --update-hooks`.
+
+# Git LFS — invoke when present, warn (don't fail) when absent.
+if command -v git-lfs >/dev/null 2>&1; then
+	git lfs post-checkout "$@"
+fi
+
+# Gitalong: only resync when the user is dropping uncommitted changes
+# (HEAD did not move), not on regular branch switches.
+NEW_HEAD=$1
+PREVIOUS_HEAD=$2
+if [ "$NEW_HEAD" = "$PREVIOUS_HEAD" ]; then
+	if command -v gitalong >/dev/null 2>&1; then
+		gitalong update
+	else
+		echo "gitalong is not installed; skipping tracked-commits update." >&2
+	fi
+fi
