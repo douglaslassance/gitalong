@@ -147,11 +147,36 @@ if [ "$PULL_REQUEST" = true ]; then
             || curl -fsSL https://cli.github.com/install.sh | sh
     fi
 
-    # TODO: If the repo is not a fork make pull request to default branch, if it's a fork make pull request to upstream default branch.
+    # Detect whether the configured tap is a fork. If it is, the PR
+    # targets the upstream's default branch (e.g. Homebrew/homebrew-cask)
+    # with a head spec like `<owner>:<branch>`. Otherwise the PR is a
+    # same-repo PR against the tap's own default branch.
+    REPO_INFO=$(GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN" \
+        gh repo view "$TAP_SLUG" --json isFork,parent,defaultBranchRef 2>/dev/null)
+    IS_FORK=$(echo "$REPO_INFO" | python3 -c \
+        "import json,sys; print(json.load(sys.stdin).get('isFork', False))")
+
+    if [ "$IS_FORK" = "True" ]; then
+        PARENT_SLUG=$(echo "$REPO_INFO" | python3 -c \
+            "import json,sys; print(json.load(sys.stdin)['parent']['nameWithOwner'])")
+        PR_BASE=$(GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN" \
+            gh repo view "$PARENT_SLUG" --json defaultBranchRef -q '.defaultBranchRef.name')
+        OWNER=$(echo "$TAP_SLUG" | cut -d/ -f1)
+        PR_REPO="$PARENT_SLUG"
+        PR_HEAD="${OWNER}:${BRANCH}"
+        echo "Tap is a fork — PR will target ${PARENT_SLUG}:${PR_BASE}."
+    else
+        PR_BASE=$(echo "$REPO_INFO" | python3 -c \
+            "import json,sys; print(json.load(sys.stdin)['defaultBranchRef']['name'])")
+        PR_REPO="$TAP_SLUG"
+        PR_HEAD="$BRANCH"
+        echo "Tap is not a fork — PR will target ${TAP_SLUG}:${PR_BASE}."
+    fi
+
     GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN" gh pr create \
-        --repo "$TAP_SLUG" \
-        --head "$BRANCH" \
-        --base main \
+        --repo "$PR_REPO" \
+        --head "$PR_HEAD" \
+        --base "$PR_BASE" \
         --title "${REPO_NAME} ${VERSION}" \
         --body "Automated bump from \`${REPO_NAME}\` ${VERSION} release. Built artifacts in R2; sha256s in this commit." \
         || echo "PR may already exist for ${BRANCH}; skipping create."
