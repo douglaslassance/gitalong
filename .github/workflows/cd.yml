@@ -23,21 +23,19 @@ jobs:
       should_release: ${{ steps.version.outputs.SHOULD_RELEASE }}
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve version and check R2
+      - name: Resolve version and check for existing release
         id: version
         env:
-          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
-          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CARGO_VERSION=$(awk -F'"' '/^version =/ { print $2; exit }' Cargo.toml)
 
           # Tag-triggered runs are the canonical release path. Read the
           # version from the tag and require Cargo.toml to match exactly —
-          # otherwise the binary would print one version while the artifact
-          # filename and tap PR claim another. workflow_dispatch falls back
-          # to whatever Cargo.toml says, since there's no tag to consult.
+          # otherwise the binary would print one version while the GitHub
+          # Release tag and tap PR claim another. workflow_dispatch falls
+          # back to whatever Cargo.toml says, since there's no tag to
+          # consult.
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG_VERSION="${GITHUB_REF#refs/tags/}"
             if [[ "$TAG_VERSION" != "$CARGO_VERSION" ]]; then
@@ -52,26 +50,16 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-          aws configure set aws_access_key_id "$S3_ACCESS_KEY_ID"
-          aws configure set aws_secret_access_key "$S3_SECRET_ACCESS_KEY"
-          aws configure set region auto
-
-          # Probe one of the artifacts. If it already exists in R2 the
-          # release has shipped — skip rebuilding so re-running the
-          # workflow on the same version is idempotent. The probe key
-          # carries the actual on-disk extension (.tar.gz for unix
-          # targets) since we're checking R2 directly, not the public API.
-          PROBE_KEY="${REPO_NAME}/${REPO_NAME}-${VERSION}-aarch64-apple-darwin.tar.gz"
-          if aws s3api head-object \
-              --bucket "$S3_BUCKET_NAME" \
-              --key "$PROBE_KEY" \
-              --endpoint-url "https://$S3_ACCOUNT_ID.r2.cloudflarestorage.com" \
-              >/dev/null 2>&1; then
+          # Probe for an existing GitHub Release at this tag. If it's
+          # there, skip — re-running the workflow on the same version is
+          # idempotent. The auto-injected GITHUB_TOKEN is enough to read
+          # releases on this repo.
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "SHOULD_RELEASE=false" >> "$GITHUB_OUTPUT"
-            echo "Release ${VERSION} already in R2 — skipping."
+            echo "Release ${VERSION} already exists — skipping."
           else
             echo "SHOULD_RELEASE=true" >> "$GITHUB_OUTPUT"
-            echo "Release ${VERSION} not in R2 — building."
+            echo "Release ${VERSION} not found — building."
           fi
 
   build:
@@ -166,10 +154,12 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Upload to R2
+    name: Publish GitHub Release
     needs: [detect-version, build]
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write    # required for softprops/action-gh-release
     steps:
       - uses: actions/checkout@v4
 
@@ -179,17 +169,14 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Upload to R2 + update KV + purge cache
-        env:
-          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
-          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
-        run: ./upload_build.sh ${{ needs.detect-version.outputs.version }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.detect-version.outputs.version }}
+          name: ${{ needs.detect-version.outputs.version }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
 
       - name: Submit to Homebrew tap
         env:
@@ -199,5 +186,4 @@ jobs:
           # reads (matches Peel and the local .env convention).
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
-          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
         run: ./submit_build.sh --pull-request ${{ needs.detect-version.outputs.version }}

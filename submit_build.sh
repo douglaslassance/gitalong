@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # Renders Formula/gitalong.rb from the in-repo template, downloading each
-# target's .tar.gz from S3_PUBLIC_URL and hashing it locally (so this can run
-# from a laptop after CI has uploaded artifacts — no local build required),
+# target's .tar.gz from this repo's GitHub Release and hashing it locally,
 # then pushes a release branch to the Homebrew tap identified by
 # HOMEBREW_TAP_URL.
 #
@@ -24,15 +23,14 @@ for arg in "$@"; do
 submit_build.sh - Push (and optionally PR) the new formula to the Homebrew tap
 Usage: ./submit_build.sh [--pull-request] <version>
 
-Run this locally after CI has uploaded the release to R2. Downloads each
-target's .tar.gz from S3_PUBLIC_URL, hashes it, renders the formula
-template, and pushes a branch to the configured tap. With --pull-request,
-also opens a PR back to the tap's main.
+Run this locally after CD has published the GitHub Release. Downloads each
+target's .tar.gz from the release, hashes it, renders the formula template,
+and pushes a branch to the configured tap. With --pull-request, also opens
+a PR back to the tap's main.
 
 Required env (from .env):
   GITHUB_PERSONAL_ACCESS_TOKEN  GitHub PAT with \`repo\` scope on the tap
-  HOMEBREW_TAP_URL         e.g. https://github.com/douglaslassance/homebrew-tap.git
-  S3_PUBLIC_URL                 e.g. https://s3.douglaslassance.me
+  HOMEBREW_TAP_URL              e.g. https://github.com/douglaslassance/homebrew-tap.git
 EOF
             exit 0
             ;;
@@ -47,12 +45,12 @@ if [[ -f .env ]]; then
 fi
 
 REPO_NAME="gitalong"
+GITHUB_REPO="douglaslassance/${REPO_NAME}"
 VERSION="${ARGS[0]:?version required}"
 
 missing=()
 [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]] && missing+=("GITHUB_PERSONAL_ACCESS_TOKEN")
 [[ -z "${HOMEBREW_TAP_URL:-}" ]] && missing+=("HOMEBREW_TAP_URL")
-[[ -z "${S3_PUBLIC_URL:-}" ]] && missing+=("S3_PUBLIC_URL")
 if (( ${#missing[@]} )); then
     echo "Error: missing env vars: ${missing[*]}" >&2
     exit 1
@@ -67,16 +65,16 @@ if [[ ! "$TAP_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
     exit 1
 fi
 
-# Targets that ship via Homebrew. brew is the macOS distribution channel
-# only — Linux users `cargo install gitalong` and Windows users grab the
-# zip from R2. CD still builds and uploads all five targets, but the
-# formula only references the macOS ones.
+# Targets included in the Homebrew formula. brew is the macOS distribution
+# channel only — Linux users `cargo install gitalong` and Windows users
+# grab the zip from the GitHub Release. CD still builds and ships all five
+# targets, but the formula only references the macOS ones.
 TARGETS=(
     "aarch64-apple-darwin"
     "x86_64-apple-darwin"
 )
 
-# macOS ships bash 3.2 which has no associative arrays, so we build the
+# bash 3.2 (the macOS default) has no associative arrays, so we build the
 # per-target sed expressions inline as we walk the target list. Placeholder
 # names follow the convention `{{SHA256_<TARGET_UPPERCASE_UNDERSCORED>}}`.
 
@@ -87,10 +85,10 @@ SED_ARGS=("-e" "s|{{VERSION}}|${VERSION}|g")
 
 for target in "${TARGETS[@]}"; do
     archive="${REPO_NAME}-${VERSION}-${target}.tar.gz"
-    archive_url="${S3_PUBLIC_URL%/}/${REPO_NAME}/${archive}"
+    archive_url="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${archive}"
     echo "Hashing ${archive_url}"
     if ! curl -fsSL -o "${SCRATCH}/${archive}" "$archive_url"; then
-        echo "Error: could not fetch ${archive_url}. Has CD finished uploading version ${VERSION}?" >&2
+        echo "Error: could not fetch ${archive_url}. Has CD finished publishing release ${VERSION}?" >&2
         exit 1
     fi
     sha=$(shasum -a 256 "${SCRATCH}/${archive}" | awk '{print $1}')
@@ -179,7 +177,7 @@ if [ "$PULL_REQUEST" = true ]; then
         --head "$PR_HEAD" \
         --base "$PR_BASE" \
         --title "${REPO_NAME} ${VERSION}" \
-        --body "Automated bump from \`${REPO_NAME}\` ${VERSION} release. Built artifacts in R2; sha256s in this commit." \
+        --body "Automated bump from \`${REPO_NAME}\` ${VERSION} release. GitHub Release: https://github.com/${GITHUB_REPO}/releases/tag/${VERSION}" \
         || echo "PR may already exist for ${BRANCH}; skipping create."
 fi
 
