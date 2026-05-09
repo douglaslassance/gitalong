@@ -152,13 +152,55 @@ pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
 }
 
 /// Print the tracking status (commit spread) for each given file.
-pub fn status(_opts: &GlobalOpts, _files: &[PathBuf], _profile: bool) -> Result<()> {
-    bail!("`gitalong status` is not implemented yet");
+pub fn status(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()> {
+    let Some(repo) = Repository::discover(&opts.repository)? else {
+        bail!("not in a managed repository (no .gitalong.json found)");
+    };
+    let str_files: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let statuses = crate::operations::last_commits(&repo, &str_files)?;
+    let active = repo.active_branch_name()?;
+    let ctx = repo.context();
+    for status in &statuses {
+        println!("{}", crate::operations::format_status(status, active.as_deref(), &ctx));
+    }
+    Ok(())
 }
 
 /// Claim files for editing, returning a non-zero exit status when any are blocked.
-pub fn claim(_opts: &GlobalOpts, _files: &[PathBuf], _profile: bool) -> Result<()> {
-    bail!("`gitalong claim` is not implemented yet");
+pub fn claim(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()> {
+    let Some(repo) = Repository::discover(&opts.repository)? else {
+        bail!("not in a managed repository (no .gitalong.json found)");
+    };
+    let str_files: Vec<String> = files
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let outcomes = crate::operations::claim_files(&repo, &str_files)?;
+    let active = repo.active_branch_name()?;
+    let ctx = repo.context();
+
+    let mut any_blocked = false;
+    for outcome in &outcomes {
+        let pseudo_status = crate::operations::FileStatus {
+            filename: outcome.filename.clone(),
+            commit: outcome.blocker.clone(),
+        };
+        println!(
+            "{}",
+            crate::operations::format_status(&pseudo_status, active.as_deref(), &ctx)
+        );
+        if outcome.blocker.sha.is_some() || outcome.blocker.user.is_some() {
+            any_blocked = true;
+        }
+    }
+    if any_blocked {
+        // Match the Python contract: exit 1 when any file couldn't be claimed.
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 /// Helper for future command implementations: ensure the resolved repository path exists.

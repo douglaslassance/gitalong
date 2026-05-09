@@ -51,6 +51,13 @@ pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()
     next.extend(local_only_commits(repo, claims, &context, &remote_url)?);
 
     store.write(&next)?;
+
+    // When the repo opted into permission management, refresh the write-bit
+    // for every tracked file based on the freshly-written commit set.
+    if repo.config().modify_permissions {
+        let files = repo.tracked_files_at_head()?;
+        crate::operations::update_files_permissions(repo, &files)?;
+    }
     Ok(())
 }
 
@@ -113,7 +120,16 @@ fn real_local_only_commits(
 }
 
 /// Build a [`Commit`] record from a `git2::Commit`, populating the fields the
-/// Python tool expects.
+/// Python tool expects. Re-exported for the status pipeline as well.
+pub(crate) fn commit_from_git_public(
+    repo: &Repository,
+    git_commit: &git2::Commit<'_>,
+    context: &Context,
+    remote_url: &str,
+) -> Result<Commit> {
+    commit_from_git(repo, git_commit, context, remote_url)
+}
+
 fn commit_from_git(
     repo: &Repository,
     git_commit: &git2::Commit<'_>,

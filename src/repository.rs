@@ -281,6 +281,64 @@ impl Repository {
         Ok(hits)
     }
 
+    /// Repo-relative paths of every file tracked at HEAD. Returns an empty
+    /// vec for an unborn branch (no commits yet).
+    pub fn tracked_files_at_head(&self) -> Result<Vec<String>> {
+        let head = match self.inner.head() {
+            Ok(h) => h,
+            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => return Ok(Vec::new()),
+            Err(e) => return Err(e.into()),
+        };
+        let tree = head.peel_to_tree()?;
+        let mut files = Vec::new();
+        tree.walk(git2::TreeWalkMode::PreOrder, |dir, entry| {
+            if let Some(git2::ObjectType::Blob) = entry.kind()
+                && let Some(name) = entry.name()
+            {
+                let mut p = dir.to_string();
+                p.push_str(name);
+                files.push(p.replace('\\', "/"));
+            }
+            git2::TreeWalkResult::Ok
+        })?;
+        Ok(files)
+    }
+
+    /// `true` when `path` (absolute or repo-relative) is something gitalong
+    /// should track, given the configuration:
+    ///
+    /// - Always tracked when its extension is in `tracked_extensions`.
+    /// - Tracked when `track_binaries` is on and the file looks binary
+    ///   (heuristic: contains a NUL byte in the first 1KB).
+    /// - Otherwise tracked iff it's committed at HEAD.
+    pub fn is_file_tracked(&self, path: &Path) -> Result<bool> {
+        let rel = self.relative_path(path);
+
+        // Explicit extension list short-circuits everything.
+        let cfg = self.config();
+        if let Some(ext) = rel.extension().and_then(|e| e.to_str()) {
+            let dotted = format!(".{ext}");
+            if cfg.tracked_extensions.iter().any(|x| x == &dotted) {
+                return Ok(true);
+            }
+        }
+
+        let abs = self.absolute_path(path);
+        if cfg.track_binaries && abs.is_file() && is_binary_file(&abs)? {
+            return Ok(true);
+        }
+
+        // Tracked iff the path resolves in the HEAD tree. We avoid
+        // `status_file` here because some git2 versions surface a no-message
+        // error for files with no pending changes.
+        let head = match self.inner.head() {
+            Ok(h) => h,
+            Err(_) => return Ok(false),
+        };
+        let tree = head.peel_to_tree()?;
+        Ok(tree.get_path(&rel).is_ok())
+    }
+
     /// Files with uncommitted changes — union of untracked, unstaged, and
     /// staged paths. Returns repo-relative paths with forward slashes (the
     /// form `commits.json` stores).
@@ -319,6 +377,16 @@ impl Repository {
 /// fails (e.g. on platforms where the path can't be probed).
 fn real_path(p: &Path) -> PathBuf {
     std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+}
+
+/// Heuristic match for binary files: scan the first 1024 bytes for a NUL
+/// byte, the same approach the Python `is_binary_file` used.
+fn is_binary_file(path: &Path) -> Result<bool> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut buf = [0u8; 1024];
+    let n = f.read(&mut buf)?;
+    Ok(buf[..n].contains(&0))
 }
 
 /// Try to canonicalize a path even if it doesn't exist yet by canonicalizing
