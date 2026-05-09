@@ -11,13 +11,6 @@ class Gitalong < Formula
   # macOS-only on Homebrew. Linux users `cargo install gitalong` instead.
   depends_on macos: :ventura
 
-  on_linux do
-    # Satisfies brew readall's "every platform needs a URL or disable"
-    # check on Linux — without this, --only-tap-syntax fails on the
-    # Linux runner even though the formula is functionally macOS-only.
-    disable! because: :unsupported
-  end
-
   on_macos do
     on_arm do
       url "https://github.com/douglaslassance/gitalong/releases/download/{{VERSION}}/gitalong-{{VERSION}}-aarch64-apple-darwin.tar.gz"
@@ -27,6 +20,13 @@ class Gitalong < Formula
       url "https://github.com/douglaslassance/gitalong/releases/download/{{VERSION}}/gitalong-{{VERSION}}-x86_64-apple-darwin.tar.gz"
       sha256 "{{SHA256_X86_64_APPLE_DARWIN}}"
     end
+  end
+
+  on_linux do
+    # Satisfies brew readall's "every platform needs a URL or disable" check
+    # on Linux. Without this, --only-tap-syntax fails on the Linux runner
+    # even though the formula is functionally macOS-only.
+    disable! date: "2026-01-01", because: :unsupported
   end
 
   def install
