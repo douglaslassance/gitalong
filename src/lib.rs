@@ -6,13 +6,19 @@
 
 pub mod cli;
 pub mod commands;
+pub mod commit;
 pub mod config;
 pub mod error;
 pub mod hooks;
 pub mod repository;
+pub mod spread;
+pub mod store;
 
+pub use commit::{Branches, Commit};
 pub use config::Config;
 pub use repository::{Context, Repository};
+pub use spread::CommitSpread;
+pub use store::Store;
 
 pub use error::{Error, Result};
 

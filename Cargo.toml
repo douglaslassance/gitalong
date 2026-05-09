@@ -27,6 +27,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 git2 = { version = "0.20", default-features = false }
 whoami = "1.5"
+bitflags = { version = "2.6", features = ["serde"] }
 
 [features]
 # Statically link libgit2. Used for distribution builds (Homebrew releases) so
