@@ -82,11 +82,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS is Apple-Silicon-only — Intel Macs aren't a supported
+          # release target. Anyone on Intel can `cargo install gitalong`.
           - target: aarch64-apple-darwin
             os: macos-15
-            archive: tar.gz
-          - target: x86_64-apple-darwin
-            os: macos-13
             archive: tar.gz
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
