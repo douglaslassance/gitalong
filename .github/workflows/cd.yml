@@ -186,7 +186,13 @@ jobs:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
         run: ./upload_build.sh ${{ needs.detect-version.outputs.version }}
 
-      # Homebrew tap submission is intentionally not part of CD — it's a
-      # local-only step you run from your laptop after the artifacts are in
-      # R2. See submit_build.sh; it reads the .sha256 sidecars from
-      # S3_PUBLIC_URL so no local build is needed.
+      - name: Submit to Homebrew tap
+        env:
+          # GitHub forbids the `GITHUB_` prefix in secret names, so the secret
+          # is stored as HOMEBREW_TAP_TOKEN and the workflow renames it to
+          # GITHUB_PERSONAL_ACCESS_TOKEN — the env-var name submit_build.sh
+          # reads (matches Peel and the local .env convention).
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO_URL: ${{ secrets.HOMEBREW_TAP_REPO_URL }}
+          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
+        run: ./submit_build.sh --pull-request ${{ needs.detect-version.outputs.version }}
