@@ -484,7 +484,11 @@ mod tests {
     fn relative_path_strips_working_dir() {
         let dir = fixture("x.git");
         let repo = Repository::open(dir.path()).unwrap();
-        let abs = dir.path().join("subdir/file.txt");
+        // Build the absolute input from `repo.working_dir()` (canonical) rather
+        // than `dir.path()` so the test doesn't trip on platform-specific
+        // canonicalization quirks (Windows 8.3 short names like `RUNNER~1`
+        // vs the long form, macOS `/var` vs `/private/var`).
+        let abs = repo.working_dir().join("subdir/file.txt");
         let rel = repo.relative_path(&abs);
         assert_eq!(rel, Path::new("subdir/file.txt"));
     }
@@ -509,7 +513,12 @@ mod tests {
     fn absolute_path_passes_through_absolute_input() {
         let dir = fixture("x.git");
         let repo = Repository::open(dir.path()).unwrap();
+        // Pick a path that's actually absolute on the host's platform —
+        // `/absolute/foo.txt` is absolute on Unix but relative on Windows.
+        #[cfg(unix)]
         let already = Path::new("/absolute/foo.txt");
+        #[cfg(windows)]
+        let already = Path::new(r"C:\absolute\foo.txt");
         assert_eq!(repo.absolute_path(already), already);
     }
 
