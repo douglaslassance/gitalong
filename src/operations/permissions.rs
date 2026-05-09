@@ -79,7 +79,7 @@ fn set_writable(path: &Path, writable: bool) -> Result<bool> {
 fn set_writable(path: &Path, writable: bool) -> Result<bool> {
     let meta = std::fs::metadata(path)?;
     let mut perms = meta.permissions();
-    if perms.readonly() == !writable {
+    if perms.readonly() != writable {
         return Ok(false);
     }
     perms.set_readonly(!writable);
