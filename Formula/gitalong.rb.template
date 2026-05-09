@@ -1,0 +1,43 @@
+class Gitalong < Formula
+  desc "Keep your team in sync on what's being worked on across Git clones"
+  homepage "https://github.com/douglaslassance/gitalong"
+  version "{{VERSION}}"
+  license "MIT"
+
+  on_macos do
+    on_arm do
+      url "https://api.douglaslassance.me/gitalong/download/#{version}/aarch64-apple-darwin"
+      sha256 "{{SHA256_AARCH64_APPLE_DARWIN}}"
+    end
+    on_intel do
+      url "https://api.douglaslassance.me/gitalong/download/#{version}/x86_64-apple-darwin"
+      sha256 "{{SHA256_X86_64_APPLE_DARWIN}}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://api.douglaslassance.me/gitalong/download/#{version}/aarch64-unknown-linux-gnu"
+      sha256 "{{SHA256_AARCH64_UNKNOWN_LINUX_GNU}}"
+    end
+    on_intel do
+      url "https://api.douglaslassance.me/gitalong/download/#{version}/x86_64-unknown-linux-gnu"
+      sha256 "{{SHA256_X86_64_UNKNOWN_LINUX_GNU}}"
+    end
+  end
+
+  livecheck do
+    url "https://api.douglaslassance.me/gitalong"
+    strategy :json do |json|
+      json["latest"]
+    end
+  end
+
+  def install
+    bin.install "gitalong"
+  end
+
+  test do
+    assert_match "gitalong version", shell_output("#{bin}/gitalong version")
+  end
+end

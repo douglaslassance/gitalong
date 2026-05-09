@@ -1,14 +1,8 @@
 {
     "recommendations": [
-        "ms-python.vscode-pylance",
-        "ms-python.python",
-        "ms-python.debugpy",
-        "ms-python.black-formatter",
-        "yardensachs.copy-python-path",
-        "benspaulding.python-manifest-template",
-        "njpwerner.autodocstring",
-        "stkb.rewrap",
-        "ms-python.pylint",
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml",
         "editorconfig.editorconfig"
     ]
 }

@@ -1,0 +1,47 @@
+[package]
+name = "gitalong"
+version = "1.0.0"
+edition = "2024"
+authors = ["Douglas Lassance <douglassance@gmail.com>"]
+description = "Keep your team in sync on what's being worked on across Git clones."
+license = "MIT"
+repository = "https://github.com/douglaslassance/gitalong"
+homepage = "https://github.com/douglaslassance/gitalong"
+readme = "README.md"
+keywords = ["git", "vcs", "collaboration", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "gitalong"
+path = "src/main.rs"
+
+[lib]
+name = "gitalong"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "2.0"
+git2 = { version = "0.20", default-features = false }
+whoami = "1.5"
+bitflags = { version = "2.6", features = ["serde"] }
+time = { version = "0.3", features = ["formatting", "macros"] }
+ureq = { version = "3.0", features = ["json", "rustls"], default-features = false }
+
+[features]
+# Statically link libgit2. Used for distribution builds (Homebrew releases) so
+# the binary doesn't depend on the user's system libgit2.
+vendored = ["git2/vendored-libgit2"]
+
+[dev-dependencies]
+tempfile = "3.10"
+assert_cmd = "2.0"
+predicates = "3.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
