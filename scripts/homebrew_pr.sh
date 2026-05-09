@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 #
-# Renders Formula/gitalong.rb from the in-repo template using the SHA256s in
-# dist/, then opens a PR on the Homebrew tap repo identified by
-# HOMEBREW_TAP_REPO_URL (e.g. https://github.com/douglaslassance/homebrew-tap.git).
-# Will switch to the official Homebrew core when that becomes possible — only
-# the env var has to change.
+# Renders Formula/gitalong.rb from the in-repo template, fetching the SHA256
+# sidecars over HTTPS from S3_PUBLIC_URL (so this can run from a laptop after
+# CI has uploaded artifacts — no local build required), then opens a PR on
+# the Homebrew tap identified by HOMEBREW_TAP_REPO_URL.
+#
+# Will switch to homebrew-core when that becomes possible by changing only
+# HOMEBREW_TAP_REPO_URL.
 
 set -euo pipefail
 
@@ -13,17 +15,19 @@ if [[ "${1-}" == "-h" || "${1-}" == "--help" ]]; then
 homebrew_pr.sh - Open a Homebrew tap PR with the new formula
 Usage: ./scripts/homebrew_pr.sh <version>
 
-Reads dist/gitalong-<version>-*.tar.gz.sha256 sidecars produced by the
-build job and pushes a branch + PR to the configured tap.
+Run this locally after CI has uploaded the release to R2. Fetches each
+target's .sha256 sidecar over HTTPS, renders the formula template, and
+pushes a branch + PR to the configured tap.
 
-Required env:
-  GITHUB_PERSONAL_ACCESS_TOKEN     GitHub PAT with \`repo\` scope on the tap
-  HOMEBREW_TAP_REPO_URL  e.g. https://github.com/douglaslassance/homebrew-tap.git
+Required env (from .env):
+  GITHUB_PERSONAL_ACCESS_TOKEN  GitHub PAT with \`repo\` scope on the tap
+  HOMEBREW_TAP_REPO_URL         e.g. https://github.com/douglaslassance/homebrew-tap.git
+  S3_PUBLIC_URL                 e.g. https://s3.douglaslassance.me
 EOF
     exit 0
 fi
 
-if [[ -f .env && -z "${CI:-}" ]]; then
+if [[ -f .env ]]; then
     # shellcheck disable=SC1091
     source .env
 fi
@@ -34,6 +38,7 @@ VERSION="${1:?version required}"
 missing=()
 [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]] && missing+=("GITHUB_PERSONAL_ACCESS_TOKEN")
 [[ -z "${HOMEBREW_TAP_REPO_URL:-}" ]] && missing+=("HOMEBREW_TAP_REPO_URL")
+[[ -z "${S3_PUBLIC_URL:-}" ]] && missing+=("S3_PUBLIC_URL")
 if (( ${#missing[@]} )); then
     echo "Error: missing env vars: ${missing[*]}" >&2
     exit 1
@@ -61,12 +66,13 @@ declare -A SHA
 
 for target in "${TARGETS[@]}"; do
     archive="${REPO_NAME}-${VERSION}-${target}.tar.gz"
-    sha_file="dist/${archive}.sha256"
-    if [[ ! -f "$sha_file" ]]; then
-        echo "Error: missing ${sha_file} — was the build job's artifact uploaded?" >&2
+    sha_url="${S3_PUBLIC_URL%/}/${REPO_NAME}/${archive}.sha256"
+    echo "Fetching SHA: ${sha_url}"
+    if ! sha=$(curl -fsSL "$sha_url"); then
+        echo "Error: could not fetch ${sha_url}. Has CD finished uploading version ${VERSION}?" >&2
         exit 1
     fi
-    SHA["$target"]=$(awk '{print $1}' "$sha_file")
+    SHA["$target"]=$(echo "$sha" | awk '{print $1}')
 done
 
 # --- Render the formula from the template ---

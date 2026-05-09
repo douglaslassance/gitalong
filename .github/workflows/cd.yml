@@ -165,7 +165,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Upload to R2 and open Homebrew PR
+    name: Upload to R2
     needs: [detect-version, build]
     if: needs.detect-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
@@ -190,12 +190,7 @@ jobs:
           CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
         run: ./scripts/upload_build.sh ${{ needs.detect-version.outputs.version }}
 
-      - name: Open Homebrew tap PR
-        env:
-          # PAT with `repo` scope on the tap. The GitHub secret is named
-          # HOMEBREW_TAP_TOKEN (so it's discoverable next to other tap
-          # config), but the script reads GITHUB_PERSONAL_ACCESS_TOKEN to
-          # match the convention Peel uses — same .env works for both repos.
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          HOMEBREW_TAP_REPO_URL: ${{ secrets.HOMEBREW_TAP_REPO_URL }}
-        run: ./scripts/homebrew_pr.sh ${{ needs.detect-version.outputs.version }}
+      # Homebrew tap submission is intentionally not part of CD — it's a
+      # local-only step you run from your laptop after the artifacts are in
+      # R2. See scripts/homebrew_pr.sh; it reads the .sha256 sidecars from
+      # S3_PUBLIC_URL so no local build is needed.
