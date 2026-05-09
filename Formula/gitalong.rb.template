@@ -11,7 +11,7 @@ class Gitalong < Formula
   # macOS-only on Homebrew. Linux users `cargo install gitalong` instead.
   # The depends_on signals to brew test-bot's Linux runs that the formula
   # is out of scope, so they skip the install/test there.
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   on_macos do
     on_arm do
