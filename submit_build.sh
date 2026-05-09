@@ -4,14 +4,14 @@
 # target's .tar.gz from S3_PUBLIC_URL and hashing it locally (so this can run
 # from a laptop after CI has uploaded artifacts — no local build required),
 # then pushes a release branch to the Homebrew tap identified by
-# HOMEBREW_TAP_REPO_URL.
+# HOMEBREW_TAP_URL.
 #
 # Mirrors Peel's submit_build.sh: pass --pull-request to also open a PR
 # against the tap. Without the flag the branch is just pushed and the tap
 # owner merges manually.
 #
 # Will switch to homebrew-core when that becomes possible by changing only
-# HOMEBREW_TAP_REPO_URL.
+# HOMEBREW_TAP_URL.
 
 set -euo pipefail
 
@@ -31,7 +31,7 @@ also opens a PR back to the tap's main.
 
 Required env (from .env):
   GITHUB_PERSONAL_ACCESS_TOKEN  GitHub PAT with \`repo\` scope on the tap
-  HOMEBREW_TAP_REPO_URL         e.g. https://github.com/douglaslassance/homebrew-tap.git
+  HOMEBREW_TAP_URL         e.g. https://github.com/douglaslassance/homebrew-tap.git
   S3_PUBLIC_URL                 e.g. https://s3.douglaslassance.me
 EOF
             exit 0
@@ -51,7 +51,7 @@ VERSION="${ARGS[0]:?version required}"
 
 missing=()
 [[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]] && missing+=("GITHUB_PERSONAL_ACCESS_TOKEN")
-[[ -z "${HOMEBREW_TAP_REPO_URL:-}" ]] && missing+=("HOMEBREW_TAP_REPO_URL")
+[[ -z "${HOMEBREW_TAP_URL:-}" ]] && missing+=("HOMEBREW_TAP_URL")
 [[ -z "${S3_PUBLIC_URL:-}" ]] && missing+=("S3_PUBLIC_URL")
 if (( ${#missing[@]} )); then
     echo "Error: missing env vars: ${missing[*]}" >&2
@@ -60,10 +60,10 @@ fi
 
 # Parse owner/repo from the tap URL for `gh pr create --repo`. Accepts both
 # .git suffix and bare HTTPS; strips either.
-TAP_SLUG=$(echo "$HOMEBREW_TAP_REPO_URL" \
+TAP_SLUG=$(echo "$HOMEBREW_TAP_URL" \
     | sed -E 's#^https?://[^/]+/##; s#\.git$##')
 if [[ ! "$TAP_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
-    echo "Error: HOMEBREW_TAP_REPO_URL=$HOMEBREW_TAP_REPO_URL did not parse as owner/repo." >&2
+    echo "Error: HOMEBREW_TAP_URL=$HOMEBREW_TAP_URL did not parse as owner/repo." >&2
     exit 1
 fi
 
@@ -117,7 +117,7 @@ trap 'rm -rf "$WORKTREE" "$RENDERED"' EXIT
 
 # Inject the token via insteadOf so it doesn't end up in the repo's .git/config.
 git -c "url.https://x-access-token:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/.insteadOf=https://github.com/" \
-    clone --depth=1 "$HOMEBREW_TAP_REPO_URL" "$WORKTREE"
+    clone --depth=1 "$HOMEBREW_TAP_URL" "$WORKTREE"
 
 cd "$WORKTREE"
 git config user.email "actions@github.com"
