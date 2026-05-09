@@ -63,8 +63,8 @@ pub fn config(opts: &GlobalOpts, property: &str) -> Result<()> {
 
 /// Initialize gitalong in the repository: write config, clone the store, optionally install hooks.
 ///
-/// The actual store clone (for git stores) or remote handshake (for jsonbin
-/// stores) is deferred to first use. Setup does the local-side work: validate
+/// The actual store clone (for git stores) or remote handshake (for
+/// JSONBin.io stores) is deferred to first use. Setup does the local-side work: validate
 /// the URL shape, write `.gitalong.json`, and apply the optional flags
 /// (`--update-hooks`, `--update-gitignore`, `--modify-permissions`).
 pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {

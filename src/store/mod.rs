@@ -34,7 +34,7 @@ impl Store {
             Ok(Store::Git(GitStore::open_or_clone(repo)?))
         } else {
             Err(Error::InvalidConfig(format!(
-                "store_url `{url}` is neither a `.git` URL nor a JSONBin URL"
+                "store_url `{url}` is neither a `.git` URL nor a JSONBin.io URL"
             )))
         }
     }
@@ -48,7 +48,7 @@ impl Store {
     }
 
     /// Persist `commits` to the store. The git backend commits and pushes;
-    /// the jsonbin backend issues an HTTP PUT.
+    /// the JSONBin.io backend issues an HTTP PUT.
     pub fn write(&mut self, commits: &[Commit]) -> Result<()> {
         match self {
             Store::Git(s) => s.write(commits),

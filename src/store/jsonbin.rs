@@ -1,7 +1,7 @@
 //! JSONBin.io-backed [`Store`](super::Store).
 //!
 //! Storage is a single bin holding the JSON-encoded commits list. The wire
-//! format mirrors the JSONBin v3 API: GETs return `{"record": [...]}`, PUTs
+//! format mirrors the JSONBin.io v3 API: GETs return `{"record": [...]}`, PUTs
 //! take the array directly. Header values may reference environment variables
 //! (`$KEY` or `${KEY}`) which are expanded at request time so secrets stay out
 //! of the on-disk config.
@@ -17,7 +17,7 @@ use crate::repository::Repository;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// JSONBin response envelope. Only the `record` field is meaningful for us;
+/// JSONBin.io response envelope. Only the `record` field is meaningful for us;
 /// the API also returns `metadata`, which we don't store.
 #[derive(Deserialize)]
 struct JsonbinResponse {
@@ -226,7 +226,7 @@ mod tests {
     use std::collections::BTreeMap;
     use tempfile::tempdir;
 
-    /// Stand up a managed git repo with a JSONBin-shaped store_url. The URL
+    /// Stand up a managed git repo with a JSONBin.io-shaped store_url. The URL
     /// points at an unreachable host so the read path will fall back to the
     /// cache without us standing up an HTTP server.
     fn fixture(headers: BTreeMap<String, String>) -> (tempfile::TempDir, Repository) {
