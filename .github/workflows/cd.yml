@@ -172,9 +172,10 @@ jobs:
 
       - name: Open Homebrew tap PR
         env:
-          # PAT with `repo` scope on the tap. The tap URL itself is also a
-          # secret so it can flip from the personal tap to homebrew-core when
-          # gitalong eventually qualifies, without changing the workflow.
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # PAT with `repo` scope on the tap. The GitHub secret is named
+          # HOMEBREW_TAP_TOKEN (so it's discoverable next to other tap
+          # config), but the script reads GITHUB_PERSONAL_ACCESS_TOKEN to
+          # match the convention Peel uses — same .env works for both repos.
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           HOMEBREW_TAP_REPO_URL: ${{ secrets.HOMEBREW_TAP_REPO_URL }}
         run: ./scripts/homebrew_pr.sh ${{ needs.detect-version.outputs.version }}

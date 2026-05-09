@@ -17,7 +17,7 @@ Reads dist/gitalong-<version>-*.tar.gz.sha256 sidecars produced by the
 build job and pushes a branch + PR to the configured tap.
 
 Required env:
-  HOMEBREW_TAP_TOKEN     GitHub PAT with \`repo\` scope on the tap
+  GITHUB_PERSONAL_ACCESS_TOKEN     GitHub PAT with \`repo\` scope on the tap
   HOMEBREW_TAP_REPO_URL  e.g. https://github.com/douglaslassance/homebrew-tap.git
 EOF
     exit 0
@@ -32,7 +32,7 @@ REPO_NAME="gitalong"
 VERSION="${1:?version required}"
 
 missing=()
-[[ -z "${HOMEBREW_TAP_TOKEN:-}" ]] && missing+=("HOMEBREW_TAP_TOKEN")
+[[ -z "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]] && missing+=("GITHUB_PERSONAL_ACCESS_TOKEN")
 [[ -z "${HOMEBREW_TAP_REPO_URL:-}" ]] && missing+=("HOMEBREW_TAP_REPO_URL")
 if (( ${#missing[@]} )); then
     echo "Error: missing env vars: ${missing[*]}" >&2
@@ -94,7 +94,7 @@ WORKTREE=$(mktemp -d)
 trap 'rm -rf "$WORKTREE" "$RENDERED"' EXIT
 
 # Inject the token via insteadOf so it doesn't end up in the repo's .git/config.
-git -c "url.https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/.insteadOf=https://github.com/" \
+git -c "url.https://x-access-token:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/.insteadOf=https://github.com/" \
     clone --depth=1 "$HOMEBREW_TAP_REPO_URL" "$WORKTREE"
 
 cd "$WORKTREE"
@@ -114,7 +114,7 @@ if git diff --cached --quiet; then
 fi
 
 git commit -m "Update ${REPO_NAME} to ${VERSION}"
-git -c "url.https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/.insteadOf=https://github.com/" \
+git -c "url.https://x-access-token:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com/.insteadOf=https://github.com/" \
     push --force-with-lease origin "$BRANCH"
 
 # --- Open the PR ---
@@ -124,7 +124,7 @@ if ! command -v gh >/dev/null 2>&1; then
         || curl -fsSL https://cli.github.com/install.sh | sh
 fi
 
-GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh pr create \
+GH_TOKEN="$GITHUB_PERSONAL_ACCESS_TOKEN" gh pr create \
     --repo "$TAP_SLUG" \
     --head "$BRANCH" \
     --base main \
