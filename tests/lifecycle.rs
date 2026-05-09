@@ -25,7 +25,11 @@ use predicates::prelude::*;
 use tempfile::tempdir;
 
 fn run(dir: &Path, args: &[&str]) {
-    let out = Command::new("git").current_dir(dir).args(args).output().unwrap();
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
     assert!(
         out.status.success(),
         "git {} in {} failed: {}",
@@ -48,7 +52,10 @@ fn full_lifecycle_two_clones() {
 
     // ---- Alice ----
     let alice = tempdir().unwrap();
-    run(alice.path(), &["clone", &origin_url, alice.path().to_str().unwrap()]);
+    run(
+        alice.path(),
+        &["clone", &origin_url, alice.path().to_str().unwrap()],
+    );
     run(alice.path(), &["config", "user.email", "alice@example.com"]);
     run(alice.path(), &["config", "user.name", "Alice"]);
 
@@ -69,7 +76,10 @@ fn full_lifecycle_two_clones() {
     // Commit the freshly-created config and the gitignore so Alice's clone
     // is in a clean baseline state.
     fs::write(alice.path().join("README"), b"hello").unwrap();
-    run(alice.path(), &["add", "README", ".gitalong.json", ".gitignore"]);
+    run(
+        alice.path(),
+        &["add", "README", ".gitalong.json", ".gitignore"],
+    );
     run(alice.path(), &["commit", "-m", "init"]);
     run(alice.path(), &["push", "-u", "origin", "main"]);
 
@@ -81,7 +91,10 @@ fn full_lifecycle_two_clones() {
 
     // ---- Bob ----
     let bob = tempdir().unwrap();
-    run(bob.path(), &["clone", &origin_url, bob.path().to_str().unwrap()]);
+    run(
+        bob.path(),
+        &["clone", &origin_url, bob.path().to_str().unwrap()],
+    );
     run(bob.path(), &["config", "user.email", "bob@example.com"]);
     run(bob.path(), &["config", "user.name", "Bob"]);
 

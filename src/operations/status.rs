@@ -215,14 +215,10 @@ fn commit_touches(repo: &git2::Repository, c: &git2::Commit<'_>, target: &Path) 
 fn enrich_branches(repo: &Repository, mut commit: Commit) -> Result<Commit> {
     if let Some(sha) = commit.sha.clone() {
         if commit.branches.local.is_empty() {
-            commit.branches.local = repo
-                .local_branches_containing(&sha)
-                .unwrap_or_default();
+            commit.branches.local = repo.local_branches_containing(&sha).unwrap_or_default();
         }
         if commit.branches.remote.is_empty() {
-            commit.branches.remote = repo
-                .remote_branches_containing(&sha)
-                .unwrap_or_default();
+            commit.branches.remote = repo.remote_branches_containing(&sha).unwrap_or_default();
         }
     }
     Ok(commit)
