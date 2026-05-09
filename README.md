@@ -13,7 +13,7 @@ cargo install gitalong
 ```
 
 > [!NOTE]
-> Binaries for all systems can also be download directly [here](https://github.com/douglaslassance/gitalong/releases).
+> Binaries for all systems can also be downloaded [here](https://github.com/douglaslassance/gitalong/releases).
 
 ## Usage
 
@@ -73,41 +73,44 @@ Each line is:
 `<spread>` is an eight-character `+`/`-` bitstring describing where this
 commit lives. The bits, in order, are:
 
-| # | Flag                       | Meaning |
-|---|----------------------------|---------|
-| 1 | `MINE_UNCOMMITTED`         | Uncommitted on this clone |
-| 2 | `MINE_ACTIVE_BRANCH`       | On this clone's active branch |
-| 3 | `MINE_OTHER_BRANCH`        | On a different local branch |
-| 4 | `REMOTE_MATCHING_BRANCH`   | On the remote branch matching the active one |
-| 5 | `REMOTE_OTHER_BRANCH`      | On a different remote branch |
-| 6 | `THEIR_OTHER_BRANCH`       | On someone else's non-matching branch |
-| 7 | `THEIR_MATCHING_BRANCH`    | On someone else's matching branch |
-| 8 | `THEIR_UNCOMMITTED`        | Uncommitted on someone else's clone |
+| #   | Flag                     | Meaning                                      |
+| --- | ------------------------ | -------------------------------------------- |
+| 1   | `MINE_UNCOMMITTED`       | Uncommitted on this clone                    |
+| 2   | `MINE_ACTIVE_BRANCH`     | On this clone's active branch                |
+| 3   | `MINE_OTHER_BRANCH`      | On a different local branch                  |
+| 4   | `REMOTE_MATCHING_BRANCH` | On the remote branch matching the active one |
+| 5   | `REMOTE_OTHER_BRANCH`    | On a different remote branch                 |
+| 6   | `THEIR_OTHER_BRANCH`     | On someone else's non-matching branch        |
+| 7   | `THEIR_MATCHING_BRANCH`  | On someone else's matching branch            |
+| 8   | `THEIR_UNCOMMITTED`      | Uncommitted on someone else's clone          |
 
 ## Stores
 
+The `<STORE_URL>` argument to `gitalong setup` selects how this clone
+publishes its tracked changes for the rest of the team.
+
 ### Git repository
 
-Any Git repository the team can read and push to. Set
-`store_url` to the clone URL ending in `.git` and Gitalong will clone it into
-`<repo>/.gitalong/` on first use, then commit and push `commits.json` updates
-from there.
+Pass a repository URL or path. Gitalong clones it into
+`<repo>/.gitalong/` on first use, then commits and pushes `commits.json`
+updates from there.
 
 > [!WARNING]
-> This method is has very low infrastructure implications but operations are pretty slow.
+> Low infrastructure hassle but operations are slow.
 
 ### JSONBin.io
 
-A hosted alternative. Set
-`store_url` to the bin URL and pass an access key via `--store-header`:
+Pass the bin URL (`https://api.jsonbin.io/v3/b/<id>`) and an access key via
+`--store-header`:
 
 ```shell
 gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> \
   --store-header X-Access-Key=$ACCESS_KEY
 ```
 
-`$ACCESS_KEY` is expanded from the environment at request time, so the secret
-itself doesn't end up in the on-disk config.
+> [!NOTE]
+> `$ACCESS_KEY` is expanded from the environment at request time, so the secret
+> itself doesn't end up in the on-disk config.
 
 ## Development
 
