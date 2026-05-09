@@ -29,6 +29,7 @@ git2 = { version = "0.20", default-features = false }
 whoami = "1.5"
 bitflags = { version = "2.6", features = ["serde"] }
 time = { version = "0.3", features = ["formatting", "macros"] }
+ureq = { version = "3.0", features = ["json", "rustls"], default-features = false }
 
 [features]
 # Statically link libgit2. Used for distribution builds (Homebrew releases) so
