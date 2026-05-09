@@ -9,9 +9,14 @@ class Gitalong < Formula
   end
 
   # macOS-only on Homebrew. Linux users `cargo install gitalong` instead.
-  # The depends_on signals to brew test-bot's Linux runs that the formula
-  # is out of scope, so they skip the install/test there.
   depends_on macos: :ventura
+
+  on_linux do
+    # Satisfies brew readall's "every platform needs a URL or disable"
+    # check on Linux — without this, --only-tap-syntax fails on the
+    # Linux runner even though the formula is functionally macOS-only.
+    disable! because: :unsupported
+  end
 
   on_macos do
     on_arm do
