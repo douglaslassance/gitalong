@@ -1,0 +1,177 @@
+name: cd
+
+# Auto-run on main is disabled while the Rust rewrite is WIP.
+# Re-enable by uncommenting the push trigger below.
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+
+env:
+  REPO_NAME: gitalong
+  CARGO_TERM_COLOR: always
+
+jobs:
+  detect-version:
+    name: Detect version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      should_release: ${{ steps.version.outputs.SHOULD_RELEASE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version from Cargo.toml and check R2
+        id: version
+        env:
+          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+        run: |
+          VERSION=$(awk -F'"' '/^version =/ { print $2; exit }' Cargo.toml)
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION"
+
+          aws configure set aws_access_key_id "$S3_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$S3_SECRET_ACCESS_KEY"
+          aws configure set region auto
+
+          # Probe one of the artifacts. If it already exists in R2 the
+          # release has shipped — skip rebuilding so re-running the
+          # workflow on the same version is idempotent.
+          PROBE_KEY="${REPO_NAME}/${REPO_NAME}-${VERSION}-aarch64-apple-darwin.tar.gz"
+          if aws s3api head-object \
+              --bucket "$S3_BUCKET_NAME" \
+              --key "$PROBE_KEY" \
+              --endpoint-url "https://$S3_ACCOUNT_ID.r2.cloudflarestorage.com" \
+              >/dev/null 2>&1; then
+            echo "SHOULD_RELEASE=false" >> "$GITHUB_OUTPUT"
+            echo "Release ${VERSION} already in R2 — skipping."
+          else
+            echo "SHOULD_RELEASE=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${VERSION} not in R2 — building."
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: detect-version
+    if: needs.detect-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-15
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-13
+            archive: tar.gz
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ matrix.target }}-
+
+      # libgit2 is statically linked via the `vendored` feature so the
+      # released binary doesn't depend on the host's system library.
+      - name: Build (Unix)
+        if: matrix.os != 'windows-latest'
+        run: cargo build --release --features vendored --target ${{ matrix.target }}
+        shell: bash
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cargo build --release --features vendored --target ${{ matrix.target }}
+        shell: pwsh
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        env:
+          VERSION: ${{ needs.detect-version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          mkdir -p dist
+          ARTIFACT="${REPO_NAME}-${VERSION}-${TARGET}.tar.gz"
+          tar -czf "dist/${ARTIFACT}" \
+            -C "target/${TARGET}/release" "${REPO_NAME}"
+          shasum -a 256 "dist/${ARTIFACT}" | awk '{print $1}' > "dist/${ARTIFACT}.sha256"
+          ls -lh dist/
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        env:
+          VERSION: ${{ needs.detect-version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $artifact = "${env:REPO_NAME}-${env:VERSION}-${env:TARGET}.zip"
+          Compress-Archive `
+            -Path "target/${env:TARGET}/release/${env:REPO_NAME}.exe" `
+            -DestinationPath "dist/$artifact"
+          (Get-FileHash -Algorithm SHA256 "dist/$artifact").Hash.ToLower() `
+            | Out-File -Encoding ascii -NoNewline "dist/$artifact.sha256"
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.REPO_NAME }}-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Upload to R2 and open Homebrew PR
+    needs: [detect-version, build]
+    if: needs.detect-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload to R2 + update KV + purge cache
+        env:
+          S3_ACCOUNT_ID: ${{ secrets.S3_ACCOUNT_ID }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_KV_NAMESPACE_ID: ${{ secrets.CLOUDFLARE_KV_NAMESPACE_ID }}
+        run: ./scripts/upload_build.sh ${{ needs.detect-version.outputs.version }}
+
+      - name: Open Homebrew tap PR
+        env:
+          # Personal access token with `repo` scope on
+          # douglaslassance/homebrew-tap. Stored as HOMEBREW_TAP_TOKEN.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
+        run: ./scripts/homebrew_pr.sh ${{ needs.detect-version.outputs.version }}
