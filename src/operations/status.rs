@@ -207,13 +207,22 @@ fn commit_touches(repo: &git2::Repository, c: &git2::Commit<'_>, target: &Path) 
 
 /// Populate `branches.local` and `branches.remote` for a commit that has a
 /// `sha`. No-op for uncommitted-changes records.
+///
+/// A SHA pulled from the store may belong to a commit that lives only on
+/// another clone — it's expected to be missing from this clone's object
+/// database. We treat that as "not in any local/remote branch here" rather
+/// than an error.
 fn enrich_branches(repo: &Repository, mut commit: Commit) -> Result<Commit> {
     if let Some(sha) = commit.sha.clone() {
         if commit.branches.local.is_empty() {
-            commit.branches.local = repo.local_branches_containing(&sha)?;
+            commit.branches.local = repo
+                .local_branches_containing(&sha)
+                .unwrap_or_default();
         }
         if commit.branches.remote.is_empty() {
-            commit.branches.remote = repo.remote_branches_containing(&sha)?;
+            commit.branches.remote = repo
+                .remote_branches_containing(&sha)
+                .unwrap_or_default();
         }
     }
     Ok(commit)

@@ -106,15 +106,19 @@ pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
 
 /// Decide which store backend a URL points at without instantiating it.
 ///
-/// Returns the matching [`StoreKind`] or an error message for callers to
-/// surface. Mirrors the dispatch the Python `Repository.__init__` did inline.
+/// Mirrors `Store::for_repository` so the front-door validation in `setup`
+/// agrees with the runtime dispatch. Accepts:
+///
+/// - `https://api.jsonbin.io/...` → JSONBin
+/// - `.git` suffix → Git (local or remote)
+/// - `file://...` → Git (local file URL)
 pub(crate) fn classify_store_url(url: &str) -> Result<StoreKind> {
     if url.starts_with("https://api.jsonbin.io") {
         Ok(StoreKind::Jsonbin)
-    } else if url.ends_with(".git") {
+    } else if url.ends_with(".git") || url.starts_with("file://") {
         Ok(StoreKind::Git)
     } else {
-        bail!("expected a `.git` URL or a `https://api.jsonbin.io/...` URL")
+        bail!("expected a `.git` URL, a `file://` URL, or a `https://api.jsonbin.io/...` URL")
     }
 }
 
