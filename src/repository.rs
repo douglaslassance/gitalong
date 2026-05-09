@@ -134,6 +134,58 @@ impl Repository {
             clone: real_path(&self.working_dir),
         }
     }
+
+    /// Resolve the directory git should look in for hooks. Honors
+    /// `core.hooksPath` if set in the repository config, otherwise falls back
+    /// to `<gitdir>/hooks`.
+    pub fn hooks_path(&self) -> Result<PathBuf> {
+        let cfg = self.inner.config()?;
+        if let Ok(custom) = cfg.get_path("core.hooksPath") {
+            return Ok(if custom.is_absolute() {
+                custom
+            } else {
+                self.working_dir.join(custom)
+            });
+        }
+        Ok(self.inner.path().join("hooks"))
+    }
+
+    /// Install the gitalong git hooks into [`hooks_path`](Self::hooks_path).
+    pub fn install_hooks(&self) -> Result<()> {
+        crate::hooks::install(&self.hooks_path()?)
+    }
+
+    /// Append the gitalong directives to `.gitignore` if they aren't already
+    /// present. Idempotent: running twice leaves the file unchanged the
+    /// second time.
+    pub fn update_gitignore(&self) -> Result<()> {
+        let path = self.working_dir.join(".gitignore");
+        let existing = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(e.into()),
+        };
+        if existing.contains(crate::hooks::GITIGNORE_PATCH) {
+            return Ok(());
+        }
+        let needs_separator = !existing.is_empty() && !existing.ends_with('\n');
+        let mut next = existing;
+        if needs_separator {
+            next.push('\n');
+        }
+        next.push_str(crate::hooks::GITIGNORE_PATCH);
+        std::fs::write(&path, next)?;
+        Ok(())
+    }
+
+    /// Disable git's `core.fileMode` tracking so user-driven `chmod` calls
+    /// (which gitalong uses to enforce claims when `modify_permissions` is on)
+    /// don't show up as dirty diffs.
+    pub fn disable_file_mode_tracking(&self) -> Result<()> {
+        let mut cfg = self.inner.config()?;
+        cfg.set_bool("core.fileMode", false)?;
+        Ok(())
+    }
 }
 
 /// Resolve symlinks in `p`, falling back to `p` itself when canonicalization
