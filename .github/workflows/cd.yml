@@ -193,6 +193,6 @@ jobs:
           # GITHUB_PERSONAL_ACCESS_TOKEN — the env-var name submit_build.sh
           # reads (matches Peel and the local .env convention).
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          HOMEBREW_TAP_REPO_URL: ${{ secrets.HOMEBREW_TAP_REPO_URL }}
+          HOMEBREW_TAP_URL: ${{ secrets.HOMEBREW_TAP_URL }}
           S3_PUBLIC_URL: ${{ secrets.S3_PUBLIC_URL }}
         run: ./submit_build.sh --pull-request ${{ needs.detect-version.outputs.version }}
