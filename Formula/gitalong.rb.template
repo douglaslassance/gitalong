@@ -5,13 +5,10 @@ class Gitalong < Formula
   license "MIT"
 
   on_macos do
+    # Apple Silicon only. Intel Macs install via `cargo install gitalong`.
     on_arm do
       url "https://api.douglaslassance.me/gitalong/download/#{version}/aarch64-apple-darwin"
       sha256 "{{SHA256_AARCH64_APPLE_DARWIN}}"
-    end
-    on_intel do
-      url "https://api.douglaslassance.me/gitalong/download/#{version}/x86_64-apple-darwin"
-      sha256 "{{SHA256_X86_64_APPLE_DARWIN}}"
     end
   end
 

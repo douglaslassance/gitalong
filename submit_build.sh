@@ -70,7 +70,6 @@ fi
 # uploaded to R2 but isn't a Homebrew target.
 TARGETS=(
     "aarch64-apple-darwin"
-    "x86_64-apple-darwin"
     "aarch64-unknown-linux-gnu"
     "x86_64-unknown-linux-gnu"
 )
@@ -99,7 +98,6 @@ RENDERED=$(mktemp)
 sed \
     -e "s|{{VERSION}}|${VERSION}|g" \
     -e "s|{{SHA256_AARCH64_APPLE_DARWIN}}|${SHA["aarch64-apple-darwin"]}|g" \
-    -e "s|{{SHA256_X86_64_APPLE_DARWIN}}|${SHA["x86_64-apple-darwin"]}|g" \
     -e "s|{{SHA256_AARCH64_UNKNOWN_LINUX_GNU}}|${SHA["aarch64-unknown-linux-gnu"]}|g" \
     -e "s|{{SHA256_X86_64_UNKNOWN_LINUX_GNU}}|${SHA["x86_64-unknown-linux-gnu"]}|g" \
     "$TEMPLATE" > "$RENDERED"
