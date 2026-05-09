@@ -18,10 +18,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux + macOS cover the platforms gitalong actually targets at the
-        # moment. Add windows-latest here once we've worked out the
-        # permission-management semantics there.
-        os: [ubuntu-latest, macos-latest]
+        include:
+          # Linux uses apt's libgit2-dev to keep dev builds fast.
+          - os: ubuntu-latest
+            features: ""
+          # macOS relies on git2's auto-vendored fallback when no system
+          # libgit2 is present on the runner.
+          - os: macos-latest
+            features: ""
+          # Windows has no system libgit2, so always vendor here. Slower
+          # build but the only path that actually links.
+          - os: windows-latest
+            features: "--features vendored"
     steps:
       - uses: actions/checkout@v4
 
@@ -30,8 +38,6 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      # libgit2 ships with the `vendored` feature; for CI dev builds we use
-      # the system one if available to keep build times reasonable.
       - name: Install libgit2 (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libgit2-dev
@@ -50,12 +56,12 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
 
       - name: cargo test
-        run: cargo test --all-targets
+        run: cargo test --all-targets ${{ matrix.features }}
 
       - name: cargo doc
-        run: cargo doc --no-deps
+        run: cargo doc --no-deps ${{ matrix.features }}
         env:
           RUSTDOCFLAGS: -D warnings
