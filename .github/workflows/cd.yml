@@ -82,9 +82,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS is Apple-Silicon-only — Intel Macs aren't a supported
-          # release target. Anyone on Intel can `cargo install gitalong`.
+          # Both macOS targets run on Apple Silicon runners — x86_64 is
+          # produced via native cross-compile (Rust + the Mac SDK on arm
+          # know how to emit Intel Mach-O), avoiding the macos-13 (Intel)
+          # runner queue.
           - target: aarch64-apple-darwin
+            os: macos-15
+            archive: tar.gz
+          - target: x86_64-apple-darwin
             os: macos-15
             archive: tar.gz
           - target: x86_64-unknown-linux-gnu
