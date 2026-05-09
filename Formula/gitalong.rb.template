@@ -4,12 +4,18 @@ class Gitalong < Formula
   version "{{VERSION}}"
   license "MIT"
 
+  livecheck do
+    url "https://api.douglaslassance.me/gitalong"
+    strategy :json do |json|
+      json["latest"]
+    end
+  end
+
   on_macos do
     # Apple Silicon only. Intel Macs install via `cargo install gitalong`.
-    on_arm do
-      url "https://api.douglaslassance.me/gitalong/download/#{version}/aarch64-apple-darwin"
-      sha256 "{{SHA256_AARCH64_APPLE_DARWIN}}"
-    end
+    depends_on arch: :arm64
+    url "https://api.douglaslassance.me/gitalong/download/#{version}/aarch64-apple-darwin"
+    sha256 "{{SHA256_AARCH64_APPLE_DARWIN}}"
   end
 
   on_linux do
@@ -20,13 +26,6 @@ class Gitalong < Formula
     on_intel do
       url "https://api.douglaslassance.me/gitalong/download/#{version}/x86_64-unknown-linux-gnu"
       sha256 "{{SHA256_X86_64_UNKNOWN_LINUX_GNU}}"
-    end
-  end
-
-  livecheck do
-    url "https://api.douglaslassance.me/gitalong"
-    strategy :json do |json|
-      json["latest"]
     end
   end
 
