@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Renders Formula/gitalong.rb from the in-repo template, fetching the SHA256
-# sidecars over HTTPS from S3_PUBLIC_URL (so this can run from a laptop after
-# CI has uploaded artifacts — no local build required), then pushes a release
-# branch to the Homebrew tap identified by HOMEBREW_TAP_REPO_URL.
+# Renders Formula/gitalong.rb from the in-repo template, downloading each
+# target's .tar.gz from S3_PUBLIC_URL and hashing it locally (so this can run
+# from a laptop after CI has uploaded artifacts — no local build required),
+# then pushes a release branch to the Homebrew tap identified by
+# HOMEBREW_TAP_REPO_URL.
 #
 # Mirrors Peel's submit_build.sh: pass --pull-request to also open a PR
 # against the tap. Without the flag the branch is just pushed and the tap
@@ -23,10 +24,10 @@ for arg in "$@"; do
 submit_build.sh - Push (and optionally PR) the new formula to the Homebrew tap
 Usage: ./submit_build.sh [--pull-request] <version>
 
-Run this locally after CI has uploaded the release to R2. Fetches each
-target's .sha256 sidecar over HTTPS, renders the formula template, and
-pushes a branch to the configured tap. With --pull-request, also opens a
-PR back to the tap's main.
+Run this locally after CI has uploaded the release to R2. Downloads each
+target's .tar.gz from S3_PUBLIC_URL, hashes it, renders the formula
+template, and pushes a branch to the configured tap. With --pull-request,
+also opens a PR back to the tap's main.
 
 Required env (from .env):
   GITHUB_PERSONAL_ACCESS_TOKEN  GitHub PAT with \`repo\` scope on the tap
@@ -76,15 +77,18 @@ TARGETS=(
 
 declare -A SHA
 
+SCRATCH=$(mktemp -d)
+trap 'rm -rf "$SCRATCH"' EXIT
+
 for target in "${TARGETS[@]}"; do
     archive="${REPO_NAME}-${VERSION}-${target}.tar.gz"
-    sha_url="${S3_PUBLIC_URL%/}/${REPO_NAME}/${archive}.sha256"
-    echo "Fetching SHA: ${sha_url}"
-    if ! sha=$(curl -fsSL "$sha_url"); then
-        echo "Error: could not fetch ${sha_url}. Has CD finished uploading version ${VERSION}?" >&2
+    archive_url="${S3_PUBLIC_URL%/}/${REPO_NAME}/${archive}"
+    echo "Hashing ${archive_url}"
+    if ! curl -fsSL -o "${SCRATCH}/${archive}" "$archive_url"; then
+        echo "Error: could not fetch ${archive_url}. Has CD finished uploading version ${VERSION}?" >&2
         exit 1
     fi
-    SHA["$target"]=$(echo "$sha" | awk '{print $1}')
+    SHA["$target"]=$(shasum -a 256 "${SCRATCH}/${archive}" | awk '{print $1}')
 done
 
 # --- Render the formula from the template ---

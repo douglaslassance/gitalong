@@ -84,18 +84,6 @@ for path in "${ARTIFACTS[@]}"; do
         --key "$key" \
         --acl public-read \
         --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1 || true
-
-    # Upload the matching .sha256 sidecar so consumers (and the Homebrew
-    # PR job) can fetch it without redownloading the archive.
-    if [[ -f "${path}.sha256" ]]; then
-        aws s3 cp "${path}.sha256" "s3://${S3_BUCKET_NAME}/${key}.sha256" \
-            --endpoint-url "$R2_ENDPOINT"
-        aws s3api put-object-acl \
-            --bucket "$S3_BUCKET_NAME" \
-            --key "${key}.sha256" \
-            --acl public-read \
-            --endpoint-url "$R2_ENDPOINT" >/dev/null 2>&1 || true
-    fi
 done
 
 # --- KV update (Cloudflare Worker reads this for livecheck) ---
