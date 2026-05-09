@@ -118,9 +118,17 @@ try:
 except Exception:
     print("{}")
 ')
+        # gitalong ships .tar.gz everywhere except Windows MSVC, where it
+        # ships .zip. The Worker reads these to resolve `/{app}/download/...`
+        # URLs to actual R2 keys.
         NEW_VALUE=$(python3 -c '
 import json, sys
-data = {"latest": sys.argv[1], "downloads": json.loads(sys.argv[2])}
+data = {
+    "latest": sys.argv[1],
+    "downloads": json.loads(sys.argv[2]),
+    "extension": ".tar.gz",
+    "extension_overrides": {"x86_64-pc-windows-msvc": ".zip"},
+}
 print(json.dumps(data))
 ' "$VERSION" "$EXISTING_DOWNLOADS")
 

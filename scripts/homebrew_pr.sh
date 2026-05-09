@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
-# Renders Formula/gitalong.rb from the in-repo template using the SHA256s
-# in dist/ and the configured S3_PUBLIC_URL, then opens a PR on
-# douglaslassance/homebrew-tap with the new formula.
+# Renders Formula/gitalong.rb from the in-repo template using the SHA256s in
+# dist/, then opens a PR on the Homebrew tap repo identified by
+# HOMEBREW_TAP_REPO_URL (e.g. https://github.com/douglaslassance/homebrew-tap.git).
+# Will switch to the official Homebrew core when that becomes possible — only
+# the env var has to change.
 
 set -euo pipefail
 
@@ -12,11 +14,11 @@ homebrew_pr.sh - Open a Homebrew tap PR with the new formula
 Usage: ./scripts/homebrew_pr.sh <version>
 
 Reads dist/gitalong-<version>-*.tar.gz.sha256 sidecars produced by the
-build job and pushes a branch + PR to douglaslassance/homebrew-tap.
+build job and pushes a branch + PR to the configured tap.
 
 Required env:
-  HOMEBREW_TAP_TOKEN  GitHub PAT with \`repo\` scope on the tap
-  S3_PUBLIC_URL       Public download URL prefix, e.g. https://api.douglaslassance.me
+  HOMEBREW_TAP_TOKEN     GitHub PAT with \`repo\` scope on the tap
+  HOMEBREW_TAP_REPO_URL  e.g. https://github.com/douglaslassance/homebrew-tap.git
 EOF
     exit 0
 fi
@@ -27,19 +29,27 @@ if [[ -f .env && -z "${CI:-}" ]]; then
 fi
 
 REPO_NAME="gitalong"
-TAP_OWNER="douglaslassance"
-TAP_REPO="homebrew-tap"
 VERSION="${1:?version required}"
 
 missing=()
 [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]] && missing+=("HOMEBREW_TAP_TOKEN")
-[[ -z "${S3_PUBLIC_URL:-}" ]] && missing+=("S3_PUBLIC_URL")
+[[ -z "${HOMEBREW_TAP_REPO_URL:-}" ]] && missing+=("HOMEBREW_TAP_REPO_URL")
 if (( ${#missing[@]} )); then
     echo "Error: missing env vars: ${missing[*]}" >&2
     exit 1
 fi
 
-# Targets that ship via Homebrew (Linux + macOS, both arches).
+# Parse owner/repo from the tap URL for `gh pr create --repo`.
+# Accepts both .git suffix and bare HTTPS; strips either.
+TAP_SLUG=$(echo "$HOMEBREW_TAP_REPO_URL" \
+    | sed -E 's#^https?://[^/]+/##; s#\.git$##')
+if [[ ! "$TAP_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
+    echo "Error: HOMEBREW_TAP_REPO_URL=$HOMEBREW_TAP_REPO_URL did not parse as owner/repo." >&2
+    exit 1
+fi
+
+# Targets that ship via Homebrew (macOS + Linux, both arches). Windows is
+# uploaded to R2 but isn't a Homebrew target.
 TARGETS=(
     "aarch64-apple-darwin"
     "x86_64-apple-darwin"
@@ -47,7 +57,7 @@ TARGETS=(
     "x86_64-unknown-linux-gnu"
 )
 
-declare -A SHA URL
+declare -A SHA
 
 for target in "${TARGETS[@]}"; do
     archive="${REPO_NAME}-${VERSION}-${target}.tar.gz"
@@ -57,7 +67,6 @@ for target in "${TARGETS[@]}"; do
         exit 1
     fi
     SHA["$target"]=$(awk '{print $1}' "$sha_file")
-    URL["$target"]="${S3_PUBLIC_URL%/}/${REPO_NAME}/${archive}"
 done
 
 # --- Render the formula from the template ---
@@ -70,13 +79,9 @@ fi
 RENDERED=$(mktemp)
 sed \
     -e "s|{{VERSION}}|${VERSION}|g" \
-    -e "s|{{URL_AARCH64_APPLE_DARWIN}}|${URL["aarch64-apple-darwin"]}|g" \
     -e "s|{{SHA256_AARCH64_APPLE_DARWIN}}|${SHA["aarch64-apple-darwin"]}|g" \
-    -e "s|{{URL_X86_64_APPLE_DARWIN}}|${URL["x86_64-apple-darwin"]}|g" \
     -e "s|{{SHA256_X86_64_APPLE_DARWIN}}|${SHA["x86_64-apple-darwin"]}|g" \
-    -e "s|{{URL_AARCH64_UNKNOWN_LINUX_GNU}}|${URL["aarch64-unknown-linux-gnu"]}|g" \
     -e "s|{{SHA256_AARCH64_UNKNOWN_LINUX_GNU}}|${SHA["aarch64-unknown-linux-gnu"]}|g" \
-    -e "s|{{URL_X86_64_UNKNOWN_LINUX_GNU}}|${URL["x86_64-unknown-linux-gnu"]}|g" \
     -e "s|{{SHA256_X86_64_UNKNOWN_LINUX_GNU}}|${SHA["x86_64-unknown-linux-gnu"]}|g" \
     "$TEMPLATE" > "$RENDERED"
 
@@ -88,8 +93,9 @@ echo "----------------------------------------"
 WORKTREE=$(mktemp -d)
 trap 'rm -rf "$WORKTREE" "$RENDERED"' EXIT
 
+# Inject the token via insteadOf so it doesn't end up in the repo's .git/config.
 git -c "url.https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/.insteadOf=https://github.com/" \
-    clone --depth=1 "https://github.com/${TAP_OWNER}/${TAP_REPO}.git" "$WORKTREE"
+    clone --depth=1 "$HOMEBREW_TAP_REPO_URL" "$WORKTREE"
 
 cd "$WORKTREE"
 git config user.email "actions@github.com"
@@ -118,9 +124,8 @@ if ! command -v gh >/dev/null 2>&1; then
         || curl -fsSL https://cli.github.com/install.sh | sh
 fi
 
-# `gh` reads GH_TOKEN.
 GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh pr create \
-    --repo "${TAP_OWNER}/${TAP_REPO}" \
+    --repo "$TAP_SLUG" \
     --head "$BRANCH" \
     --base main \
     --title "Update ${REPO_NAME} to ${VERSION}" \
