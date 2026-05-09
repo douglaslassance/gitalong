@@ -1,32 +1,24 @@
-# gitalong
+# Gitalong
 
-Gitalong helps teams sharing a Git repository avoid stepping on each other's
-files. Each clone publishes the changes it has in flight (committed but
-unpushed work, plus uncommitted edits when the option is on) to a shared
-*store*, and the CLI lets anyone query "who's currently editing this file?"
-or "can I claim this file for editing?".
-
-> [!NOTE]
-> The `1.x` line is a complete rewrite in Rust, distributed as a single
-> binary. The Python `0.x` releases (and the `gitalong` PyPI package) live on
-> the [`python`](https://github.com/douglaslassance/gitalong/tree/python)
-> branch and are kept in maintenance mode for legacy users.
+Gitalong is a CLI for Git repositories that seeks to prevent conflicts between files when working with a team. It uses hooks and a store to communicate local changes across all clones of a given remote. In turns this information can be leveraged to prevent modifying files that are already changed elsewhere.
 
 ## Install
 
-A single static binary, no Python runtime required.
-
 ```shell
-# Homebrew (preferred)
+# Via Homebrew
 brew install douglaslassance/tap/gitalong
 
 # From source via Cargo
 cargo install gitalong
 ```
 
-Requires Git ≥ 2.35 on `PATH`.
+> [!NOTE]
+> Binaries for all systems can also be download directly [here](https://github.com/douglaslassance/gitalong/releases).
 
 ## Usage
+
+> [!WARNING]
+> This following assumes you have [Git](https://git-scm.com/) 2.35 or later installed on your system.
 
 ```shell
 # Stand up a project repository and a clone of it.
@@ -96,14 +88,17 @@ commit lives. The bits, in order, are:
 
 ### Git repository
 
-The simplest backend: any git repository the team can read and push to. Set
-`store_url` to the clone URL ending in `.git` and gitalong will clone it into
+Any Git repository the team can read and push to. Set
+`store_url` to the clone URL ending in `.git` and Gitalong will clone it into
 `<repo>/.gitalong/` on first use, then commit and push `commits.json` updates
 from there.
 
+> [!WARNING]
+> This method is has very low infrastructure implications but operations are pretty slow.
+
 ### JSONBin.io
 
-A hosted alternative for teams that don't want a second git repo. Set
+A hosted alternative. Set
 `store_url` to the bin URL and pass an access key via `--store-header`:
 
 ```shell
@@ -127,14 +122,3 @@ cargo clippy --all-targets -- -D warnings
 # Run the CLI from a checkout
 cargo run -- --help
 ```
-
-Distribution builds use the `vendored` feature so libgit2 is statically
-linked and the resulting binary is self-contained:
-
-```shell
-cargo build --release --features vendored
-```
-
-## License
-
-[MIT](LICENSE)
