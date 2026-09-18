@@ -58,9 +58,6 @@ impl JsonbinStore {
         }
         match self.read_remote() {
             Ok(commits) => Ok(commits),
-            // Best-effort fallback to cache when the network read fails so
-            // local-only operations (status, claim hints) keep working
-            // offline. Unreachable-store errors during write still bubble up.
             Err(Error::StoreUnreachable(_)) => self.read_local(),
             Err(e) => Err(e),
         }
@@ -109,7 +106,6 @@ impl JsonbinStore {
             .body_mut()
             .read_json()
             .map_err(|e| Error::StoreUnreachable(format!("decoding GET {}: {e}", self.url)))?;
-        // Refresh the cache so an offline next-read can answer.
         let body = serde_json::to_vec(&envelope.record)?;
         std::fs::write(&self.cache_path, body)?;
         touch(&self.pull_marker)?;
@@ -179,7 +175,6 @@ fn expand_env(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'$' && i + 1 < bytes.len() {
-            // Handle ${NAME}
             if bytes[i + 1] == b'{'
                 && let Some(close) = bytes[i + 2..].iter().position(|&b| b == b'}')
             {
@@ -191,7 +186,6 @@ fn expand_env(input: &str) -> String {
                 i += 2 + close + 1;
                 continue;
             }
-            // Handle $NAME (alphanumeric + underscore).
             let start = i + 1;
             let mut end = start;
             while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
@@ -249,7 +243,6 @@ mod tests {
         let (m, repo) = fixture(BTreeMap::new());
         let mut store = JsonbinStore::new(&repo).unwrap();
 
-        // Seed a cache as if a previous successful read had stored commits.
         let cached = vec![Commit {
             sha: Some("cached".into()),
             ..Commit::default()
@@ -270,8 +263,6 @@ mod tests {
     fn read_returns_empty_vec_when_no_cache_exists_and_remote_is_unreachable() {
         let (_m, repo) = fixture(BTreeMap::new());
         let mut store = JsonbinStore::new(&repo).unwrap();
-        // No cache, no network. read() should bail to an empty list rather
-        // than failing — gitalong shouldn't blow up on offline machines.
         let got = store.read().unwrap();
         assert!(got.is_empty());
     }

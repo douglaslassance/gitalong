@@ -40,14 +40,8 @@ pub fn claim_files(repo: &Repository, files: &[String]) -> Result<Vec<ClaimOutco
 
     for status in statuses {
         let spread = status.commit.spread(active.as_deref(), &ctx);
-        // Match the Python rule: any commit on this clone's active branch or
-        // in this clone's uncommitted state is claimable. We use
-        // `intersects`, not `==`, so a commit also visible elsewhere (e.g.
-        // also on a remote branch) doesn't suddenly become "blocked".
         let already_ours = spread.intersects(CommitSpread::MINE_ACTIVE_BRANCH)
             || spread.intersects(CommitSpread::MINE_UNCOMMITTED);
-        // Spread is empty when no commit exists for this file — an
-        // unblocked first-claim, not a denial.
         let unblocked = already_ours || spread.is_empty();
 
         if unblocked {
@@ -102,8 +96,6 @@ mod tests {
         let origin = tempfile::tempdir().unwrap();
         run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
 
-        // Alice creates the initial commit including .gitalong.json and the
-        // .gitignore patch that hides the cloned store; she pushes once.
         let alice = tempfile::tempdir().unwrap();
         run(
             alice.path(),
@@ -135,8 +127,6 @@ mod tests {
         run(alice.path(), &["commit", "-m", "init"]);
         run(alice.path(), &["push", "-u", "origin", "main"]);
 
-        // Bob clones from the same origin — he inherits Alice's config and
-        // doesn't need to re-commit anything to start using gitalong.
         let bob = tempfile::tempdir().unwrap();
         run(
             bob.path(),
@@ -159,11 +149,9 @@ mod tests {
 
         let outcomes = claim_files(&repo, &["shared.txt".to_string()]).unwrap();
         assert_eq!(outcomes.len(), 1);
-        // Blocker is the default empty commit — no sha, no host.
         assert!(outcomes[0].blocker.sha.is_none());
         assert!(outcomes[0].blocker.host.is_none());
 
-        // The store now records us editing shared.txt as uncommitted.
         let mut store = crate::store::Store::for_repository(&repo).unwrap();
         let commits = store.read().unwrap();
         let ours = commits
@@ -177,11 +165,9 @@ mod tests {
     fn claim_blocked_when_other_clone_has_uncommitted_changes() {
         let (_s, alice, bob) = two_clones();
 
-        // Alice claims shared.txt, recording an uncommitted-changes entry.
         let alice_repo = Repository::open(alice.path()).unwrap();
         claim_files(&alice_repo, &["shared.txt".to_string()]).unwrap();
 
-        // Bob now tries to claim it — should see Alice's record as blocker.
         let bob_repo = Repository::open(bob.path()).unwrap();
         let outcomes = claim_files(&bob_repo, &["shared.txt".to_string()]).unwrap();
         let blocker = &outcomes[0].blocker;
@@ -189,10 +175,6 @@ mod tests {
             blocker.is_uncommitted_changes(),
             "blocker should be an uncommitted-changes record"
         );
-        // We can't differentiate the two clones by OS user (single test
-        // process, single user). The clone path is what makes them
-        // distinguishable — and the Python implementation behaves the same
-        // way for two clones owned by the same person on the same host.
         let bob_clone = bob_repo.context().clone.to_string_lossy().into_owned();
         assert_ne!(
             blocker.clone.as_deref(),

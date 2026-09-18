@@ -61,8 +61,6 @@ impl GitStore {
     /// Pull the store (subject to the cache window) and return all commits.
     pub fn read(&mut self) -> Result<Vec<Commit>> {
         if !self.pulled_within_threshold() {
-            // Best-effort: a failed pull (offline, force-pushed remote, etc.)
-            // shouldn't kill the read — we fall through to the cached file.
             let _ = run_git_in(
                 &self.clone_path,
                 &[
@@ -93,9 +91,6 @@ impl GitStore {
         std::fs::write(&path, new_body.as_bytes())?;
         run_git_in(&self.clone_path, &["add", COMMITS_FILENAME])?;
 
-        // Configure a stable identity for store commits if the user hasn't
-        // set one globally — without this, `git commit` errors out in
-        // pristine environments (CI, tempdirs in tests).
         ensure_commit_identity(&self.clone_path)?;
 
         run_git_in(
@@ -195,7 +190,6 @@ mod tests {
 
     fn make_fixture() -> Fixture {
         let store = tempfile::tempdir().unwrap();
-        // Bare repo so we can push to it without setup gymnastics.
         Command::new("git")
             .args(["init", "--bare", "--initial-branch=main"])
             .arg(store.path())
@@ -274,10 +268,8 @@ mod tests {
         }];
 
         store.write(&commits).unwrap();
-        // Capture the HEAD sha after the first write.
         let head_after_first = head_sha(&store.clone_path);
 
-        // Re-write identical content; HEAD must not advance.
         store.write(&commits).unwrap();
         let head_after_second = head_sha(&store.clone_path);
         assert_eq!(head_after_first, head_after_second);
@@ -285,9 +277,6 @@ mod tests {
 
     #[test]
     fn second_clone_sees_first_clones_writes() {
-        // Two managed repos sharing the same store URL — the second one's
-        // GitStore should see what the first wrote, simulating two team
-        // members running gitalong against the same store.
         let store = tempfile::tempdir().unwrap();
         Command::new("git")
             .args(["init", "--bare", "--initial-branch=main"])
@@ -343,13 +332,10 @@ mod tests {
     fn pull_failure_does_not_break_read() {
         let f = make_fixture();
         let mut store = GitStore::open_or_clone(&f.repo).unwrap();
-        // Drop the FETCH_HEAD so `pulled_within_threshold` returns false and
-        // we'll try to pull again.
         let fetch_head = store.clone_path.join(".git/FETCH_HEAD");
         if fetch_head.exists() {
             fs::remove_file(&fetch_head).unwrap();
         }
-        // Read should still succeed even if the bare remote has nothing yet.
         assert!(store.read().unwrap().is_empty());
     }
 }

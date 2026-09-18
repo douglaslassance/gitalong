@@ -204,7 +204,6 @@ impl Repository {
     pub fn active_branch_name(&self) -> Result<Option<String>> {
         let head = match self.inner.head() {
             Ok(h) => h,
-            // Unborn branch (no commits yet): no active branch to report.
             Err(e) if e.code() == git2::ErrorCode::UnbornBranch => return Ok(None),
             Err(e) => return Err(e.into()),
         };
@@ -314,7 +313,6 @@ impl Repository {
     pub fn is_file_tracked(&self, path: &Path) -> Result<bool> {
         let rel = self.relative_path(path);
 
-        // Explicit extension list short-circuits everything.
         let cfg = self.config();
         if let Some(ext) = rel.extension().and_then(|e| e.to_str()) {
             let dotted = format!(".{ext}");
@@ -328,9 +326,6 @@ impl Repository {
             return Ok(true);
         }
 
-        // Tracked iff the path resolves in the HEAD tree. We avoid
-        // `status_file` here because some git2 versions surface a no-message
-        // error for files with no pending changes.
         let head = match self.inner.head() {
             Ok(h) => h,
             Err(_) => return Ok(false),
@@ -440,7 +435,6 @@ mod tests {
         let dir = fixture("https://example.com/store.git");
         let repo = Repository::open(dir.path()).unwrap();
         assert_eq!(repo.config().store_url, "https://example.com/store.git");
-        // canonicalize() may strip /private prefixes etc; compare canonicalized.
         let want = std::fs::canonicalize(dir.path()).unwrap();
         let got = std::fs::canonicalize(repo.working_dir()).unwrap();
         assert_eq!(got, want);
@@ -469,7 +463,6 @@ mod tests {
     #[test]
     fn discover_returns_none_for_non_git_path() {
         let dir = tempdir().unwrap();
-        // No git init.
         assert!(Repository::discover(dir.path()).unwrap().is_none());
     }
 
@@ -484,10 +477,6 @@ mod tests {
     fn relative_path_strips_working_dir() {
         let dir = fixture("x.git");
         let repo = Repository::open(dir.path()).unwrap();
-        // Build the absolute input from `repo.working_dir()` (canonical) rather
-        // than `dir.path()` so the test doesn't trip on platform-specific
-        // canonicalization quirks (Windows 8.3 short names like `RUNNER~1`
-        // vs the long form, macOS `/var` vs `/private/var`).
         let abs = repo.working_dir().join("subdir/file.txt");
         let rel = repo.relative_path(&abs);
         assert_eq!(rel, Path::new("subdir/file.txt"));
@@ -513,8 +502,6 @@ mod tests {
     fn absolute_path_passes_through_absolute_input() {
         let dir = fixture("x.git");
         let repo = Repository::open(dir.path()).unwrap();
-        // Pick a path that's actually absolute on the host's platform —
-        // `/absolute/foo.txt` is absolute on Unix but relative on Windows.
         #[cfg(unix)]
         let already = Path::new("/absolute/foo.txt");
         #[cfg(windows)]

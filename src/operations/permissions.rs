@@ -32,10 +32,6 @@ pub fn update_files_permissions(repo: &Repository, files: &[String]) -> Result<V
     let mut touched = Vec::new();
     for status in statuses {
         let spread = status.commit.spread(active.as_deref(), &ctx);
-        // The Python only flips files whose spread *exactly* equals one of
-        // the writable bits. A file with both MINE_ACTIVE_BRANCH and
-        // REMOTE_MATCHING_BRANCH is treated as read-only because someone
-        // else's branch could see it. Mirror that exactness.
         let want_writable =
             spread == CommitSpread::MINE_UNCOMMITTED || spread == CommitSpread::MINE_ACTIVE_BRANCH;
         let abs = repo.absolute_path(Path::new(&status.filename));
@@ -45,8 +41,6 @@ pub fn update_files_permissions(repo: &Repository, files: &[String]) -> Result<V
         match set_writable(&abs, want_writable) {
             Ok(true) => touched.push(status.filename),
             Ok(false) => {}
-            // Permission errors on chmod are common when running unprivileged
-            // against repo files owned by someone else; surface as a no-op.
             Err(_) => {}
         }
     }
@@ -100,7 +94,6 @@ mod tests {
         let p = dir.path().join("f.txt");
         std::fs::write(&p, b"x").unwrap();
 
-        // Drop write, verify it's gone, restore it, verify it's back.
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o444)).unwrap();
         assert!(set_writable(&p, true).unwrap());
         assert_ne!(
@@ -121,7 +114,6 @@ mod tests {
         let p = dir.path().join("f.txt");
         std::fs::write(&p, b"x").unwrap();
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o644)).unwrap();
-        // Already writable: a request for writable should be a no-op.
         assert!(!set_writable(&p, true).unwrap());
     }
 }

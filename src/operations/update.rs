@@ -32,13 +32,6 @@ pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
 
-    // Step 1: drop our own stale entries for this remote.
-    //
-    // The Python filter used `is_issued_commit()` (full host/user/clone match),
-    // which never matches real commits — they only carry `clone`. That left
-    // every previously-tracked real commit in the store, doubling up on each
-    // re-run. The looser `is_ours` (clone-path match) catches both real and
-    // uncommitted records this clone contributed.
     let mut next: Vec<Commit> = existing
         .into_iter()
         .filter(|c| {
@@ -47,13 +40,10 @@ pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()
         })
         .collect();
 
-    // Step 2: append the fresh local-only view.
     next.extend(local_only_commits(repo, claims, &context, &remote_url)?);
 
     store.write(&next)?;
 
-    // When the repo opted into permission management, refresh the write-bit
-    // for every tracked file based on the freshly-written commit set.
     if repo.config().modify_permissions {
         let files = repo.tracked_files_at_head()?;
         crate::operations::update_files_permissions(repo, &files)?;
@@ -94,13 +84,8 @@ fn real_local_only_commits(
     let mut walk = inner.revwalk()?;
     walk.set_sorting(git2::Sort::TIME)?;
 
-    // Push every local branch tip — `push_glob` happily matches across the
-    // single segment under `refs/heads/`.
     walk.push_glob("refs/heads/*")?;
 
-    // Hide remote-tracking branches explicitly. `hide_glob("refs/remotes/*")`
-    // would seem natural but its `*` doesn't cross slashes, so it misses the
-    // common `refs/remotes/<remote>/<branch>` layout entirely.
     for entry in inner.branches(Some(git2::BranchType::Remote))? {
         let (branch, _) = entry?;
         if let Some(oid) = branch.get().target() {
@@ -211,9 +196,6 @@ fn uncommitted_changes_commit(
     }
     paths.sort();
 
-    // `time` only exposes UTC `now` without the optional `local-offset` feature.
-    // The Python tool stamps with the local clock, but UTC sorts the same way
-    // and is unambiguous across timezones — a small, intentional deviation.
     let date = format_offset_date_time(OffsetDateTime::now_utc())?;
 
     let mut c = Commit {
@@ -275,18 +257,12 @@ mod tests {
     }
 
     fn make_fixture() -> Fixture {
-        // Bare store repo (gitalong's commits.json target).
         let store = tempfile::tempdir().unwrap();
         run(store.path(), &["init", "--bare", "--initial-branch=main"]);
 
-        // Bare "origin" repo for the managed code.
         let origin = tempfile::tempdir().unwrap();
         run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
 
-        // Managed repo: cloned from origin. We seed README *and* the gitalong
-        // config in the same initial commit so the working tree is pristine
-        // afterwards — leaving .gitalong.json as an untracked file would make
-        // every test see a stray uncommitted-changes record.
         let managed = tempfile::tempdir().unwrap();
         run(
             managed.path(),
@@ -310,9 +286,6 @@ mod tests {
         };
         cfg.save(&managed.path().join(CONFIG_BASENAME)).unwrap();
         std::fs::write(managed.path().join("README"), b"hi").unwrap();
-        // The cloned store lives in `<managed>/.gitalong/`. Without ignoring
-        // it the post-clone working tree would look dirty to status, polluting
-        // every uncommitted-changes record under track_uncommitted=true.
         std::fs::write(
             managed.path().join(".gitignore"),
             crate::hooks::GITIGNORE_PATCH,
@@ -340,16 +313,12 @@ mod tests {
         update_tracked_commits(&repo, &[]).unwrap();
 
         let mut store = Store::for_repository(&repo).unwrap();
-        // Everything is on the remote and there are no uncommitted edits, so
-        // the store should land empty.
         assert!(store.read().unwrap().is_empty());
     }
 
     #[test]
     fn local_only_commit_makes_it_into_the_store() {
         let f = make_fixture();
-        // A commit that hasn't been pushed yet — exactly the case gitalong
-        // needs to surface.
         std::fs::write(f.managed.path().join("local.txt"), b"local-only").unwrap();
         run(f.managed.path(), &["add", "local.txt"]);
         run(f.managed.path(), &["commit", "-m", "wip"]);
@@ -365,8 +334,6 @@ mod tests {
         assert_eq!(c.author.as_deref(), Some("Alice"));
         assert_eq!(c.changes, vec!["local.txt".to_string()]);
         assert_eq!(c.branches.local, vec!["main".to_string()]);
-        // The host stamp ties the commit to this clone, distinguishing it
-        // from another team member's commit on the same branch.
         assert!(c.host.is_some());
     }
 
@@ -374,7 +341,6 @@ mod tests {
     fn uncommitted_changes_appear_when_track_uncommitted() {
         let f = make_fixture();
         std::fs::write(f.managed.path().join("draft.txt"), b"in flight").unwrap();
-        // Don't add or commit — purely uncommitted.
 
         let repo = Repository::open(f.managed.path()).unwrap();
         update_tracked_commits(&repo, &[]).unwrap();
@@ -391,7 +357,6 @@ mod tests {
     #[test]
     fn rerun_replaces_our_previous_local_view() {
         let f = make_fixture();
-        // First wave: one local commit.
         std::fs::write(f.managed.path().join("a.txt"), b"first").unwrap();
         run(f.managed.path(), &["add", "a.txt"]);
         run(f.managed.path(), &["commit", "-m", "first"]);
@@ -399,8 +364,6 @@ mod tests {
         let repo = Repository::open(f.managed.path()).unwrap();
         update_tracked_commits(&repo, &[]).unwrap();
 
-        // Second wave: a second local commit, then rerun. The store must
-        // reflect the two-commit local view, not the one-commit + carry-over.
         std::fs::write(f.managed.path().join("b.txt"), b"second").unwrap();
         run(f.managed.path(), &["add", "b.txt"]);
         run(f.managed.path(), &["commit", "-m", "second"]);
@@ -413,7 +376,6 @@ mod tests {
             2,
             "rerun must replace the previous local view, not append to it"
         );
-        // Sorted newest-first by date — the "second" commit should lead.
         assert!(commits[0].changes.iter().any(|c| c == "b.txt"));
     }
 
@@ -421,8 +383,6 @@ mod tests {
     fn claim_paths_are_added_to_uncommitted_record() {
         let f = make_fixture();
         let repo = Repository::open(f.managed.path()).unwrap();
-        // No actual edits: only an explicit claim. With track_uncommitted on,
-        // the claim alone should produce an uncommitted-changes record.
         update_tracked_commits(&repo, &["claimed.txt".to_string()]).unwrap();
 
         let mut store = Store::for_repository(&repo).unwrap();

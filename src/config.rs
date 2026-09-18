@@ -90,9 +90,6 @@ impl Config {
 
     /// Write the config to disk with sorted keys and four-space indentation.
     pub fn save(&self, path: &Path) -> Result<()> {
-        // serde_json with our BTreeMap field already produces sorted keys at
-        // every nesting level. Top-level field order follows the struct layout
-        // and is stable.
         let pretty = serde_json::to_string_pretty(self)?;
         fs::write(path, pretty.as_bytes())?;
         Ok(())
@@ -147,7 +144,6 @@ mod tests {
 
     #[test]
     fn missing_fields_use_defaults() {
-        // Only store_url is provided; the rest must fall back to defaults.
         let cfg: Config = serde_json::from_str(r#"{"store_url": "x.git"}"#).unwrap();
         assert_eq!(cfg.store_url, "x.git");
         assert_eq!(cfg.pull_threshold, 60.0);
