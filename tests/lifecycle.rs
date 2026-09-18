@@ -50,7 +50,6 @@ fn full_lifecycle_two_clones() {
     let store_url = format!("file://{}", store.path().display());
     let origin_url = origin.path().to_str().unwrap().to_string();
 
-    // ---- Alice ----
     let alice = tempdir().unwrap();
     run(
         alice.path(),
@@ -89,7 +88,6 @@ fn full_lifecycle_two_clones() {
         .assert()
         .success();
 
-    // ---- Bob ----
     let bob = tempdir().unwrap();
     run(
         bob.path(),

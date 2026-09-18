@@ -58,7 +58,6 @@ pub fn install(dir: &Path) -> Result<()> {
 fn make_executable(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mut perms = fs::metadata(path)?.permissions();
-    // 0o755: rwxr-xr-x — owner can write, everyone else can read+execute.
     perms.set_mode(0o755);
     fs::set_permissions(path, perms)?;
     Ok(())
@@ -66,7 +65,6 @@ fn make_executable(path: &Path) -> Result<()> {
 
 #[cfg(not(unix))]
 fn make_executable(_path: &Path) -> Result<()> {
-    // On Windows git uses the file extension, not the executable bit.
     Ok(())
 }
 
@@ -89,8 +87,6 @@ mod tests {
 
     #[test]
     fn hooks_call_update_not_sync() {
-        // The Python hooks called the non-existent `gitalong sync` subcommand.
-        // The Rust port must call `gitalong update`.
         for hook in HOOKS {
             assert!(!hook.body.contains("gitalong sync"));
             assert!(hook.body.contains("gitalong update"));

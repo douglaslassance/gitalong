@@ -204,7 +204,6 @@ pub fn claim(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()>
         }
     }
     if any_blocked {
-        // Match the Python contract: exit 1 when any file couldn't be claimed.
         std::process::exit(1);
     }
     Ok(())

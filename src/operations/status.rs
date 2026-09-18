@@ -294,7 +294,6 @@ mod tests {
         let result = last_commits(&repo, &["does/not/exist.txt".to_string()]).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "does/not/exist.txt");
-        // No commit means defaults: no sha, no branches.
         assert!(result[0].commit.sha.is_none());
         assert!(result[0].commit.branches.local.is_empty());
     }
@@ -306,15 +305,11 @@ mod tests {
         let result = last_commits(&repo, &["README".to_string()]).unwrap();
         let commit = &result[0].commit;
         assert!(commit.sha.is_some());
-        // Pushed file → commit is on origin/main, so remote-matching-branch
-        // membership is populated.
         assert!(commit.branches.remote.iter().any(|b| b == "main"));
     }
 
     #[test]
     fn local_only_commit_is_picked_up_from_store() {
-        // Make a local-only commit, run update to record it, then status
-        // should report that store entry as the latest.
         let (_s, _o, m) = fixture(false);
         std::fs::write(m.path().join("draft.txt"), b"draft").unwrap();
         run(m.path(), &["add", "draft.txt"]);

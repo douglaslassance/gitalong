@@ -133,7 +133,6 @@ impl Commit {
         let mut spread = CommitSpread::empty();
 
         if self.user.is_some() {
-            // Uncommitted-changes commit, with or without an associated SHA.
             let issued = self.is_issued_by(ctx);
             if self.sha.is_some() {
                 let on_active = active_branch
@@ -158,7 +157,6 @@ impl Commit {
                 };
             }
         } else {
-            // Real commit: branch membership lights things up.
             let mut remote_branches = self.branches.remote.clone();
             if let Some(active) = active_branch {
                 if remote_branches.iter().any(|b| b == active) {
@@ -199,7 +197,6 @@ mod tests {
             ..Commit::default()
         };
         let json = serde_json::to_string(&c).unwrap();
-        // No nulls or empty objects on the wire.
         assert!(!json.contains("user"));
         assert!(!json.contains("host"));
         assert!(!json.contains("branches"));
@@ -227,8 +224,6 @@ mod tests {
 
     #[test]
     fn deserializes_python_dict_with_extras() {
-        // Python serializes Commit dicts with all the same keys; gitdb-derived
-        // fields shouldn't break us.
         let raw = r#"{
             "sha": "abc",
             "author": "Alice",
@@ -280,7 +275,6 @@ mod tests {
     fn spread_for_my_uncommitted() {
         let mut c = Commit::default();
         c.stamp_context(&ctx());
-        // No sha → pure uncommitted record.
         assert_eq!(
             c.spread(Some("main"), &ctx()),
             CommitSpread::MINE_UNCOMMITTED
@@ -311,9 +305,6 @@ mod tests {
             },
             ..Commit::default()
         };
-        // Active branch is "main"; remote branches list includes both
-        // "main" and "origin/main" — only the literal match counts as
-        // REMOTE_MATCHING_BRANCH, the rest fall under REMOTE_OTHER_BRANCH.
         let spread = c.spread(Some("main"), &ctx());
         assert!(spread.contains(CommitSpread::MINE_ACTIVE_BRANCH));
         assert!(spread.contains(CommitSpread::REMOTE_MATCHING_BRANCH));
