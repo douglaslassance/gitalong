@@ -17,6 +17,10 @@
 - No `Co-Authored-By`, no "Generated with" footer, no emoji, no AI attribution of any kind.
 - If a change seems to need a body, split it into several focused commits instead.
 
+### Versioning
+
+- Git tags and version strings are bare, no `v` prefix. `1.2.3`, not `v1.2.3`.
+
 ### Pull requests
 
 - Keep the description short and objective. State what the change does, not the story of how it got there, unless a reviewer genuinely needs it.
