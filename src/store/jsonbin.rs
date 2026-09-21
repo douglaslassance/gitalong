@@ -6,7 +6,7 @@
 //! (`$KEY` or `${KEY}`) which are expanded at request time so secrets stay out
 //! of the on-disk config.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use serde::Deserialize;
@@ -14,6 +14,8 @@ use serde::Deserialize;
 use crate::commit::Commit;
 use crate::error::{Error, Result};
 use crate::repository::Repository;
+
+use super::touch;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -205,12 +207,6 @@ fn expand_env(input: &str) -> String {
         i += 1;
     }
     out
-}
-
-/// Update `path`'s mtime by writing an empty file (creating it if missing).
-fn touch(path: &Path) -> Result<()> {
-    std::fs::write(path, b"")?;
-    Ok(())
 }
 
 #[cfg(test)]
