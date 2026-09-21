@@ -7,9 +7,11 @@
 //! The two flavors of commit:
 //!
 //! - **Real commits** — carry a `sha` and `author`, populated from the git
-//!   log of the managed repository.
-//! - **Uncommitted-changes commits** — carry no `sha`, but a `user` (the OS
-//!   username of the clone that has the working-tree edits). Identified by
+//!   log of the managed repository. Those written to the store also carry the
+//!   issuing clone's `host`, `user` and `clone` so readers can tell whose
+//!   unpushed work they are.
+//! - **Uncommitted-changes commits** — carry no `sha`, only the issuing
+//!   context and the dirty paths. Identified by
 //!   [`Commit::is_uncommitted_changes`].
 
 use serde::{Deserialize, Serialize};
@@ -24,8 +26,8 @@ pub struct Commit {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub sha: Option<String>,
 
-    /// OS username — present only on uncommitted-changes commits to identify
-    /// the clone that issued them.
+    /// OS username of the issuing clone. Present on every store record,
+    /// absent on commits read straight from the git log.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub user: Option<String>,
 
@@ -75,9 +77,9 @@ impl Branches {
 
 impl Commit {
     /// `true` when this record represents uncommitted changes rather than a
-    /// real commit. Mirrors the Python `is_uncommitted_changes_commit` predicate.
+    /// real commit.
     pub fn is_uncommitted_changes(&self) -> bool {
-        self.user.is_some()
+        self.sha.is_none()
     }
 
     /// `true` when this record was contributed by the given clone, identified
@@ -94,12 +96,10 @@ impl Commit {
     }
 
     /// `true` when this record carries the full host/user/clone context of
-    /// the given clone — only uncommitted-changes commits ever satisfy this,
-    /// since real commits don't carry `host`/`user`.
+    /// the given clone.
     ///
-    /// Used during [`Self::spread`] to distinguish `MINE_UNCOMMITTED` from
-    /// `THEIR_UNCOMMITTED`. The looser [`Self::is_ours`] is preferred for
-    /// store filtering.
+    /// Used during [`Self::spread`] to tell `MINE_*` from `THEIR_*`. The
+    /// looser [`Self::is_ours`] is preferred for store filtering.
     pub fn is_issued_by(&self, ctx: &Context) -> bool {
         let clone_str = ctx.clone.to_string_lossy();
         self.host.as_deref() == Some(ctx.host.as_str())
@@ -118,17 +118,17 @@ impl Commit {
     /// Compute the [`CommitSpread`] for this record relative to the given
     /// active branch and identity context.
     ///
-    /// Mirrors the Python `Commit.commit_spread` logic verbatim:
+    /// Mirrors the Python `Commit.commit_spread` logic:
     ///
-    /// - For uncommitted-changes commits, branches don't apply: light up
-    ///   one of `MINE_UNCOMMITTED` / `THEIR_UNCOMMITTED` based on issuer.
-    /// - For real commits with a known active branch on the local side,
-    ///   light up `MINE_ACTIVE_BRANCH` / `THEIR_MATCHING_BRANCH` for the
-    ///   matching-branch case and the equivalent `*_OTHER_BRANCH` flag
-    ///   otherwise. Issuance is determined by whether the local branches
-    ///   list contains the active branch (Python checks issuance via the
-    ///   context dict in this branch — both readings are equivalent given
-    ///   how local branches are populated only for the issuing clone).
+    /// - Store records (those with a `user`) are someone's unpushed work.
+    ///   Uncommitted ones light `MINE_UNCOMMITTED` / `THEIR_UNCOMMITTED`;
+    ///   real ones light `MINE_ACTIVE_BRANCH` / `THEIR_MATCHING_BRANCH` when
+    ///   the issuer's local branches include the active branch and the
+    ///   `*_OTHER_BRANCH` flag otherwise. Mine versus theirs is decided by
+    ///   [`Self::is_issued_by`].
+    /// - Commits read from the git log (no `user`) are already public: light
+    ///   the `REMOTE_*` flags from their remote branches, plus
+    ///   `MINE_ACTIVE_BRANCH` when the active branch contains them.
     pub fn spread(&self, active_branch: Option<&str>, ctx: &Context) -> CommitSpread {
         let mut spread = CommitSpread::empty();
 
@@ -237,18 +237,15 @@ mod tests {
     }
 
     #[test]
-    fn is_uncommitted_changes_keys_off_user() {
-        let real = Commit {
+    fn is_uncommitted_changes_keys_off_missing_sha() {
+        let mut real = Commit {
             sha: Some("abc".into()),
             author: Some("A".into()),
             ..Commit::default()
         };
-        let uncommitted = Commit {
-            user: Some("alice".into()),
-            host: Some("host-1".into()),
-            clone: Some("/work/repo".into()),
-            ..Commit::default()
-        };
+        real.stamp_context(&ctx());
+        let mut uncommitted = Commit::default();
+        uncommitted.stamp_context(&ctx());
         assert!(!real.is_uncommitted_changes());
         assert!(uncommitted.is_uncommitted_changes());
     }
@@ -292,6 +289,64 @@ mod tests {
         assert_eq!(
             c.spread(Some("main"), &ctx()),
             CommitSpread::THEIR_UNCOMMITTED
+        );
+    }
+
+    fn their_ctx() -> Context {
+        Context {
+            host: "host-2".into(),
+            user: "bob".into(),
+            clone: PathBuf::from("/elsewhere"),
+        }
+    }
+
+    fn stored_real_commit(issuer: &Context, local: &[&str]) -> Commit {
+        let mut c = Commit {
+            sha: Some("abc".into()),
+            author: Some("Someone".into()),
+            branches: Branches {
+                local: local.iter().map(|s| s.to_string()).collect(),
+                remote: Vec::new(),
+            },
+            ..Commit::default()
+        };
+        c.stamp_context(issuer);
+        c
+    }
+
+    #[test]
+    fn spread_for_my_unpushed_commit_on_active_branch() {
+        let c = stored_real_commit(&ctx(), &["main"]);
+        assert_eq!(
+            c.spread(Some("main"), &ctx()),
+            CommitSpread::MINE_ACTIVE_BRANCH
+        );
+    }
+
+    #[test]
+    fn spread_for_my_unpushed_commit_on_other_branch() {
+        let c = stored_real_commit(&ctx(), &["feature"]);
+        assert_eq!(
+            c.spread(Some("main"), &ctx()),
+            CommitSpread::MINE_OTHER_BRANCH
+        );
+    }
+
+    #[test]
+    fn spread_for_their_unpushed_commit_on_matching_branch() {
+        let c = stored_real_commit(&their_ctx(), &["main"]);
+        assert_eq!(
+            c.spread(Some("main"), &ctx()),
+            CommitSpread::THEIR_MATCHING_BRANCH
+        );
+    }
+
+    #[test]
+    fn spread_for_their_unpushed_commit_on_other_branch() {
+        let c = stored_real_commit(&their_ctx(), &["feature"]);
+        assert_eq!(
+            c.spread(Some("main"), &ctx()),
+            CommitSpread::THEIR_OTHER_BRANCH
         );
     }
 

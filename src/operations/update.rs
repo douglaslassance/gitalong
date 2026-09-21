@@ -97,7 +97,10 @@ fn real_local_only_commits(
     for oid in walk {
         let oid = oid?;
         let git_commit = inner.find_commit(oid)?;
-        out.push(commit_from_git(repo, &git_commit, context, remote_url)?);
+        let mut commit = commit_from_git(repo, &git_commit, context, remote_url)?;
+        // A `user` is what marks a store record as unpushed work rather than a git log hit.
+        commit.stamp_context(context);
+        out.push(commit);
     }
     Ok(out)
 }
@@ -334,7 +337,7 @@ mod tests {
         assert_eq!(c.author.as_deref(), Some("Alice"));
         assert_eq!(c.changes, vec!["local.txt".to_string()]);
         assert_eq!(c.branches.local, vec!["main".to_string()]);
-        assert!(c.host.is_some());
+        assert!(c.is_issued_by(&repo.context()));
     }
 
     #[test]
