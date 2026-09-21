@@ -8,9 +8,8 @@
 //! 3. Build the local-only view: every commit that isn't on a remote branch yet,
 //!    plus an uncommitted-changes pseudo-commit when `track_uncommitted` is on.
 //! 4. Concatenate and write back to the store.
-//!
-//! File-permission management (the Python `update_files_permissions`) is part
-//! of a later phase and intentionally not invoked here.
+//! 5. With `modify_permissions` on, reapply the write bit to every file at
+//!    HEAD from the view just written.
 
 use time::OffsetDateTime;
 use time::UtcOffset;
@@ -46,7 +45,7 @@ pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()
 
     if repo.config().modify_permissions {
         let files = repo.tracked_files_at_head()?;
-        crate::operations::update_files_permissions(repo, &files)?;
+        crate::operations::permissions::apply_permissions(repo, &files, &next)?;
     }
     Ok(())
 }
