@@ -11,7 +11,7 @@
 //! 4. Alice creates a local-only commit and edits an uncommitted file, then
 //!    runs `update`.
 //! 5. Bob runs `status` against those paths and sees Alice as the holder.
-//! 6. Bob's `claim` against the same paths is blocked by Alice's records.
+//! 6. Bob's `claim` against either path is blocked by Alice's records.
 //! 7. Alice's claim of an unrelated file succeeds.
 
 mod common;
@@ -117,9 +117,13 @@ fn full_lifecycle_two_clones() {
             lines.len() == 2 && lines.iter().all(|l| l.contains('+'))
         }));
 
-    // ---- Bob's claim is blocked ----
+    // ---- Bob's claims are blocked, by the uncommitted edit and the unpushed commit alike ----
     common::gitalong_in(bob.path())
         .args(["claim", "draft.txt"])
+        .assert()
+        .failure();
+    common::gitalong_in(bob.path())
+        .args(["claim", "local.txt"])
         .assert()
         .failure();
 

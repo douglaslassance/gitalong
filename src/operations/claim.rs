@@ -182,4 +182,19 @@ mod tests {
             "blocker should not be Bob's own record"
         );
     }
+
+    #[test]
+    fn claim_blocked_when_other_clone_has_unpushed_commit() {
+        let (_s, alice, bob) = two_clones();
+        std::fs::write(alice.path().join("shared.txt"), b"edited").unwrap();
+        run(alice.path(), &["commit", "-am", "edit shared"]);
+        let alice_repo = Repository::open(alice.path()).unwrap();
+        crate::operations::update_tracked_commits(&alice_repo, &[]).unwrap();
+
+        let bob_repo = Repository::open(bob.path()).unwrap();
+        let outcomes = claim_files(&bob_repo, &["shared.txt".to_string()]).unwrap();
+        let blocker = &outcomes[0].blocker;
+        assert!(blocker.sha.is_some(), "blocker should be Alice's commit");
+        assert_eq!(blocker.author.as_deref(), Some("Alice"));
+    }
 }
