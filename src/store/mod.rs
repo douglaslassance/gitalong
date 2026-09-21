@@ -125,7 +125,96 @@ pub(crate) fn touch(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::for_each_store;
+    use crate::testing::Team;
     use std::path::PathBuf;
+
+    fn open(dir: &Path) -> Store {
+        Store::for_repository(&Repository::open(dir).unwrap()).unwrap()
+    }
+
+    /// The identity a clone publishes under: its context and remote URL.
+    fn identity(dir: &Path) -> (Context, String) {
+        let repo = Repository::open(dir).unwrap();
+        let remote = repo.remote_url().unwrap().unwrap_or_default();
+        (repo.context(), remote)
+    }
+
+    fn own_record(ctx: &Context, remote: &str, sha: &str) -> Commit {
+        let mut c = Commit {
+            sha: Some(sha.into()),
+            remote: Some(remote.into()),
+            ..Commit::default()
+        };
+        c.stamp_context(ctx);
+        c
+    }
+
+    fn shas(view: &[Commit]) -> Vec<&str> {
+        let mut shas: Vec<&str> = view.iter().filter_map(|c| c.sha.as_deref()).collect();
+        shas.sort();
+        shas
+    }
+
+    for_each_store!(read_on_empty_store_is_empty, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        assert!(open(alice.path()).read().unwrap().is_empty());
+    });
+
+    for_each_store!(publish_then_read_round_trips, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        let (ctx, remote) = identity(alice.path());
+        let ours = vec![own_record(&ctx, &remote, "a")];
+        let mut store = open(alice.path());
+        assert_eq!(store.publish(&ours, &ctx, &remote).unwrap(), ours);
+        assert_eq!(store.read().unwrap(), ours);
+    });
+
+    for_each_store!(second_clone_sees_first_clones_records, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        let bob = team.clone("Bob", |_| {});
+        let (ctx, remote) = identity(alice.path());
+        open(alice.path())
+            .publish(&[own_record(&ctx, &remote, "from-alice")], &ctx, &remote)
+            .unwrap();
+        assert_eq!(shas(&open(bob.path()).read().unwrap()), vec!["from-alice"]);
+    });
+
+    for_each_store!(republish_replaces_only_own_records, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        let bob = team.clone("Bob", |_| {});
+        let (alice_ctx, remote) = identity(alice.path());
+        let (bob_ctx, _) = identity(bob.path());
+
+        let mut alice_store = open(alice.path());
+        alice_store
+            .publish(
+                &[own_record(&alice_ctx, &remote, "alice-1")],
+                &alice_ctx,
+                &remote,
+            )
+            .unwrap();
+        open(bob.path())
+            .publish(&[own_record(&bob_ctx, &remote, "bob-1")], &bob_ctx, &remote)
+            .unwrap();
+
+        let view = alice_store
+            .publish(
+                &[own_record(&alice_ctx, &remote, "alice-2")],
+                &alice_ctx,
+                &remote,
+            )
+            .unwrap();
+        assert_eq!(shas(&view), vec!["alice-2", "bob-1"]);
+        assert_eq!(
+            shas(&open(bob.path()).read().unwrap()),
+            vec!["alice-2", "bob-1"]
+        );
+    });
 
     fn ctx() -> Context {
         Context {
