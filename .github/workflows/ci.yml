@@ -2,7 +2,6 @@ name: ci
 
 on:
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 env:
@@ -10,8 +9,22 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: cargo test (${{ matrix.os }})
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: cargo clippy (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -20,12 +33,10 @@ jobs:
           # Linux uses apt's libgit2-dev to keep dev builds fast.
           - os: ubuntu-latest
             features: ""
-          # macOS relies on git2's auto-vendored fallback when no system
-          # libgit2 is present on the runner.
+          # macOS relies on git2's auto-vendored fallback since the runner has no libgit2.
           - os: macos-latest
             features: ""
-          # Windows has no system libgit2, so always vendor here. Slower
-          # build but the only path that actually links.
+          # Windows has no system libgit2, so vendoring is the only path that links.
           - os: windows-latest
             features: "--features vendored"
     steps:
@@ -34,7 +45,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: clippy
 
       - name: Install libgit2 (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -47,19 +58,71 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
-      - name: cargo fmt --check
-        run: cargo fmt --all -- --check
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ github.job }}-
 
       - name: cargo clippy
         run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
 
+  test:
+    name: cargo test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            features: ""
+          - os: macos-latest
+            features: ""
+          - os: windows-latest
+            features: "--features vendored"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install libgit2 (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ github.job }}-
+
       - name: cargo test
         run: cargo test --all-targets ${{ matrix.features }}
 
+  doc:
+    name: cargo doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install libgit2 (Linux)
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ github.job }}-
+
       - name: cargo doc
-        run: cargo doc --no-deps ${{ matrix.features }}
+        run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
