@@ -64,11 +64,15 @@ gitalong -C project claim untracked.txt uncommitted.png local.png current.jpg re
 
 ### Status output
 
-Each line is:
+`status` and `claim` print one line per file, in the order you passed them:
 
 ```text
 <spread> <filename> <sha> <local-branches> <remote-branches> <host> <author>
 ```
+
+This form is meant for reading in a terminal. Fields are separated by single
+spaces and nothing is quoted, so a filename containing a space cannot be
+recovered from it. Scripts should pass `--json` instead.
 
 `<spread>` is an eight-character `+`/`-` bitstring describing where this
 commit lives. The bits, in order, are:
@@ -83,6 +87,33 @@ commit lives. The bits, in order, are:
 | 6   | `THEIR_OTHER_BRANCH`     | On someone else's non-matching branch        |
 | 7   | `THEIR_MATCHING_BRANCH`  | On someone else's matching branch            |
 | 8   | `THEIR_UNCOMMITTED`      | Uncommitted on someone else's clone          |
+
+### JSON output
+
+`--json` prints a single array instead, one object per file in the order you
+passed them:
+
+```json
+[
+  {
+    "filename": "current.jpg",
+    "spread": "-+-+----",
+    "flags": ["MINE_ACTIVE_BRANCH", "REMOTE_MATCHING_BRANCH"],
+    "commit": {
+      "sha": "9f3c1d2e5a7b4c8d9e0f1a2b3c4d5e6f7a8b9c0d",
+      "date": "2026-09-20 10:12:03+00:00",
+      "author": "Douglas Lassance",
+      "changes": ["current.jpg"],
+      "branches": { "local": ["main"], "remote": ["main"] }
+    }
+  }
+]
+```
+
+`commit` is the store record verbatim, so its fields match `commits.json` and
+the git identity (`author`) stays distinct from the OS identity (`user`). It is
+`null` when nothing applies, which the text form renders as all dashes.
+`claim --json` adds a `blocked` boolean per file and keeps the same exit code.
 
 ## Stores
 
