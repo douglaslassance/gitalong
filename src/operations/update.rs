@@ -29,7 +29,7 @@ pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()
     let remote_url = repo.remote_url()?.unwrap_or_default();
 
     let ours = local_only_commits(repo, claims, &context, &remote_url)?;
-    let all = store.publish(&ours, &context, &remote_url)?;
+    let all = store.publish(&ours)?;
 
     if repo.config().modify_permissions {
         let files = repo.tracked_files_at_head()?;

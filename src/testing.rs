@@ -127,18 +127,26 @@ impl Team {
         args
     }
 
+    /// Origin addressed as a `file://` URL, a different spelling of the same
+    /// repository than the plain path [`clone`](Self::clone) uses.
+    pub fn origin_file_url(&self) -> String {
+        format!("file://{}", self.origin.path().display())
+    }
+
     /// Clone origin with `name` as the committer identity and the store
     /// config plus the gitignore patch written but not committed.
     pub fn clone(&self, name: &str, configure: impl FnOnce(&mut Config)) -> TempDir {
+        let url = self.origin.path().to_str().unwrap().to_string();
+        self.clone_via(name, &url, configure)
+    }
+
+    /// [`clone`](Self::clone), addressing origin as `url` so tests can mix
+    /// spellings of one origin the way a real team does.
+    pub fn clone_via(&self, name: &str, url: &str, configure: impl FnOnce(&mut Config)) -> TempDir {
         let clone = tempfile::tempdir().unwrap();
         git(
             clone.path(),
-            &[
-                "clone",
-                "--quiet",
-                self.origin.path().to_str().unwrap(),
-                clone.path().to_str().unwrap(),
-            ],
+            &["clone", "--quiet", url, clone.path().to_str().unwrap()],
         );
         git(clone.path(), &["config", "user.name", name]);
         let email = format!("{}@example.com", name.to_lowercase());

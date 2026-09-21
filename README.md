@@ -102,6 +102,9 @@ see the namespace, hosting UIs hide it, and CI does not run on it. The `v1`
 is the record format, bumped only if the payload ever changes shape, so that
 clones running different versions never misread each other.
 
+A namespace belongs to exactly one repository, so gitalong does not care how
+each clone spells its remote. Teammates on SSH and on HTTPS see each other.
+
 > [!NOTE]
 > Servers that deny non-fast-forward pushes or restrict ref namespaces
 > (Gerrit, for example) need an allowance for `refs/gitalong/*`, or one of
@@ -115,6 +118,14 @@ updates from there.
 
 > [!WARNING]
 > Low infrastructure hassle but operations are slow.
+
+> [!IMPORTANT]
+> One store can serve several repositories, so records are tagged with the
+> remote they belong to and read back by exact match. Every clone of a
+> repository must therefore spell its remote the same way: a clone on
+> `git@github.com:you/project.git` and one on
+> `https://github.com/you/project.git` will not see each other. The refs
+> store has no such requirement.
 
 ### JSONBin.io
 

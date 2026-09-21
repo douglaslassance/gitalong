@@ -229,9 +229,7 @@ pub fn clear(opts: &GlobalOpts, all: bool, force: bool) -> Result<()> {
     };
     let mut store = crate::store::Store::for_repository(&repo)?;
     if !all {
-        let context = repo.context();
-        let remote_url = repo.remote_url()?.unwrap_or_default();
-        store.clear_own(&context, &remote_url)?;
+        store.clear_own()?;
         return Ok(());
     }
     let question = format!(

@@ -35,7 +35,7 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
     let store_commits = read_store_commits(repo)?;
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
-    let index = StoreIndex::new(&store_commits, &remote_url, repo.config().track_uncommitted);
+    let index = StoreIndex::new(&store_commits, repo.config().track_uncommitted);
     let head_tree = repo.head_tree()?;
 
     let mut commits: Vec<Commit> = Vec::with_capacity(files.len());
@@ -134,21 +134,19 @@ fn read_store_commits(repo: &Repository) -> Result<Vec<Commit>> {
     store.read()
 }
 
-/// The most recent store record per path, restricted to this remote and
-/// (optionally) skipping uncommitted records when the config says we don't
-/// track them. Built once so each lookup is a hash probe instead of a scan.
+/// The most recent store record per path, optionally skipping uncommitted
+/// records when the config says we don't track them. Built once so each
+/// lookup is a hash probe instead of a scan. The store has already narrowed
+/// `commits` to this repository.
 pub(crate) struct StoreIndex<'a> {
     latest: HashMap<&'a str, &'a Commit>,
 }
 
 impl<'a> StoreIndex<'a> {
-    pub(crate) fn new(commits: &'a [Commit], remote_url: &str, track_uncommitted: bool) -> Self {
+    pub(crate) fn new(commits: &'a [Commit], track_uncommitted: bool) -> Self {
         let mut latest: HashMap<&str, &Commit> = HashMap::new();
         for c in commits {
             if !track_uncommitted && c.sha.is_none() {
-                continue;
-            }
-            if c.remote.as_deref() != Some(remote_url) {
                 continue;
             }
             for path in &c.changes {
@@ -317,7 +315,7 @@ mod tests {
             ),
             record("2026-01-02 00:00:00+00:00", Some("new"), "r", &["a.txt"]),
         ];
-        let index = StoreIndex::new(&commits, "r", true);
+        let index = StoreIndex::new(&commits, true);
         assert_eq!(
             index.latest("a.txt").and_then(|c| c.sha.as_deref()),
             Some("new")
@@ -330,14 +328,8 @@ mod tests {
     }
 
     #[test]
-    fn store_index_skips_other_remotes_and_untracked_uncommitted() {
+    fn store_index_skips_uncommitted_records_when_untracked() {
         let commits = vec![
-            record(
-                "2026-01-03 00:00:00+00:00",
-                Some("elsewhere"),
-                "other",
-                &["a.txt"],
-            ),
             record("2026-01-02 00:00:00+00:00", None, "r", &["a.txt"]),
             record(
                 "2026-01-01 00:00:00+00:00",
@@ -346,9 +338,9 @@ mod tests {
                 &["a.txt"],
             ),
         ];
-        let tracked = StoreIndex::new(&commits, "r", true);
+        let tracked = StoreIndex::new(&commits, true);
         assert!(tracked.latest("a.txt").unwrap().sha.is_none());
-        let untracked = StoreIndex::new(&commits, "r", false);
+        let untracked = StoreIndex::new(&commits, false);
         assert_eq!(
             untracked.latest("a.txt").and_then(|c| c.sha.as_deref()),
             Some("committed")

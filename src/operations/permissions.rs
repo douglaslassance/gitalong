@@ -46,8 +46,7 @@ pub(crate) fn apply_permissions(
     files: &[String],
     commits: &[Commit],
 ) -> Result<Vec<String>> {
-    let remote_url = repo.remote_url()?.unwrap_or_default();
-    let index = StoreIndex::new(commits, &remote_url, repo.config().track_uncommitted);
+    let index = StoreIndex::new(commits, repo.config().track_uncommitted);
     let head_tree = repo.head_tree()?;
     let active = repo.active_branch_name()?;
     let ctx = repo.context();
