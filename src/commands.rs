@@ -68,8 +68,9 @@ pub fn config(opts: &GlobalOpts, property: &str) -> Result<()> {
 /// the URL shape, write `.gitalong.json`, and apply the optional flags
 /// (`--update-hooks`, `--update-gitignore`, `--modify-permissions`).
 pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
-    classify_store_url(&args.store_url)
-        .with_context(|| format!("invalid store URL `{}`", args.store_url))?;
+    let store_url = args.store_url.unwrap_or_default();
+    let kind = classify_store_url(&store_url)
+        .with_context(|| format!("invalid store URL `{store_url}`"))?;
 
     let inner = git2::Repository::discover(&opts.repository)
         .with_context(|| format!("not in a git repository: {}", opts.repository.display()))?;
@@ -77,9 +78,12 @@ pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
         .workdir()
         .ok_or_else(|| anyhow::anyhow!("bare repositories are not supported"))?
         .to_path_buf();
+    if kind == StoreKind::Refs && inner.remotes()?.is_empty() {
+        bail!("no remote to publish records to; add one or pass a store URL");
+    }
 
     let config = Config {
-        store_url: args.store_url,
+        store_url,
         store_headers: parse_store_headers(&args.store_headers)?,
         modify_permissions: args.modify_permissions,
         track_binaries: args.track_binaries,
@@ -109,22 +113,28 @@ pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
 /// Mirrors `Store::for_repository` so the front-door validation in `setup`
 /// agrees with the runtime dispatch. Accepts:
 ///
+/// - empty → Refs (the repository's own remote)
 /// - `https://api.jsonbin.io/...` → JSONBin
 /// - `.git` suffix → Git (local or remote)
 /// - `file://...` → Git (local file URL)
 pub(crate) fn classify_store_url(url: &str) -> Result<StoreKind> {
-    if url.starts_with("https://api.jsonbin.io") {
+    if url.is_empty() {
+        Ok(StoreKind::Refs)
+    } else if url.starts_with("https://api.jsonbin.io") {
         Ok(StoreKind::Jsonbin)
     } else if url.ends_with(".git") || url.starts_with("file://") {
         Ok(StoreKind::Git)
     } else {
-        bail!("expected a `.git` URL, a `file://` URL, or a `https://api.jsonbin.io/...` URL")
+        bail!(
+            "expected no URL, a `.git` URL, a `file://` URL, or a `https://api.jsonbin.io/...` URL"
+        )
     }
 }
 
 /// Discriminant for the store backend a config points at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoreKind {
+    Refs,
     Git,
     Jsonbin,
 }

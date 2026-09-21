@@ -21,8 +21,9 @@ pub const CONFIG_BASENAME: &str = ".gitalong.json";
 /// empty or partial config file behaves identically across versions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Config {
-    /// URL or local path to the store. A `.git` suffix selects a git store; a
-    /// `https://api.jsonbin.io` prefix selects a JSONBin store.
+    /// URL or local path to the store. Empty selects the refs store on the
+    /// repository's own remote, a `.git` suffix a git store, and a
+    /// `https://api.jsonbin.io` prefix a JSONBin store.
     #[serde(default)]
     pub store_url: String,
 

@@ -75,8 +75,9 @@ pub enum Command {
 /// Arguments for `gitalong setup`.
 #[derive(Debug, clap::Args)]
 pub struct SetupArgs {
-    /// URL or local path of the store (a git repository or a JSONBin.io URL).
-    pub store_url: String,
+    /// URL of a store repository (`.git` suffix) or a JSONBin.io bin. Omit to
+    /// publish records as refs on this repository's own remote.
+    pub store_url: Option<String>,
 
     /// HTTP header for store requests in `KEY=VALUE` form, repeatable.
     ///
