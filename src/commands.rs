@@ -114,20 +114,18 @@ pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
 /// agrees with the runtime dispatch. Accepts:
 ///
 /// - empty → Refs (the repository's own remote)
-/// - `https://api.jsonbin.io/...` → JSONBin
 /// - `.git` suffix → Git (local or remote)
 /// - `file://...` → Git (local file URL)
+/// - any other `http://` or `https://` URL → JSONBin (or a lookalike endpoint)
 pub(crate) fn classify_store_url(url: &str) -> Result<StoreKind> {
     if url.is_empty() {
         Ok(StoreKind::Refs)
-    } else if url.starts_with("https://api.jsonbin.io") {
-        Ok(StoreKind::Jsonbin)
     } else if url.ends_with(".git") || url.starts_with("file://") {
         Ok(StoreKind::Git)
+    } else if url.starts_with("http://") || url.starts_with("https://") {
+        Ok(StoreKind::Jsonbin)
     } else {
-        bail!(
-            "expected no URL, a `.git` URL, a `file://` URL, or a `https://api.jsonbin.io/...` URL"
-        )
+        bail!("expected no URL, a `.git` URL, a `file://` URL, or an HTTP URL")
     }
 }
 

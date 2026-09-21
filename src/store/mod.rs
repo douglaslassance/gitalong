@@ -38,13 +38,13 @@ impl Store {
         let url = &repo.config().store_url;
         if url.is_empty() {
             Ok(Store::Refs(RefStore::new(repo)?))
-        } else if url.starts_with("https://api.jsonbin.io") {
-            Ok(Store::Jsonbin(JsonbinStore::new(repo)?))
         } else if url.ends_with(".git") || url.starts_with("file://") {
             Ok(Store::Git(GitStore::open_or_clone(repo)?))
+        } else if url.starts_with("http://") || url.starts_with("https://") {
+            Ok(Store::Jsonbin(JsonbinStore::new(repo)?))
         } else {
             Err(Error::InvalidConfig(format!(
-                "store_url `{url}` is neither empty, a `.git` URL nor a JSONBin.io URL"
+                "store_url `{url}` is neither empty, a `.git` or `file://` URL, nor an HTTP URL"
             )))
         }
     }

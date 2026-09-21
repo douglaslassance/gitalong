@@ -2,7 +2,7 @@
 //!
 //! Storage is a single bin holding the JSON-encoded commits list. The wire
 //! format mirrors the JSONBin.io v3 API: GETs return `{"record": [...]}`, PUTs
-//! take the array directly. Header values may reference environment variables
+//! take the array directly. Any HTTP endpoint speaking that envelope works. Header values may reference environment variables
 //! (`$KEY` or `${KEY}`) which are expanded at request time so secrets stay out
 //! of the on-disk config.
 

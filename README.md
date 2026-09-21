@@ -111,7 +111,8 @@ updates from there.
 ### JSONBin.io
 
 Pass the bin URL (`https://api.jsonbin.io/v3/b/<id>`) and an access key via
-`--store-header`:
+`--store-header`. Any other HTTP endpoint that answers `GET` with
+`{"record": [...]}` and accepts the array on `PUT` works the same way.
 
 ```shell
 gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> \
