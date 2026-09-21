@@ -25,12 +25,9 @@ cargo install gitalong
 git init --bare project.git
 git clone project.git project
 
-# Stand up the store gitalong will use to share local changes between clones.
-# In production this lives on GitHub or another shared remote.
-git init --bare store.git
-
-# Initialize gitalong in the project clone.
-gitalong -C project setup ./store.git \
+# Initialize gitalong in the project clone. With no store URL, clones share
+# their local changes through hidden refs on the project's own remote.
+gitalong -C project setup \
   --modify-permissions \
   --tracked-extensions .jpg,.png \
   --track-uncommitted \
@@ -86,8 +83,21 @@ commit lives. The bits, in order, are:
 
 ## Stores
 
-The `<STORE_URL>` argument to `gitalong setup` selects how this clone
+The optional `<STORE_URL>` argument to `gitalong setup` selects how this clone
 publishes its tracked changes for the rest of the team.
+
+### Repository refs
+
+Omit the argument. Each clone pushes its records to its own ref under
+`refs/gitalong/v1/` on the repository's remote, with the same credentials as
+any other push. The ref points at a commit with an empty tree and the records
+in its message, so no file content is ever uploaded. Ordinary fetches never
+see the namespace, hosting UIs hide it, and CI does not run on it.
+
+> [!NOTE]
+> Servers that deny non-fast-forward pushes or restrict ref namespaces
+> (Gerrit, for example) need an allowance for `refs/gitalong/*`, or one of
+> the stores below.
 
 ### Git repository
 
