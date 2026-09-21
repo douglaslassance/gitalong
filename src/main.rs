@@ -25,5 +25,6 @@ fn main() -> Result<()> {
             json,
             profile,
         } => commands::claim(&opts, &files, json, profile),
+        Command::Clear { all, force } => commands::clear(&opts, all, force),
     }
 }

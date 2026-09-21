@@ -1,4 +1,5 @@
-//! End-to-end lifecycle test mirroring the Python 0.x `cases.test_lib`.
+//! End-to-end lifecycle test mirroring the Python 0.x `cases.test_lib`, run
+//! once per store backend.
 //!
 //! Runs the full team-collaboration scenario top-to-bottom:
 //!
@@ -18,72 +19,51 @@
 mod common;
 
 use std::fs;
-use std::path::Path;
-use std::process::Command;
 
 use assert_cmd::prelude::*;
+use gitalong::for_each_store;
+use gitalong::testing::{Team, git};
 use predicates::prelude::*;
 use tempfile::tempdir;
 
-fn run(dir: &Path, args: &[&str]) {
-    let out = Command::new("git")
-        .current_dir(dir)
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "git {} in {} failed: {}",
-        args.join(" "),
-        dir.display(),
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
-#[test]
-fn full_lifecycle_two_clones() {
-    // Standalone bare repos for code (origin) and gitalong's commit ledger (store).
-    let store = tempdir().unwrap();
-    run(store.path(), &["init", "--bare", "--initial-branch=main"]);
-    let origin = tempdir().unwrap();
-    run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
-
-    let store_url = format!("file://{}", store.path().display());
-    let origin_url = origin.path().to_str().unwrap().to_string();
+for_each_store!(full_lifecycle_two_clones, |kind| {
+    let team = Team::new(kind);
+    let origin_url = team.origin().to_str().unwrap().to_string();
 
     let alice = tempdir().unwrap();
-    run(
+    git(
         alice.path(),
         &["clone", &origin_url, alice.path().to_str().unwrap()],
     );
-    run(alice.path(), &["config", "user.email", "alice@example.com"]);
-    run(alice.path(), &["config", "user.name", "Alice"]);
+    git(alice.path(), &["config", "user.email", "alice@example.com"]);
+    git(alice.path(), &["config", "user.name", "Alice"]);
 
     // `gitalong setup` writes the config, the .gitignore patch, and the hooks.
-    common::gitalong_in(alice.path())
-        .args([
-            "setup",
-            "--pull-threshold",
-            "0",
-            &store_url,
+    let mut setup = team.setup_args();
+    setup.extend(
+        [
             "--track-uncommitted",
             "--tracked-extensions",
             ".txt",
             "--update-gitignore",
             "--update-hooks",
-        ])
+        ]
+        .map(String::from),
+    );
+    common::gitalong_in(alice.path())
+        .args(&setup)
         .assert()
         .success();
 
     // Commit the freshly-created config and the gitignore so Alice's clone
     // is in a clean baseline state.
     fs::write(alice.path().join("README"), b"hello").unwrap();
-    run(
+    git(
         alice.path(),
         &["add", "README", ".gitalong.json", ".gitignore"],
     );
-    run(alice.path(), &["commit", "-m", "init"]);
-    run(alice.path(), &["push", "-u", "origin", "main"]);
+    git(alice.path(), &["commit", "-m", "init"]);
+    git(alice.path(), &["push", "-u", "origin", "main"]);
 
     // First update: nothing to track yet — clean push, clean working tree.
     common::gitalong_in(alice.path())
@@ -92,17 +72,17 @@ fn full_lifecycle_two_clones() {
         .success();
 
     let bob = tempdir().unwrap();
-    run(
+    git(
         bob.path(),
         &["clone", &origin_url, bob.path().to_str().unwrap()],
     );
-    run(bob.path(), &["config", "user.email", "bob@example.com"]);
-    run(bob.path(), &["config", "user.name", "Bob"]);
+    git(bob.path(), &["config", "user.email", "bob@example.com"]);
+    git(bob.path(), &["config", "user.name", "Bob"]);
 
     // ---- Alice creates work ----
     fs::write(alice.path().join("local.txt"), b"alice-local").unwrap();
-    run(alice.path(), &["add", "local.txt"]);
-    run(alice.path(), &["commit", "-m", "alice's local commit"]);
+    git(alice.path(), &["add", "local.txt"]);
+    git(alice.path(), &["commit", "-m", "alice's local commit"]);
     fs::write(alice.path().join("draft.txt"), b"alice-draft").unwrap();
     common::gitalong_in(alice.path())
         .args(["update"])
@@ -131,8 +111,8 @@ fn full_lifecycle_two_clones() {
         .failure();
 
     // ---- Once Alice pushes and Bob pulls, the commit no longer blocks ----
-    run(alice.path(), &["push"]);
-    run(bob.path(), &["pull", "--ff-only"]);
+    git(alice.path(), &["push"]);
+    git(bob.path(), &["pull", "--ff-only"]);
     common::gitalong_in(bob.path())
         .args(["claim", "local.txt"])
         .assert()
@@ -143,4 +123,4 @@ fn full_lifecycle_two_clones() {
         .args(["claim", "README"])
         .assert()
         .success();
-}
+});

@@ -388,6 +388,7 @@ dependencies = [
  "bitflags",
  "clap",
  "git2",
+ "gitalong",
  "predicates",
  "serde",
  "serde_json",

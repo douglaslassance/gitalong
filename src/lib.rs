@@ -14,6 +14,9 @@ pub mod operations;
 pub mod repository;
 pub mod spread;
 pub mod store;
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub mod testing;
 
 pub use commit::{Branches, Commit};
 pub use config::Config;

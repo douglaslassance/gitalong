@@ -213,14 +213,20 @@ impl Repository {
         Ok(head.shorthand().map(str::to_string))
     }
 
+    /// Name of the first configured remote (typically `origin`), or `None`
+    /// when the repo has no remotes.
+    pub fn remote_name(&self) -> Result<Option<String>> {
+        let remotes = self.inner.remotes()?;
+        Ok(remotes.iter().next().flatten().map(str::to_string))
+    }
+
     /// URL of the first configured remote (typically `origin`), or `None` when
     /// the repo has no remotes.
     pub fn remote_url(&self) -> Result<Option<String>> {
-        let remotes = self.inner.remotes()?;
-        let Some(name) = remotes.iter().next().flatten() else {
+        let Some(name) = self.remote_name()? else {
             return Ok(None);
         };
-        let remote = self.inner.find_remote(name)?;
+        let remote = self.inner.find_remote(&name)?;
         Ok(remote.url().map(str::to_string))
     }
 

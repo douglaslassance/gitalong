@@ -34,6 +34,37 @@ fn writes_minimum_config() {
 }
 
 #[test]
+fn defaults_to_refs_store_when_url_is_omitted() {
+    let dir = tempdir().unwrap();
+    let repo = git2::Repository::init(dir.path()).unwrap();
+    repo.remote("origin", "https://example.com/project.git")
+        .unwrap();
+
+    common::gitalong_in(dir.path())
+        .args(["setup"])
+        .assert()
+        .success();
+
+    let body = fs::read_to_string(dir.path().join(".gitalong.json")).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(parsed["store_url"], "");
+}
+
+#[test]
+fn rejects_omitted_url_without_a_remote() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+
+    common::gitalong_in(dir.path())
+        .args(["setup"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no remote"));
+
+    assert!(!dir.path().join(".gitalong.json").exists());
+}
+
+#[test]
 fn rejects_unrecognized_store_url() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());

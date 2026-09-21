@@ -1,87 +1,40 @@
-//! End-to-end tests for `gitalong status` and `gitalong update`.
+//! End-to-end tests for `gitalong status`, `update` and `claim`, run once
+//! per store backend.
 //!
-//! These exercise the binary against real bare-store + bare-origin + managed
-//! clone fixtures. Heavier than the lib-level tests but they catch CLI-side
-//! wiring (argument parsing, output formatting, exit codes).
+//! These exercise the binary against real origin, store and clone fixtures.
+//! Heavier than the lib-level tests but they catch CLI-side wiring (argument
+//! parsing, output formatting, exit codes).
 
 mod common;
 
 use std::fs;
-use std::path::Path;
-use std::process::Command;
 
 use assert_cmd::prelude::*;
+use gitalong::for_each_store;
+use gitalong::testing::{Team, git};
 use predicates::prelude::*;
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 
-const GITIGNORE_PATCH: &str = "# Gitalong\n/.gitalong/\n!/.gitalong.cfg\n";
-
-fn run(dir: &Path, args: &[&str]) {
-    let out = Command::new("git")
-        .current_dir(dir)
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "git {} failed: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&out.stderr)
-    );
+/// Alice's clone with README committed and pushed, tracking uncommitted changes.
+fn alice(team: &Team) -> TempDir {
+    team.seeded_clone("Alice", &[("README", "hi")], |c| c.track_uncommitted = true)
 }
 
-/// Stand up a complete fixture and return paths for store, origin, managed.
-fn fixture() -> (tempfile::TempDir, tempfile::TempDir, tempfile::TempDir) {
-    let store = tempdir().unwrap();
-    run(store.path(), &["init", "--bare", "--initial-branch=main"]);
-    let origin = tempdir().unwrap();
-    run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
-
-    let managed = tempdir().unwrap();
-    run(
-        managed.path(),
-        &[
-            "clone",
-            origin.path().to_str().unwrap(),
-            managed.path().to_str().unwrap(),
-        ],
-    );
-    run(
-        managed.path(),
-        &["config", "user.email", "alice@example.com"],
-    );
-    run(managed.path(), &["config", "user.name", "Alice"]);
-
-    // Round-trip through the real Config serializer so Windows paths get the
-    // backslashes JSON-escaped properly. Hand-formatting `r#"…{}…"#` with a
-    // raw `Path::display()` produces invalid escape sequences on Windows.
-    let cfg = gitalong::Config {
-        store_url: format!("file://{}", store.path().display()),
-        pull_threshold: 0.0,
-        track_uncommitted: true,
-        ..gitalong::Config::default()
-    };
-    cfg.save(&managed.path().join(".gitalong.json")).unwrap();
-    fs::write(managed.path().join(".gitignore"), GITIGNORE_PATCH).unwrap();
-    fs::write(managed.path().join("README"), b"hi").unwrap();
-    run(
-        managed.path(),
-        &["add", "README", ".gitalong.json", ".gitignore"],
-    );
-    run(managed.path(), &["commit", "-m", "init"]);
-    run(managed.path(), &["push", "-u", "origin", "main"]);
-
-    (store, origin, managed)
+/// Run the binary in `dir` and parse its stdout as JSON, asserting success.
+fn json_of(dir: &std::path::Path, args: &[&str]) -> serde_json::Value {
+    let out = common::gitalong_in(dir).args(args).output().unwrap();
+    assert!(out.status.success(), "{args:?} failed");
+    serde_json::from_slice(&out.stdout).unwrap()
 }
 
-#[test]
-fn update_succeeds_in_a_managed_repo() {
-    let (_s, _o, m) = fixture();
+for_each_store!(update_succeeds_in_a_managed_repo, |kind| {
+    let team = Team::new(kind);
+    let m = alice(&team);
     common::gitalong_in(m.path())
         .args(["update"])
         .assert()
         .success();
-}
+});
 
 #[test]
 fn update_fails_outside_a_managed_repo() {
@@ -93,10 +46,9 @@ fn update_fails_outside_a_managed_repo() {
         .stderr(predicate::str::contains("not in a managed repository"));
 }
 
-#[test]
-fn status_renders_one_line_per_file() {
-    let (_s, _o, m) = fixture();
-
+for_each_store!(status_renders_one_line_per_file, |kind| {
+    let team = Team::new(kind);
+    let m = alice(&team);
     common::gitalong_in(m.path())
         .args(["status", "README", "missing.txt"])
         .assert()
@@ -109,19 +61,12 @@ fn status_renders_one_line_per_file() {
                 && lines[0].starts_with(['+', '-'])
                 && lines[1].starts_with("-------- missing.txt")
         }));
-}
+});
 
-#[test]
-fn status_json_is_one_array_in_input_order() {
-    let (_s, _o, m) = fixture();
-
-    let out = common::gitalong_in(m.path())
-        .args(["status", "--json", "README", "missing.txt"])
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-
-    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+for_each_store!(status_json_is_one_array_in_input_order, |kind| {
+    let team = Team::new(kind);
+    let m = alice(&team);
+    let parsed = json_of(m.path(), &["status", "--json", "README", "missing.txt"]);
     let rows = parsed.as_array().unwrap();
     assert_eq!(rows.len(), 2);
 
@@ -135,46 +80,33 @@ fn status_json_is_one_array_in_input_order() {
     assert!(rows[1]["commit"].is_null());
     assert_eq!(rows[1]["spread"], "--------");
     assert_eq!(rows[1]["flags"].as_array().unwrap().len(), 0);
-}
+});
 
-#[test]
-fn status_json_survives_a_filename_with_spaces() {
-    let (_s, _o, m) = fixture();
+for_each_store!(status_json_survives_a_filename_with_spaces, |kind| {
+    let team = Team::new(kind);
+    let m = alice(&team);
     fs::write(m.path().join("my file.txt"), b"hi").unwrap();
-    run(m.path(), &["add", "my file.txt"]);
-    run(m.path(), &["commit", "-m", "spaced"]);
+    git(m.path(), &["add", "my file.txt"]);
+    git(m.path(), &["commit", "-m", "spaced"]);
 
-    let out = common::gitalong_in(m.path())
-        .args(["status", "--json", "my file.txt"])
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-
-    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let parsed = json_of(m.path(), &["status", "--json", "my file.txt"]);
     assert_eq!(parsed[0]["filename"], "my file.txt");
     assert!(parsed[0]["commit"]["sha"].is_string());
-}
+});
 
-#[test]
-fn claim_json_reports_blocked_per_file() {
-    let (_s, _o, m) = fixture();
-
-    let out = common::gitalong_in(m.path())
-        .args(["claim", "--json", "README"])
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-
-    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+for_each_store!(claim_json_reports_blocked_per_file, |kind| {
+    let team = Team::new(kind);
+    let m = alice(&team);
+    let parsed = json_of(m.path(), &["claim", "--json", "README"]);
     assert_eq!(parsed[0]["filename"], "README");
     assert_eq!(parsed[0]["blocked"], false);
-}
+});
 
-#[test]
-fn claim_on_unblocked_file_exits_zero() {
-    let (_s, _o, m) = fixture();
+for_each_store!(claim_on_unblocked_file_exits_zero, |kind| {
+    let team = Team::new(kind);
+    let m = alice(&team);
     common::gitalong_in(m.path())
         .args(["claim", "README"])
         .assert()
         .success();
-}
+});

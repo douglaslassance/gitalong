@@ -13,6 +13,8 @@ use crate::commit::Commit;
 use crate::error::{Error, Result};
 use crate::repository::Repository;
 
+use super::{check_status, run_git_in};
+
 /// Filename of the JSON document inside the store repository.
 const COMMITS_FILENAME: &str = "commits.json";
 
@@ -136,24 +138,6 @@ fn run_git(args: &[&str]) -> Result<Output> {
     let output = Command::new("git").args(args).output()?;
     check_status(&output, args)?;
     Ok(output)
-}
-
-/// Spawn `git -C <dir> <args>`.
-fn run_git_in(dir: &Path, args: &[&str]) -> Result<Output> {
-    let output = Command::new("git").current_dir(dir).args(args).output()?;
-    check_status(&output, args)?;
-    Ok(output)
-}
-
-fn check_status(output: &Output, args: &[&str]) -> Result<()> {
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    let cmd = args.join(" ");
-    Err(Error::StoreUnreachable(format!(
-        "git {cmd} failed: {stderr}"
-    )))
 }
 
 /// Set a fallback `user.name` / `user.email` on the store repo when the

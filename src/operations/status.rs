@@ -37,7 +37,7 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
     let store_commits = read_store_commits(repo)?;
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
-    let index = StoreIndex::new(&store_commits, &remote_url, repo.config().track_uncommitted);
+    let index = StoreIndex::new(&store_commits, repo.config().track_uncommitted);
     let head_tree = repo.head_tree()?;
 
     let mut commits: Vec<Commit> = Vec::with_capacity(files.len());
@@ -168,21 +168,19 @@ fn read_store_commits(repo: &Repository) -> Result<Vec<Commit>> {
     store.read()
 }
 
-/// The most recent store record per path, restricted to this remote and
-/// (optionally) skipping uncommitted records when the config says we don't
-/// track them. Built once so each lookup is a hash probe instead of a scan.
+/// The most recent store record per path, optionally skipping uncommitted
+/// records when the config says we don't track them. Built once so each
+/// lookup is a hash probe instead of a scan. The store has already narrowed
+/// `commits` to this repository.
 pub(crate) struct StoreIndex<'a> {
     latest: HashMap<&'a str, &'a Commit>,
 }
 
 impl<'a> StoreIndex<'a> {
-    pub(crate) fn new(commits: &'a [Commit], remote_url: &str, track_uncommitted: bool) -> Self {
+    pub(crate) fn new(commits: &'a [Commit], track_uncommitted: bool) -> Self {
         let mut latest: HashMap<&str, &Commit> = HashMap::new();
         for c in commits {
             if !track_uncommitted && c.sha.is_none() {
-                continue;
-            }
-            if c.remote.as_deref() != Some(remote_url) {
                 continue;
             }
             for path in &c.changes {
@@ -318,70 +316,16 @@ impl BranchCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CONFIG_BASENAME, Config};
+    use crate::for_each_store;
     use crate::spread::CommitSpread;
-    use std::path::Path;
-    use std::process::Command;
+    use crate::testing::{Team, git};
     use tempfile::TempDir;
 
-    fn run(dir: &Path, args: &[&str]) {
-        let out = Command::new("git")
-            .current_dir(dir)
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(
-            out.status.success(),
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr)
-        );
-    }
-
-    /// Same shape as the update tests' fixture, exposed here so we can ask
-    /// about file status after a few different commit scenarios.
-    fn fixture(track_uncommitted: bool) -> (TempDir, TempDir, TempDir) {
-        let store = tempfile::tempdir().unwrap();
-        run(store.path(), &["init", "--bare", "--initial-branch=main"]);
-        let origin = tempfile::tempdir().unwrap();
-        run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
-
-        let managed = tempfile::tempdir().unwrap();
-        run(
-            managed.path(),
-            &[
-                "clone",
-                origin.path().to_str().unwrap(),
-                managed.path().to_str().unwrap(),
-            ],
-        );
-        run(
-            managed.path(),
-            &["config", "user.email", "alice@example.com"],
-        );
-        run(managed.path(), &["config", "user.name", "Alice"]);
-
-        let cfg = Config {
-            store_url: format!("file://{}", store.path().display()),
-            pull_threshold: 0.0,
-            track_uncommitted,
-            ..Config::default()
-        };
-        cfg.save(&managed.path().join(CONFIG_BASENAME)).unwrap();
-        std::fs::write(managed.path().join("README"), b"hi").unwrap();
-        std::fs::write(
-            managed.path().join(".gitignore"),
-            crate::hooks::GITIGNORE_PATCH,
-        )
-        .unwrap();
-        run(
-            managed.path(),
-            &["add", "README", ".gitalong.json", ".gitignore"],
-        );
-        run(managed.path(), &["commit", "-m", "init"]);
-        run(managed.path(), &["push", "-u", "origin", "main"]);
-
-        (store, origin, managed)
+    /// Alice's clone with README committed and pushed.
+    fn alice(team: &Team, track_uncommitted: bool) -> TempDir {
+        team.seeded_clone("Alice", &[("README", "hi")], |c| {
+            c.track_uncommitted = track_uncommitted
+        })
     }
 
     fn record(date: &str, sha: Option<&str>, remote: &str, changes: &[&str]) -> Commit {
@@ -405,7 +349,7 @@ mod tests {
             ),
             record("2026-01-02 00:00:00+00:00", Some("new"), "r", &["a.txt"]),
         ];
-        let index = StoreIndex::new(&commits, "r", true);
+        let index = StoreIndex::new(&commits, true);
         assert_eq!(
             index.latest("a.txt").and_then(|c| c.sha.as_deref()),
             Some("new")
@@ -418,14 +362,8 @@ mod tests {
     }
 
     #[test]
-    fn store_index_skips_other_remotes_and_untracked_uncommitted() {
+    fn store_index_skips_uncommitted_records_when_untracked() {
         let commits = vec![
-            record(
-                "2026-01-03 00:00:00+00:00",
-                Some("elsewhere"),
-                "other",
-                &["a.txt"],
-            ),
             record("2026-01-02 00:00:00+00:00", None, "r", &["a.txt"]),
             record(
                 "2026-01-01 00:00:00+00:00",
@@ -434,42 +372,42 @@ mod tests {
                 &["a.txt"],
             ),
         ];
-        let tracked = StoreIndex::new(&commits, "r", true);
+        let tracked = StoreIndex::new(&commits, true);
         assert!(tracked.latest("a.txt").unwrap().sha.is_none());
-        let untracked = StoreIndex::new(&commits, "r", false);
+        let untracked = StoreIndex::new(&commits, false);
         assert_eq!(
             untracked.latest("a.txt").and_then(|c| c.sha.as_deref()),
             Some("committed")
         );
     }
 
-    #[test]
-    fn unknown_file_yields_empty_commit() {
-        let (_s, _o, m) = fixture(false);
+    for_each_store!(unknown_file_yields_empty_commit, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team, false);
         let repo = Repository::open(m.path()).unwrap();
         let result = last_commits(&repo, &["does/not/exist.txt".to_string()]).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "does/not/exist.txt");
         assert!(result[0].commit.sha.is_none());
         assert!(result[0].commit.branches.local.is_empty());
-    }
+    });
 
-    #[test]
-    fn pushed_file_resolves_to_its_git_commit() {
-        let (_s, _o, m) = fixture(false);
+    for_each_store!(pushed_file_resolves_to_its_git_commit, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team, false);
         let repo = Repository::open(m.path()).unwrap();
         let result = last_commits(&repo, &["README".to_string()]).unwrap();
         let commit = &result[0].commit;
         assert!(commit.sha.is_some());
         assert!(commit.branches.remote.iter().any(|b| b == "main"));
-    }
+    });
 
-    #[test]
-    fn files_from_different_commits_resolve_in_one_pass() {
-        let (_s, _o, m) = fixture(false);
+    for_each_store!(files_from_different_commits_resolve_in_one_pass, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team, false);
         std::fs::write(m.path().join("second.txt"), b"two").unwrap();
-        run(m.path(), &["add", "second.txt"]);
-        run(m.path(), &["commit", "-m", "second"]);
+        git(m.path(), &["add", "second.txt"]);
+        git(m.path(), &["commit", "-m", "second"]);
 
         let repo = Repository::open(m.path()).unwrap();
         let files = ["README", "second.txt", "missing.txt", "README"].map(String::from);
@@ -480,14 +418,14 @@ mod tests {
         assert_ne!(result[0].commit.sha, result[1].commit.sha);
         assert!(result[2].commit.sha.is_none());
         assert_eq!(result[3].commit.sha, result[0].commit.sha);
-    }
+    });
 
-    #[test]
-    fn local_only_commit_is_picked_up_from_store() {
-        let (_s, _o, m) = fixture(false);
+    for_each_store!(local_only_commit_is_picked_up_from_store, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team, false);
         std::fs::write(m.path().join("draft.txt"), b"draft").unwrap();
-        run(m.path(), &["add", "draft.txt"]);
-        run(m.path(), &["commit", "-m", "wip"]);
+        git(m.path(), &["add", "draft.txt"]);
+        git(m.path(), &["commit", "-m", "wip"]);
 
         let repo = Repository::open(m.path()).unwrap();
         crate::operations::update_tracked_commits(&repo, &[]).unwrap();
@@ -496,18 +434,18 @@ mod tests {
         let c = &result[0].commit;
         assert!(c.sha.is_some());
         assert!(c.changes.iter().any(|p| p == "draft.txt"));
-    }
+    });
 
-    #[test]
-    fn pushed_store_record_resolves_as_remote_commit() {
-        let (_s, _o, m) = fixture(false);
+    for_each_store!(pushed_store_record_resolves_as_remote_commit, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team, false);
         std::fs::write(m.path().join("draft.txt"), b"draft").unwrap();
-        run(m.path(), &["add", "draft.txt"]);
-        run(m.path(), &["commit", "-m", "wip"]);
+        git(m.path(), &["add", "draft.txt"]);
+        git(m.path(), &["commit", "-m", "wip"]);
 
         let repo = Repository::open(m.path()).unwrap();
         crate::operations::update_tracked_commits(&repo, &[]).unwrap();
-        run(m.path(), &["push"]);
+        git(m.path(), &["push"]);
 
         let result = last_commits(&repo, &["draft.txt".to_string()]).unwrap();
         let c = &result[0].commit;
@@ -520,7 +458,7 @@ mod tests {
             c.spread(Some("main"), &repo.context()),
             CommitSpread::MINE_ACTIVE_BRANCH | CommitSpread::REMOTE_MATCHING_BRANCH
         );
-    }
+    });
 
     #[test]
     fn format_status_renders_dashes_for_empty_commit() {

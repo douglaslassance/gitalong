@@ -78,13 +78,25 @@ pub enum Command {
         #[arg(short, long)]
         profile: bool,
     },
+
+    /// Remove this clone's records from the store, or every clone's with --all.
+    Clear {
+        /// Remove every clone's records, not just this clone's.
+        #[arg(long)]
+        all: bool,
+
+        /// Skip the confirmation that --all asks for.
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 /// Arguments for `gitalong setup`.
 #[derive(Debug, clap::Args)]
 pub struct SetupArgs {
-    /// URL or local path of the store (a git repository or a JSONBin.io URL).
-    pub store_url: String,
+    /// URL of a store repository (`.git` suffix) or a JSONBin.io bin. Omit to
+    /// publish records as refs on this repository's own remote.
+    pub store_url: Option<String>,
 
     /// HTTP header for store requests in `KEY=VALUE` form, repeatable.
     ///
