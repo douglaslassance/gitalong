@@ -69,13 +69,14 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
         }
     }
 
+    let mut cache = BranchCache::default();
     files
         .iter()
         .zip(commits)
         .map(|(raw, commit)| {
             Ok(FileStatus {
                 filename: raw.clone(),
-                commit: enrich_branches(repo, commit)?,
+                commit: enrich_branches(repo, commit, &mut cache)?,
             })
         })
         .collect()
@@ -236,23 +237,48 @@ fn entry_signature(tree: &git2::Tree<'_>, path: &Path) -> Option<(git2::Oid, i32
 /// A store record whose commit has since reached a remote branch is demoted
 /// to a plain remote commit. The issuing clone only rewrites its records on
 /// its next update, so the record lingers after a push.
-fn enrich_branches(repo: &Repository, mut commit: Commit) -> Result<Commit> {
+fn enrich_branches(
+    repo: &Repository,
+    mut commit: Commit,
+    cache: &mut BranchCache,
+) -> Result<Commit> {
     let Some(sha) = commit.sha.clone() else {
         return Ok(commit);
     };
-    if commit.user.is_some() && repo.is_remote_commit(&sha).unwrap_or(false) {
+    let here = cache.containing(repo, &sha);
+    if commit.user.is_some() && !here.remote.is_empty() {
         commit.host = None;
         commit.user = None;
         commit.clone = None;
         commit.branches = Branches::default();
     }
     if commit.branches.local.is_empty() {
-        commit.branches.local = repo.local_branches_containing(&sha).unwrap_or_default();
+        commit.branches.local = here.local.clone();
     }
     if commit.branches.remote.is_empty() {
-        commit.branches.remote = repo.remote_branches_containing(&sha).unwrap_or_default();
+        commit.branches.remote = here.remote.clone();
     }
     Ok(commit)
+}
+
+/// Branch containment per sha, so files sharing a last commit pay for the
+/// merge-base checks once.
+#[derive(Default)]
+struct BranchCache {
+    by_sha: HashMap<String, Branches>,
+}
+
+impl BranchCache {
+    /// Local and remote branches of this clone containing `sha`. Both empty
+    /// for a sha this clone has never seen.
+    fn containing(&mut self, repo: &Repository, sha: &str) -> &Branches {
+        self.by_sha
+            .entry(sha.to_string())
+            .or_insert_with(|| Branches {
+                local: repo.local_branches_containing(sha).unwrap_or_default(),
+                remote: repo.remote_branches_containing(sha).unwrap_or_default(),
+            })
+    }
 }
 
 #[cfg(test)]
