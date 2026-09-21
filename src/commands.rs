@@ -156,7 +156,7 @@ pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
 }
 
 /// Print the tracking status (commit spread) for each given file.
-pub fn status(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()> {
+pub fn status(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
         bail!("not in a managed repository (no .gitalong.json found)");
     };
@@ -167,6 +167,14 @@ pub fn status(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()
     let statuses = crate::operations::last_commits(&repo, &str_files)?;
     let active = repo.active_branch_name()?;
     let ctx = repo.context();
+    if json {
+        let records: Vec<_> = statuses
+            .iter()
+            .map(|s| crate::operations::status_record(s, active.as_deref(), &ctx))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&records)?);
+        return Ok(());
+    }
     for status in &statuses {
         println!(
             "{}",
@@ -177,7 +185,7 @@ pub fn status(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()
 }
 
 /// Claim files for editing, returning a non-zero exit status when any are blocked.
-pub fn claim(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()> {
+pub fn claim(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
         bail!("not in a managed repository (no .gitalong.json found)");
     };
@@ -189,21 +197,39 @@ pub fn claim(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()>
     let active = repo.active_branch_name()?;
     let ctx = repo.context();
 
-    let mut any_blocked = false;
-    for outcome in &outcomes {
-        let pseudo_status = crate::operations::FileStatus {
-            filename: outcome.filename.clone(),
-            commit: outcome.blocker.clone(),
-        };
-        println!(
-            "{}",
-            crate::operations::format_status(&pseudo_status, active.as_deref(), &ctx)
-        );
-        if outcome.blocker.sha.is_some() || outcome.blocker.user.is_some() {
-            any_blocked = true;
+    let statuses: Vec<crate::operations::FileStatus> = outcomes
+        .iter()
+        .map(|o| crate::operations::FileStatus {
+            filename: o.filename.clone(),
+            commit: o.blocker.clone(),
+        })
+        .collect();
+    let blocked: Vec<bool> = outcomes
+        .iter()
+        .map(|o| o.blocker.sha.is_some() || o.blocker.user.is_some())
+        .collect();
+
+    if json {
+        let records: Vec<_> = statuses
+            .iter()
+            .zip(&blocked)
+            .map(|(s, b)| {
+                let mut record = crate::operations::status_record(s, active.as_deref(), &ctx);
+                record.blocked = Some(*b);
+                record
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&records)?);
+    } else {
+        for status in &statuses {
+            println!(
+                "{}",
+                crate::operations::format_status(status, active.as_deref(), &ctx)
+            );
         }
     }
-    if any_blocked {
+
+    if blocked.iter().any(|b| *b) {
         std::process::exit(1);
     }
     Ok(())

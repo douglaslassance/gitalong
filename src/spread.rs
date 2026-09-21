@@ -51,6 +51,11 @@ impl CommitSpread {
             .map(|f| if self.contains(*f) { '+' } else { '-' })
             .collect()
     }
+
+    /// Names of the set flags, in bit order, for the `--json` output.
+    pub fn flag_names(self) -> Vec<&'static str> {
+        self.iter_names().map(|(name, _)| name).collect()
+    }
 }
 
 #[cfg(test)]
@@ -81,6 +86,17 @@ mod tests {
             CommitSpread::THEIR_UNCOMMITTED.to_status_string(),
             "-------+"
         );
+    }
+
+    #[test]
+    fn flag_names_are_empty_for_an_empty_spread() {
+        assert!(CommitSpread::empty().flag_names().is_empty());
+    }
+
+    #[test]
+    fn flag_names_follow_bit_order() {
+        let s = CommitSpread::THEIR_UNCOMMITTED | CommitSpread::MINE_UNCOMMITTED;
+        assert_eq!(s.flag_names(), ["MINE_UNCOMMITTED", "THEIR_UNCOMMITTED"]);
     }
 
     #[test]

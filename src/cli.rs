@@ -56,6 +56,10 @@ pub enum Command {
         /// File paths (relative to the repository or absolute).
         files: Vec<PathBuf>,
 
+        /// Emit one JSON array instead of the whitespace-delimited text lines.
+        #[arg(long)]
+        json: bool,
+
         /// Write a `gitalong.prof` profile dump for analysis.
         #[arg(short, long)]
         profile: bool,
@@ -65,6 +69,10 @@ pub enum Command {
     Claim {
         /// File paths (relative to the repository or absolute).
         files: Vec<PathBuf>,
+
+        /// Emit one JSON array instead of the whitespace-delimited text lines.
+        #[arg(long)]
+        json: bool,
 
         /// Write a `gitalong.prof` profile dump for analysis.
         #[arg(short, long)]
