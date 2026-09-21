@@ -85,12 +85,17 @@ mod tests {
             .args(args)
             .output()
             .unwrap();
-        assert!(out.status.success(), "git {} failed", args.join(" "));
+        assert!(
+            out.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 
     /// Two managed clones sharing the same store, set up so we can simulate
     /// a contested-claim scenario.
-    fn two_clones() -> (TempDir, TempDir, TempDir) {
+    fn two_clones() -> (TempDir, TempDir, TempDir, TempDir) {
         let store = tempfile::tempdir().unwrap();
         run(store.path(), &["init", "--bare", "--initial-branch=main"]);
         let origin = tempfile::tempdir().unwrap();
@@ -139,12 +144,12 @@ mod tests {
         run(bob.path(), &["config", "user.email", "bob@example.com"]);
         run(bob.path(), &["config", "user.name", "Bob"]);
 
-        (store, alice, bob)
+        (store, origin, alice, bob)
     }
 
     #[test]
     fn claim_on_clean_file_is_unblocked() {
-        let (_s, alice, _bob) = two_clones();
+        let (_s, _o, alice, _bob) = two_clones();
         let repo = Repository::open(alice.path()).unwrap();
 
         let outcomes = claim_files(&repo, &["shared.txt".to_string()]).unwrap();
@@ -163,7 +168,7 @@ mod tests {
 
     #[test]
     fn claim_blocked_when_other_clone_has_uncommitted_changes() {
-        let (_s, alice, bob) = two_clones();
+        let (_s, _o, alice, bob) = two_clones();
 
         let alice_repo = Repository::open(alice.path()).unwrap();
         claim_files(&alice_repo, &["shared.txt".to_string()]).unwrap();
@@ -180,6 +185,39 @@ mod tests {
             blocker.clone.as_deref(),
             Some(bob_clone.as_str()),
             "blocker should not be Bob's own record"
+        );
+    }
+
+    #[test]
+    fn claim_blocked_when_other_clone_has_unpushed_commit() {
+        let (_s, _o, alice, bob) = two_clones();
+        std::fs::write(alice.path().join("shared.txt"), b"edited").unwrap();
+        run(alice.path(), &["commit", "-am", "edit shared"]);
+        let alice_repo = Repository::open(alice.path()).unwrap();
+        crate::operations::update_tracked_commits(&alice_repo, &[]).unwrap();
+
+        let bob_repo = Repository::open(bob.path()).unwrap();
+        let outcomes = claim_files(&bob_repo, &["shared.txt".to_string()]).unwrap();
+        let blocker = &outcomes[0].blocker;
+        assert!(blocker.sha.is_some(), "blocker should be Alice's commit");
+        assert_eq!(blocker.author.as_deref(), Some("Alice"));
+    }
+
+    #[test]
+    fn claim_unblocked_once_other_clones_commit_is_pushed() {
+        let (_s, _o, alice, bob) = two_clones();
+        std::fs::write(alice.path().join("shared.txt"), b"edited").unwrap();
+        run(alice.path(), &["commit", "-am", "edit shared"]);
+        let alice_repo = Repository::open(alice.path()).unwrap();
+        crate::operations::update_tracked_commits(&alice_repo, &[]).unwrap();
+        run(alice.path(), &["push"]);
+        run(bob.path(), &["pull", "--ff-only"]);
+
+        let bob_repo = Repository::open(bob.path()).unwrap();
+        let outcomes = claim_files(&bob_repo, &["shared.txt".to_string()]).unwrap();
+        assert!(
+            outcomes[0].blocker.sha.is_none(),
+            "pushed work must not block a claim"
         );
     }
 }

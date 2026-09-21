@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use crate::commit::Commit;
+use crate::commit::{Branches, Commit};
 use crate::error::Result;
 use crate::repository::Repository;
 use crate::store::Store;
@@ -212,14 +212,25 @@ fn commit_touches(repo: &git2::Repository, c: &git2::Commit<'_>, target: &Path) 
 /// another clone — it's expected to be missing from this clone's object
 /// database. We treat that as "not in any local/remote branch here" rather
 /// than an error.
+///
+/// A store record whose commit has since reached a remote branch is demoted
+/// to a plain remote commit. The issuing clone only rewrites its records on
+/// its next update, so the record lingers after a push.
 fn enrich_branches(repo: &Repository, mut commit: Commit) -> Result<Commit> {
-    if let Some(sha) = commit.sha.clone() {
-        if commit.branches.local.is_empty() {
-            commit.branches.local = repo.local_branches_containing(&sha).unwrap_or_default();
-        }
-        if commit.branches.remote.is_empty() {
-            commit.branches.remote = repo.remote_branches_containing(&sha).unwrap_or_default();
-        }
+    let Some(sha) = commit.sha.clone() else {
+        return Ok(commit);
+    };
+    if commit.user.is_some() && repo.is_remote_commit(&sha).unwrap_or(false) {
+        commit.host = None;
+        commit.user = None;
+        commit.clone = None;
+        commit.branches = Branches::default();
+    }
+    if commit.branches.local.is_empty() {
+        commit.branches.local = repo.local_branches_containing(&sha).unwrap_or_default();
+    }
+    if commit.branches.remote.is_empty() {
+        commit.branches.remote = repo.remote_branches_containing(&sha).unwrap_or_default();
     }
     Ok(commit)
 }
@@ -228,6 +239,7 @@ fn enrich_branches(repo: &Repository, mut commit: Commit) -> Result<Commit> {
 mod tests {
     use super::*;
     use crate::config::{CONFIG_BASENAME, Config};
+    use crate::spread::CommitSpread;
     use std::path::Path;
     use std::process::Command;
     use tempfile::TempDir;
@@ -238,7 +250,12 @@ mod tests {
             .args(args)
             .output()
             .unwrap();
-        assert!(out.status.success(), "git {} failed", args.join(" "));
+        assert!(
+            out.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 
     /// Same shape as the update tests' fixture, exposed here so we can ask
@@ -322,6 +339,30 @@ mod tests {
         let c = &result[0].commit;
         assert!(c.sha.is_some());
         assert!(c.changes.iter().any(|p| p == "draft.txt"));
+    }
+
+    #[test]
+    fn pushed_store_record_resolves_as_remote_commit() {
+        let (_s, _o, m) = fixture(false);
+        std::fs::write(m.path().join("draft.txt"), b"draft").unwrap();
+        run(m.path(), &["add", "draft.txt"]);
+        run(m.path(), &["commit", "-m", "wip"]);
+
+        let repo = Repository::open(m.path()).unwrap();
+        crate::operations::update_tracked_commits(&repo, &[]).unwrap();
+        run(m.path(), &["push"]);
+
+        let result = last_commits(&repo, &["draft.txt".to_string()]).unwrap();
+        let c = &result[0].commit;
+        assert!(
+            c.user.is_none(),
+            "pushed record should read as a remote commit"
+        );
+        assert!(c.branches.remote.iter().any(|b| b == "main"));
+        assert_eq!(
+            c.spread(Some("main"), &repo.context()),
+            CommitSpread::MINE_ACTIVE_BRANCH | CommitSpread::REMOTE_MATCHING_BRANCH
+        );
     }
 
     #[test]

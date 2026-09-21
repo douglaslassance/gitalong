@@ -11,8 +11,9 @@
 //! 4. Alice creates a local-only commit and edits an uncommitted file, then
 //!    runs `update`.
 //! 5. Bob runs `status` against those paths and sees Alice as the holder.
-//! 6. Bob's `claim` against the same paths is blocked by Alice's records.
-//! 7. Alice's claim of an unrelated file succeeds.
+//! 6. Bob's `claim` against either path is blocked by Alice's records.
+//! 7. Alice pushes and Bob pulls; Bob's claim of the committed file succeeds.
+//! 8. Alice's claim of an unrelated file succeeds.
 
 mod common;
 
@@ -62,6 +63,8 @@ fn full_lifecycle_two_clones() {
     common::gitalong_in(alice.path())
         .args([
             "setup",
+            "--pull-threshold",
+            "0",
             &store_url,
             "--track-uncommitted",
             "--tracked-extensions",
@@ -117,11 +120,23 @@ fn full_lifecycle_two_clones() {
             lines.len() == 2 && lines.iter().all(|l| l.contains('+'))
         }));
 
-    // ---- Bob's claim is blocked ----
+    // ---- Bob's claims are blocked, by the uncommitted edit and the unpushed commit alike ----
     common::gitalong_in(bob.path())
         .args(["claim", "draft.txt"])
         .assert()
         .failure();
+    common::gitalong_in(bob.path())
+        .args(["claim", "local.txt"])
+        .assert()
+        .failure();
+
+    // ---- Once Alice pushes and Bob pulls, the commit no longer blocks ----
+    run(alice.path(), &["push"]);
+    run(bob.path(), &["pull", "--ff-only"]);
+    common::gitalong_in(bob.path())
+        .args(["claim", "local.txt"])
+        .assert()
+        .success();
 
     // ---- Alice claims an unrelated path successfully ----
     common::gitalong_in(alice.path())
