@@ -35,6 +35,7 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
     let index = StoreIndex::new(&store_commits, &remote_url, repo.config().track_uncommitted);
+    let head_tree = repo.head_tree()?;
 
     let mut out = Vec::with_capacity(files.len());
     for raw in files {
@@ -44,7 +45,7 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
             .to_string_lossy()
             .replace('\\', "/");
 
-        if !repo.is_file_tracked(&abs)? {
+        if !repo.is_file_tracked_in(&abs, head_tree.as_ref())? {
             out.push(FileStatus {
                 filename: raw.clone(),
                 commit: Commit::default(),
