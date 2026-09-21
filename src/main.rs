@@ -15,8 +15,16 @@ fn main() -> Result<()> {
         Command::Config { property } => commands::config(&opts, &property),
         Command::Setup(args) => commands::setup(&opts, args),
         Command::Update { profile } => commands::update(&opts, profile),
-        Command::Status { files, profile } => commands::status(&opts, &files, profile),
-        Command::Claim { files, profile } => commands::claim(&opts, &files, profile),
+        Command::Status {
+            files,
+            json,
+            profile,
+        } => commands::status(&opts, &files, json, profile),
+        Command::Claim {
+            files,
+            json,
+            profile,
+        } => commands::claim(&opts, &files, json, profile),
         Command::Clear { all, force } => commands::clear(&opts, all, force),
     }
 }
