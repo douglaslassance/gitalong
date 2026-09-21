@@ -2,14 +2,12 @@
 //!
 //! Mirrors the Python `update_tracked_commits()`:
 //!
-//! 1. Read the store's current commits.
-//! 2. Drop any commit issued by this clone for this remote — they're stale, we're
-//!    about to replace them with the live local view.
-//! 3. Build the local-only view: every commit that isn't on a remote branch yet,
+//! 1. Build the local-only view: every commit that isn't on a remote branch yet,
 //!    plus an uncommitted-changes pseudo-commit when `track_uncommitted` is on.
-//! 4. Concatenate and write back to the store.
-//! 5. With `modify_permissions` on, reapply the write bit to every file at
-//!    HEAD from the view just written.
+//! 2. Publish it. The store drops this clone's previous records and keeps
+//!    everyone else's.
+//! 3. With `modify_permissions` on, reapply the write bit to every file at
+//!    HEAD from the view just published.
 
 use time::OffsetDateTime;
 use time::UtcOffset;
@@ -27,25 +25,15 @@ use crate::store::Store;
 /// requiring the user to actually edit them yet).
 pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()> {
     let mut store = Store::for_repository(repo)?;
-    let existing = store.read()?;
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
 
-    let mut next: Vec<Commit> = existing
-        .into_iter()
-        .filter(|c| {
-            let other_remote = c.remote.as_deref() != Some(remote_url.as_str());
-            other_remote || !c.is_ours(&context)
-        })
-        .collect();
-
-    next.extend(local_only_commits(repo, claims, &context, &remote_url)?);
-
-    store.write(&next)?;
+    let ours = local_only_commits(repo, claims, &context, &remote_url)?;
+    let all = store.publish(&ours, &context, &remote_url)?;
 
     if repo.config().modify_permissions {
         let files = repo.tracked_files_at_head()?;
-        crate::operations::permissions::apply_permissions(repo, &files, &next)?;
+        crate::operations::permissions::apply_permissions(repo, &files, &all)?;
     }
     Ok(())
 }
