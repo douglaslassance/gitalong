@@ -128,7 +128,8 @@ impl Commit {
     ///   [`Self::is_issued_by`].
     /// - Commits read from the git log (no `user`) are already public: light
     ///   the `REMOTE_*` flags from their remote branches, plus
-    ///   `MINE_ACTIVE_BRANCH` when the active branch contains them.
+    ///   `MINE_ACTIVE_BRANCH` when the active branch contains them and
+    ///   `MINE_OTHER_BRANCH` when any other local branch does.
     pub fn spread(&self, active_branch: Option<&str>, ctx: &Context) -> CommitSpread {
         let mut spread = CommitSpread::empty();
 
@@ -169,6 +170,14 @@ impl Commit {
             }
             if !remote_branches.is_empty() {
                 spread |= CommitSpread::REMOTE_OTHER_BRANCH;
+            }
+            if self
+                .branches
+                .local
+                .iter()
+                .any(|b| Some(b.as_str()) != active_branch)
+            {
+                spread |= CommitSpread::MINE_OTHER_BRANCH;
             }
         }
 
@@ -364,6 +373,51 @@ mod tests {
         assert!(spread.contains(CommitSpread::MINE_ACTIVE_BRANCH));
         assert!(spread.contains(CommitSpread::REMOTE_MATCHING_BRANCH));
         assert!(spread.contains(CommitSpread::REMOTE_OTHER_BRANCH));
+    }
+
+    #[test]
+    fn spread_for_real_commit_on_a_diverged_local_branch() {
+        let c = Commit {
+            sha: Some("abc".into()),
+            branches: Branches {
+                local: vec!["feature".into()],
+                remote: vec![],
+            },
+            ..Commit::default()
+        };
+        assert_eq!(
+            c.spread(Some("main"), &ctx()),
+            CommitSpread::MINE_OTHER_BRANCH
+        );
+    }
+
+    #[test]
+    fn spread_for_real_commit_on_active_and_descendant_branch() {
+        let c = Commit {
+            sha: Some("abc".into()),
+            branches: Branches {
+                local: vec!["main".into(), "feature".into()],
+                remote: vec![],
+            },
+            ..Commit::default()
+        };
+        assert_eq!(
+            c.spread(Some("main"), &ctx()),
+            CommitSpread::MINE_ACTIVE_BRANCH | CommitSpread::MINE_OTHER_BRANCH
+        );
+    }
+
+    #[test]
+    fn spread_on_detached_head_treats_every_local_branch_as_other() {
+        let c = Commit {
+            sha: Some("abc".into()),
+            branches: Branches {
+                local: vec!["main".into()],
+                remote: vec![],
+            },
+            ..Commit::default()
+        };
+        assert_eq!(c.spread(None, &ctx()), CommitSpread::MINE_OTHER_BRANCH);
     }
 
     #[test]

@@ -14,6 +14,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use serde::Serialize;
+
 use crate::commit::{Branches, Commit};
 use crate::error::Result;
 use crate::repository::{Context, Repository};
@@ -117,6 +119,38 @@ pub fn format_status(
         host,
         author
     )
+}
+
+/// Machine-readable form of a [`FileStatus`], emitted by `--json`.
+///
+/// `commit` is the store record verbatim, so field names match `commits.json`
+/// and `author` (git identity) stays distinct from `user` (OS identity). It is
+/// `null` when nothing applies, which the text format renders as all dashes.
+#[derive(Debug, Serialize)]
+pub struct StatusRecord<'a> {
+    pub filename: &'a str,
+    pub spread: String,
+    pub flags: Vec<&'static str>,
+    pub commit: Option<&'a Commit>,
+    /// Set by `claim --json` only, mirroring that command's exit code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<bool>,
+}
+
+/// Build the `--json` record for a file status.
+pub fn status_record<'a>(
+    status: &'a FileStatus,
+    active_branch: Option<&str>,
+    ctx: &Context,
+) -> StatusRecord<'a> {
+    let spread = status.commit.spread(active_branch, ctx);
+    StatusRecord {
+        filename: &status.filename,
+        spread: spread.to_status_string(),
+        flags: spread.flag_names(),
+        commit: (status.commit != Commit::default()).then_some(&status.commit),
+        blocked: None,
+    }
 }
 
 fn csv_or_dash(items: &[String]) -> String {

@@ -13,5 +13,5 @@ pub mod update;
 
 pub use claim::{ClaimOutcome, claim_files};
 pub use permissions::update_files_permissions;
-pub use status::{FileStatus, format_status, last_commits};
+pub use status::{FileStatus, StatusRecord, format_status, last_commits, status_record};
 pub use update::update_tracked_commits;

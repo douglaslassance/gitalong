@@ -112,6 +112,65 @@ fn status_renders_one_line_per_file() {
 }
 
 #[test]
+fn status_json_is_one_array_in_input_order() {
+    let (_s, _o, m) = fixture();
+
+    let out = common::gitalong_in(m.path())
+        .args(["status", "--json", "README", "missing.txt"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let rows = parsed.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+
+    assert_eq!(rows[0]["filename"], "README");
+    assert!(rows[0]["commit"]["sha"].is_string());
+    assert_eq!(rows[0]["commit"]["author"], "Alice");
+    assert_eq!(rows[0]["spread"].as_str().unwrap().len(), 8);
+    assert!(rows[0]["blocked"].is_null());
+
+    assert_eq!(rows[1]["filename"], "missing.txt");
+    assert!(rows[1]["commit"].is_null());
+    assert_eq!(rows[1]["spread"], "--------");
+    assert_eq!(rows[1]["flags"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn status_json_survives_a_filename_with_spaces() {
+    let (_s, _o, m) = fixture();
+    fs::write(m.path().join("my file.txt"), b"hi").unwrap();
+    run(m.path(), &["add", "my file.txt"]);
+    run(m.path(), &["commit", "-m", "spaced"]);
+
+    let out = common::gitalong_in(m.path())
+        .args(["status", "--json", "my file.txt"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(parsed[0]["filename"], "my file.txt");
+    assert!(parsed[0]["commit"]["sha"].is_string());
+}
+
+#[test]
+fn claim_json_reports_blocked_per_file() {
+    let (_s, _o, m) = fixture();
+
+    let out = common::gitalong_in(m.path())
+        .args(["claim", "--json", "README"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(parsed[0]["filename"], "README");
+    assert_eq!(parsed[0]["blocked"], false);
+}
+
+#[test]
 fn claim_on_unblocked_file_exits_zero() {
     let (_s, _o, m) = fixture();
     common::gitalong_in(m.path())
