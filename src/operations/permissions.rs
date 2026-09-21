@@ -114,97 +114,53 @@ fn set_writable(path: &Path, writable: bool) -> Result<bool> {
 #[cfg(unix)]
 mod tests {
     use super::*;
-    use crate::config::{CONFIG_BASENAME, Config};
+    use crate::for_each_store;
+    use crate::testing::{Team, git};
     use std::os::unix::fs::PermissionsExt;
-    use std::process::Command;
     use tempfile::{TempDir, tempdir};
 
-    fn run(dir: &Path, args: &[&str]) {
-        let out = Command::new("git")
-            .current_dir(dir)
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(
-            out.status.success(),
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr)
-        );
-    }
-
-    /// Managed clone with permission management on, plus its origin and store.
-    fn fixture() -> (TempDir, TempDir, TempDir) {
-        let store = tempdir().unwrap();
-        run(store.path(), &["init", "--bare", "--initial-branch=main"]);
-        let origin = tempdir().unwrap();
-        run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
-        let managed = tempdir().unwrap();
-        run(
-            managed.path(),
-            &[
-                "clone",
-                origin.path().to_str().unwrap(),
-                managed.path().to_str().unwrap(),
-            ],
-        );
-        run(
-            managed.path(),
-            &["config", "user.email", "alice@example.com"],
-        );
-        run(managed.path(), &["config", "user.name", "Alice"]);
-        run(managed.path(), &["config", "core.fileMode", "false"]);
-        let cfg = Config {
-            store_url: format!("file://{}", store.path().display()),
-            pull_threshold: 0.0,
-            track_uncommitted: true,
-            modify_permissions: true,
-            ..Config::default()
-        };
-        cfg.save(&managed.path().join(CONFIG_BASENAME)).unwrap();
-        std::fs::write(managed.path().join("README"), b"hi").unwrap();
-        std::fs::write(
-            managed.path().join(".gitignore"),
-            crate::hooks::GITIGNORE_PATCH,
-        )
-        .unwrap();
-        run(
-            managed.path(),
-            &["add", "README", ".gitalong.json", ".gitignore"],
-        );
-        run(managed.path(), &["commit", "-m", "init"]);
-        run(managed.path(), &["push", "-u", "origin", "main"]);
-        (store, origin, managed)
+    /// Alice's clone with README pushed, permission management on, and mode
+    /// bits invisible to git so the chmod calls never look like edits.
+    fn alice(team: &Team) -> TempDir {
+        let m = team.seeded_clone("Alice", &[("README", "hi")], |c| {
+            c.track_uncommitted = true;
+            c.modify_permissions = true;
+        });
+        git(m.path(), &["config", "core.fileMode", "false"]);
+        m
     }
 
     fn is_writable(path: &Path) -> bool {
         std::fs::metadata(path).unwrap().permissions().mode() & 0o200 != 0
     }
 
-    #[test]
-    fn update_locks_pushed_files_and_frees_this_clones_work() {
-        let (_s, _o, m) = fixture();
-        std::fs::write(m.path().join("local.txt"), b"mine").unwrap();
-        run(m.path(), &["add", "local.txt"]);
-        run(m.path(), &["commit", "-m", "local"]);
+    for_each_store!(
+        update_locks_pushed_files_and_frees_this_clones_work,
+        |kind| {
+            let team = Team::new(kind);
+            let m = alice(&team);
+            std::fs::write(m.path().join("local.txt"), b"mine").unwrap();
+            git(m.path(), &["add", "local.txt"]);
+            git(m.path(), &["commit", "-m", "local"]);
 
-        let repo = Repository::open(m.path()).unwrap();
-        crate::operations::update_tracked_commits(&repo, &[]).unwrap();
-        assert!(
-            !is_writable(&m.path().join("README")),
-            "pushed file must be read-only until claimed"
-        );
-        assert!(
-            is_writable(&m.path().join("local.txt")),
-            "unpushed commit on the active branch stays writable"
-        );
+            let repo = Repository::open(m.path()).unwrap();
+            crate::operations::update_tracked_commits(&repo, &[]).unwrap();
+            assert!(
+                !is_writable(&m.path().join("README")),
+                "pushed file must be read-only until claimed"
+            );
+            assert!(
+                is_writable(&m.path().join("local.txt")),
+                "unpushed commit on the active branch stays writable"
+            );
 
-        crate::operations::update_tracked_commits(&repo, &["README".to_string()]).unwrap();
-        assert!(
-            is_writable(&m.path().join("README")),
-            "claimed file becomes writable"
-        );
-    }
+            crate::operations::update_tracked_commits(&repo, &["README".to_string()]).unwrap();
+            assert!(
+                is_writable(&m.path().join("README")),
+                "claimed file becomes writable"
+            );
+        }
+    );
 
     #[test]
     fn set_writable_toggles_user_write_bit() {

@@ -219,105 +219,40 @@ fn format_offset_date_time(dt: OffsetDateTime) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CONFIG_BASENAME, Config};
+    use crate::for_each_store;
+    use crate::testing::{Team, git};
     use std::path::Path;
-    use std::process::Command;
     use tempfile::TempDir;
 
-    /// Stand up a managed clone + bare store + remote-of-managed so revwalk
-    /// has something realistic to walk.
-    struct Fixture {
-        _store: TempDir,
-        _origin: TempDir,
-        managed: TempDir,
+    /// Alice's clone with README committed and pushed, tracking uncommitted changes.
+    fn alice(team: &Team) -> TempDir {
+        team.seeded_clone("Alice", &[("README", "hi")], |c| c.track_uncommitted = true)
     }
 
-    fn run(dir: &Path, args: &[&str]) {
-        let out = Command::new("git")
-            .current_dir(dir)
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(
-            out.status.success(),
-            "git {} failed: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr)
-        );
+    fn stored(dir: &Path) -> Vec<Commit> {
+        let repo = Repository::open(dir).unwrap();
+        Store::for_repository(&repo).unwrap().read().unwrap()
     }
 
-    fn make_fixture() -> Fixture {
-        let store = tempfile::tempdir().unwrap();
-        run(store.path(), &["init", "--bare", "--initial-branch=main"]);
+    for_each_store!(nothing_to_track_after_pristine_setup, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team);
+        let repo = Repository::open(m.path()).unwrap();
+        update_tracked_commits(&repo, &[]).unwrap();
+        assert!(stored(m.path()).is_empty());
+    });
 
-        let origin = tempfile::tempdir().unwrap();
-        run(origin.path(), &["init", "--bare", "--initial-branch=main"]);
+    for_each_store!(local_only_commit_makes_it_into_the_store, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team);
+        std::fs::write(m.path().join("local.txt"), b"local-only").unwrap();
+        git(m.path(), &["add", "local.txt"]);
+        git(m.path(), &["commit", "-m", "wip"]);
 
-        let managed = tempfile::tempdir().unwrap();
-        run(
-            managed.path(),
-            &[
-                "clone",
-                origin.path().to_str().unwrap(),
-                managed.path().to_str().unwrap(),
-            ],
-        );
-        run(
-            managed.path(),
-            &["config", "user.email", "alice@example.com"],
-        );
-        run(managed.path(), &["config", "user.name", "Alice"]);
-
-        let cfg = Config {
-            store_url: format!("file://{}", store.path().display()),
-            pull_threshold: 0.0,
-            track_uncommitted: true,
-            ..Config::default()
-        };
-        cfg.save(&managed.path().join(CONFIG_BASENAME)).unwrap();
-        std::fs::write(managed.path().join("README"), b"hi").unwrap();
-        std::fs::write(
-            managed.path().join(".gitignore"),
-            crate::hooks::GITIGNORE_PATCH,
-        )
-        .unwrap();
-
-        run(
-            managed.path(),
-            &["add", "README", ".gitalong.json", ".gitignore"],
-        );
-        run(managed.path(), &["commit", "-m", "init"]);
-        run(managed.path(), &["push", "-u", "origin", "main"]);
-
-        Fixture {
-            _store: store,
-            _origin: origin,
-            managed,
-        }
-    }
-
-    #[test]
-    fn nothing_to_track_after_pristine_setup() {
-        let f = make_fixture();
-        let repo = Repository::open(f.managed.path()).unwrap();
+        let repo = Repository::open(m.path()).unwrap();
         update_tracked_commits(&repo, &[]).unwrap();
 
-        let mut store = Store::for_repository(&repo).unwrap();
-        assert!(store.read().unwrap().is_empty());
-    }
-
-    #[test]
-    fn local_only_commit_makes_it_into_the_store() {
-        let f = make_fixture();
-        std::fs::write(f.managed.path().join("local.txt"), b"local-only").unwrap();
-        run(f.managed.path(), &["add", "local.txt"]);
-        run(f.managed.path(), &["commit", "-m", "wip"]);
-
-        let repo = Repository::open(f.managed.path()).unwrap();
-        update_tracked_commits(&repo, &[]).unwrap();
-
-        let mut store = Store::for_repository(&repo).unwrap();
-        let commits = store.read().unwrap();
+        let commits = stored(m.path());
         assert_eq!(commits.len(), 1, "expected the one local-only commit");
         let c = &commits[0];
         assert!(c.sha.is_some());
@@ -325,60 +260,57 @@ mod tests {
         assert_eq!(c.changes, vec!["local.txt".to_string()]);
         assert_eq!(c.branches.local, vec!["main".to_string()]);
         assert!(c.is_issued_by(&repo.context()));
-    }
+    });
 
-    #[test]
-    fn uncommitted_changes_appear_when_track_uncommitted() {
-        let f = make_fixture();
-        std::fs::write(f.managed.path().join("draft.txt"), b"in flight").unwrap();
+    for_each_store!(uncommitted_changes_appear_when_track_uncommitted, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team);
+        std::fs::write(m.path().join("draft.txt"), b"in flight").unwrap();
 
-        let repo = Repository::open(f.managed.path()).unwrap();
+        let repo = Repository::open(m.path()).unwrap();
         update_tracked_commits(&repo, &[]).unwrap();
 
-        let mut store = Store::for_repository(&repo).unwrap();
-        let commits = store.read().unwrap();
+        let commits = stored(m.path());
         assert_eq!(commits.len(), 1);
         let c = &commits[0];
         assert!(c.sha.is_none(), "uncommitted commit must not carry a sha");
         assert!(c.is_uncommitted_changes());
         assert!(c.changes.iter().any(|p| p == "draft.txt"));
-    }
+    });
 
-    #[test]
-    fn rerun_replaces_our_previous_local_view() {
-        let f = make_fixture();
-        std::fs::write(f.managed.path().join("a.txt"), b"first").unwrap();
-        run(f.managed.path(), &["add", "a.txt"]);
-        run(f.managed.path(), &["commit", "-m", "first"]);
+    for_each_store!(rerun_replaces_our_previous_local_view, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team);
+        std::fs::write(m.path().join("a.txt"), b"first").unwrap();
+        git(m.path(), &["add", "a.txt"]);
+        git(m.path(), &["commit", "-m", "first"]);
 
-        let repo = Repository::open(f.managed.path()).unwrap();
+        let repo = Repository::open(m.path()).unwrap();
         update_tracked_commits(&repo, &[]).unwrap();
 
-        std::fs::write(f.managed.path().join("b.txt"), b"second").unwrap();
-        run(f.managed.path(), &["add", "b.txt"]);
-        run(f.managed.path(), &["commit", "-m", "second"]);
+        std::fs::write(m.path().join("b.txt"), b"second").unwrap();
+        git(m.path(), &["add", "b.txt"]);
+        git(m.path(), &["commit", "-m", "second"]);
         update_tracked_commits(&repo, &[]).unwrap();
 
-        let mut store = Store::for_repository(&repo).unwrap();
-        let commits = store.read().unwrap();
+        let commits = stored(m.path());
         assert_eq!(
             commits.len(),
             2,
             "rerun must replace the previous local view, not append to it"
         );
         assert!(commits[0].changes.iter().any(|c| c == "b.txt"));
-    }
+    });
 
-    #[test]
-    fn claim_paths_are_added_to_uncommitted_record() {
-        let f = make_fixture();
-        let repo = Repository::open(f.managed.path()).unwrap();
+    for_each_store!(claim_paths_are_added_to_uncommitted_record, |kind| {
+        let team = Team::new(kind);
+        let m = alice(&team);
+        let repo = Repository::open(m.path()).unwrap();
         update_tracked_commits(&repo, &["claimed.txt".to_string()]).unwrap();
 
-        let mut store = Store::for_repository(&repo).unwrap();
-        let commits = store.read().unwrap();
+        let commits = stored(m.path());
         assert_eq!(commits.len(), 1);
         assert!(commits[0].is_uncommitted_changes());
         assert!(commits[0].changes.iter().any(|c| c == "claimed.txt"));
-    }
+    });
 }
