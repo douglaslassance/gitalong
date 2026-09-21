@@ -57,6 +57,12 @@ gitalong -C project status untracked.txt uncommitted.png local.png current.jpg r
 
 # Claim files for editing. Returns exit 1 when any are blocked.
 gitalong -C project claim untracked.txt uncommitted.png local.png current.jpg remote.jpg
+
+# Withdraw this clone's records, for instance before deleting the clone.
+gitalong -C project clear
+
+# Wipe the whole store, every clone included. Asks before it does.
+gitalong -C project clear --all
 ```
 
 ### Status output
@@ -92,7 +98,9 @@ Omit the argument. Each clone pushes its records to its own ref under
 `refs/gitalong/v1/` on the repository's remote, with the same credentials as
 any other push. The ref points at a commit with an empty tree and the records
 in its message, so no file content is ever uploaded. Ordinary fetches never
-see the namespace, hosting UIs hide it, and CI does not run on it.
+see the namespace, hosting UIs hide it, and CI does not run on it. The `v1`
+is the record format, bumped only if the payload ever changes shape, so that
+clones running different versions never misread each other.
 
 > [!NOTE]
 > Servers that deny non-fast-forward pushes or restrict ref namespaces
@@ -122,6 +130,19 @@ gitalong -C project setup https://api.jsonbin.io/v3/b/<BIN_ID> \
 > [!NOTE]
 > `$ACCESS_KEY` is expanded from the environment at request time, so the secret
 > itself doesn't end up in the on-disk config.
+
+## Clearing the store
+
+`gitalong clear` withdraws the records this clone published. Run it before
+deleting a clone, otherwise its last records sit in the store and keep
+claiming files nobody is working on. In a live clone the effect is temporary:
+the next commit or `gitalong update` republishes whatever is genuinely
+unpushed or uncommitted.
+
+`gitalong clear --all` removes every clone's records. It asks for
+confirmation, and `--force` skips the question. Without a terminal to ask on,
+it refuses unless `--force` is given, so a hook or a script can never wipe the
+team's records by accident.
 
 ## Development
 

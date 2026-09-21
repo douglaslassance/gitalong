@@ -8,6 +8,7 @@
 //! command-by-command in subsequent commits.
 
 use std::collections::BTreeMap;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};
@@ -215,6 +216,61 @@ pub fn claim(opts: &GlobalOpts, files: &[PathBuf], _profile: bool) -> Result<()>
         std::process::exit(1);
     }
     Ok(())
+}
+
+/// Remove this clone's records from the store, or every clone's with `all`.
+///
+/// Clearing everyone's records asks for confirmation on the terminal unless
+/// `force` is set, and refuses outright when stdin is not a terminal so a
+/// script cannot wipe the team's records by accident.
+pub fn clear(opts: &GlobalOpts, all: bool, force: bool) -> Result<()> {
+    let Some(repo) = Repository::discover(&opts.repository)? else {
+        bail!("not in a managed repository (no .gitalong.json found)");
+    };
+    let mut store = crate::store::Store::for_repository(&repo)?;
+    if !all {
+        let context = repo.context();
+        let remote_url = repo.remote_url()?.unwrap_or_default();
+        store.clear_own(&context, &remote_url)?;
+        return Ok(());
+    }
+    let question = format!(
+        "Remove every clone's records from {}?",
+        describe_store(repo.config())
+    );
+    if !force && !confirm(&question)? {
+        eprintln!("Nothing removed.");
+        std::process::exit(1);
+    }
+    store.clear_all()?;
+    Ok(())
+}
+
+/// Where a config keeps its records, for prompts.
+fn describe_store(config: &Config) -> String {
+    if config.store_url.is_empty() {
+        format!(
+            "{}/ on this repository's remote",
+            crate::store::refs::NAMESPACE
+        )
+    } else {
+        config.store_url.clone()
+    }
+}
+
+/// Ask a yes/no question on the terminal. Errors when stdin is not a
+/// terminal, since nobody is there to answer.
+fn confirm(question: &str) -> Result<bool> {
+    if !std::io::stdin().is_terminal() {
+        bail!("stdin is not a terminal; pass --force to clear without confirmation");
+    }
+    eprint!("{question} [y/N] ");
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 /// Helper for future command implementations: ensure the resolved repository path exists.

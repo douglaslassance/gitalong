@@ -81,6 +81,32 @@ impl Store {
             }
         }
     }
+
+    /// Remove the records this clone issued for `remote_url`, keeping
+    /// everyone else's.
+    pub fn clear_own(&mut self, context: &Context, remote_url: &str) -> Result<()> {
+        match self {
+            Store::Refs(s) => s.clear_own(),
+            Store::Git(_) | Store::Jsonbin(_) => self.publish(&[], context, remote_url).map(|_| ()),
+        }
+    }
+
+    /// Remove every clone's records.
+    pub fn clear_all(&mut self) -> Result<()> {
+        match self {
+            Store::Refs(s) => s.clear_all(),
+            // Read first: the shared-document stores can only write on top of
+            // what the remote already holds.
+            Store::Git(s) => {
+                s.read()?;
+                s.write(&[])
+            }
+            Store::Jsonbin(s) => {
+                s.read()?;
+                s.write(&[])
+            }
+        }
+    }
 }
 
 /// Drop the records this clone issued for `remote_url` and append `ours`.
@@ -214,6 +240,61 @@ mod tests {
             shas(&open(bob.path()).read().unwrap()),
             vec!["alice-2", "bob-1"]
         );
+    });
+
+    for_each_store!(clear_own_removes_only_this_clones_records, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        let bob = team.clone("Bob", |_| {});
+        let (alice_ctx, remote) = identity(alice.path());
+        let (bob_ctx, _) = identity(bob.path());
+        let mut alice_store = open(alice.path());
+        alice_store
+            .publish(
+                &[own_record(&alice_ctx, &remote, "alice-1")],
+                &alice_ctx,
+                &remote,
+            )
+            .unwrap();
+        open(bob.path())
+            .publish(&[own_record(&bob_ctx, &remote, "bob-1")], &bob_ctx, &remote)
+            .unwrap();
+
+        alice_store.clear_own(&alice_ctx, &remote).unwrap();
+        assert_eq!(shas(&alice_store.read().unwrap()), vec!["bob-1"]);
+        assert_eq!(shas(&open(bob.path()).read().unwrap()), vec!["bob-1"]);
+    });
+
+    for_each_store!(clear_own_with_nothing_published_is_a_no_op, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        let (ctx, remote) = identity(alice.path());
+        let mut store = open(alice.path());
+        store.clear_own(&ctx, &remote).unwrap();
+        assert!(store.read().unwrap().is_empty());
+    });
+
+    for_each_store!(clear_all_removes_every_clones_records, |kind| {
+        let team = Team::new(kind);
+        let alice = team.clone("Alice", |_| {});
+        let bob = team.clone("Bob", |_| {});
+        let (alice_ctx, remote) = identity(alice.path());
+        let (bob_ctx, _) = identity(bob.path());
+        let mut alice_store = open(alice.path());
+        alice_store
+            .publish(
+                &[own_record(&alice_ctx, &remote, "alice-1")],
+                &alice_ctx,
+                &remote,
+            )
+            .unwrap();
+        open(bob.path())
+            .publish(&[own_record(&bob_ctx, &remote, "bob-1")], &bob_ctx, &remote)
+            .unwrap();
+
+        alice_store.clear_all().unwrap();
+        assert!(alice_store.read().unwrap().is_empty());
+        assert!(open(bob.path()).read().unwrap().is_empty());
     });
 
     fn ctx() -> Context {

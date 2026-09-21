@@ -97,6 +97,58 @@ impl RefStore {
         self.read_local()
     }
 
+    /// Delete this clone's ref on the remote and locally.
+    pub fn clear_own(&mut self) -> Result<()> {
+        let own_ref = self.own_ref();
+        let present = self.remote_refs(&own_ref)?;
+        self.delete_remote_refs(&present)?;
+        let repo = git2::Repository::open(&self.working_dir)?;
+        if let Ok(mut reference) = repo.find_reference(&own_ref) {
+            reference.delete()?;
+        }
+        Ok(())
+    }
+
+    /// Delete every ref in the namespace on the remote and locally.
+    pub fn clear_all(&mut self) -> Result<()> {
+        let present = self.remote_refs(&format!("{NAMESPACE}/*"))?;
+        self.delete_remote_refs(&present)?;
+        let repo = git2::Repository::open(&self.working_dir)?;
+        for reference in repo.references_glob(&format!("{NAMESPACE}/*"))? {
+            reference?.delete()?;
+        }
+        Ok(())
+    }
+
+    /// Refs on the remote matching `pattern`, by full name.
+    fn remote_refs(&self, pattern: &str) -> Result<Vec<String>> {
+        let listing = run_git_in(
+            &self.working_dir,
+            &["ls-remote", "--refs", &self.remote, pattern],
+        )?;
+        Ok(String::from_utf8_lossy(&listing.stdout)
+            .lines()
+            .filter_map(|line| line.split_whitespace().nth(1))
+            .map(str::to_string)
+            .collect())
+    }
+
+    fn delete_remote_refs(&self, refs: &[String]) -> Result<()> {
+        if refs.is_empty() {
+            return Ok(());
+        }
+        let mut args = vec![
+            "push",
+            "--quiet",
+            "--no-verify",
+            self.remote.as_str(),
+            "--delete",
+        ];
+        args.extend(refs.iter().map(String::as_str));
+        run_git_in(&self.working_dir, &args)?;
+        Ok(())
+    }
+
     /// Fetch the namespace unless a fetch happened within the cache window.
     /// A failed fetch is not an error; the last fetched view stands.
     fn fetch_if_stale(&self) -> Result<()> {
@@ -350,6 +402,24 @@ mod tests {
             store.publish(&[record("b")]).is_err(),
             "changed records must push"
         );
+    }
+
+    #[test]
+    fn clear_all_empties_the_namespace_on_the_remote() {
+        let f = make_fixture();
+        let bob = clone_of(f.origin.path());
+        open(f.managed.path()).publish(&[record("a")]).unwrap();
+        open(bob.path()).publish(&[record("b")]).unwrap();
+        assert_eq!(
+            git(f.origin.path(), &["for-each-ref", "refs/gitalong/v1/"])
+                .lines()
+                .count(),
+            2
+        );
+
+        open(f.managed.path()).clear_all().unwrap();
+        assert!(git(f.origin.path(), &["for-each-ref", "refs/gitalong/v1/"]).is_empty());
+        assert!(git(f.managed.path(), &["for-each-ref", "refs/gitalong/v1/"]).is_empty());
     }
 
     #[test]

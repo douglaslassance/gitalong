@@ -17,5 +17,6 @@ fn main() -> Result<()> {
         Command::Update { profile } => commands::update(&opts, profile),
         Command::Status { files, profile } => commands::status(&opts, &files, profile),
         Command::Claim { files, profile } => commands::claim(&opts, &files, profile),
+        Command::Clear { all, force } => commands::clear(&opts, all, force),
     }
 }
