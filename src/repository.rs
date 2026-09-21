@@ -280,15 +280,21 @@ impl Repository {
         Ok(hits)
     }
 
+    /// The tree at HEAD, or `None` for an unborn branch (no commits yet).
+    pub fn head_tree(&self) -> Result<Option<git2::Tree<'_>>> {
+        match self.inner.head() {
+            Ok(head) => Ok(Some(head.peel_to_tree()?)),
+            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Repo-relative paths of every file tracked at HEAD. Returns an empty
     /// vec for an unborn branch (no commits yet).
     pub fn tracked_files_at_head(&self) -> Result<Vec<String>> {
-        let head = match self.inner.head() {
-            Ok(h) => h,
-            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => return Ok(Vec::new()),
-            Err(e) => return Err(e.into()),
+        let Some(tree) = self.head_tree()? else {
+            return Ok(Vec::new());
         };
-        let tree = head.peel_to_tree()?;
         let mut files = Vec::new();
         tree.walk(git2::TreeWalkMode::PreOrder, |dir, entry| {
             if let Some(git2::ObjectType::Blob) = entry.kind()
@@ -311,7 +317,21 @@ impl Repository {
     ///   (heuristic: contains a NUL byte in the first 1KB).
     /// - Otherwise tracked iff it's committed at HEAD.
     pub fn is_file_tracked(&self, path: &Path) -> Result<bool> {
+        let head_tree = self.head_tree()?;
+        self.is_file_tracked_in(path, head_tree.as_ref())
+    }
+
+    /// [`is_file_tracked`](Self::is_file_tracked) against an already peeled
+    /// HEAD tree, so callers checking many paths peel it once.
+    pub fn is_file_tracked_in(
+        &self,
+        path: &Path,
+        head_tree: Option<&git2::Tree<'_>>,
+    ) -> Result<bool> {
         let rel = self.relative_path(path);
+        if head_tree.is_some_and(|tree| tree.get_path(&rel).is_ok()) {
+            return Ok(true);
+        }
 
         let cfg = self.config();
         if let Some(ext) = rel.extension().and_then(|e| e.to_str()) {
@@ -322,16 +342,7 @@ impl Repository {
         }
 
         let abs = self.absolute_path(path);
-        if cfg.track_binaries && abs.is_file() && is_binary_file(&abs)? {
-            return Ok(true);
-        }
-
-        let head = match self.inner.head() {
-            Ok(h) => h,
-            Err(_) => return Ok(false),
-        };
-        let tree = head.peel_to_tree()?;
-        Ok(tree.get_path(&rel).is_ok())
+        Ok(cfg.track_binaries && abs.is_file() && is_binary_file(&abs)?)
     }
 
     /// Files with uncommitted changes — union of untracked, unstaged, and

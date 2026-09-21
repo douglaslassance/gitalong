@@ -6,15 +6,17 @@
 //! uncommitted changes.
 //!
 //! The Python implementation lived in `batch.get_files_last_commits` and ran
-//! the per-file work in parallel via asyncio. The Rust port is sequential for
-//! now; with typical CLI invocations passing a handful of files, the latency
-//! difference doesn't show.
+//! the per-file work in parallel via asyncio. The Rust port instead does the
+//! expensive work once per invocation: the store is indexed by path, the HEAD
+//! tree is peeled once, and every file the store knows nothing about is
+//! resolved by a single walk of the history.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use crate::commit::{Branches, Commit};
 use crate::error::Result;
-use crate::repository::Repository;
+use crate::repository::{Context, Repository};
 use crate::store::Store;
 
 /// Result of looking up a file's status: the file as the user passed it,
@@ -33,38 +35,51 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
     let store_commits = read_store_commits(repo)?;
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
-    let track_uncommitted = repo.config().track_uncommitted;
+    let index = StoreIndex::new(&store_commits, &remote_url, repo.config().track_uncommitted);
+    let head_tree = repo.head_tree()?;
 
-    let mut out = Vec::with_capacity(files.len());
-    for raw in files {
+    let mut commits: Vec<Commit> = Vec::with_capacity(files.len());
+    let mut pending: Vec<(usize, String)> = Vec::new();
+    for (i, raw) in files.iter().enumerate() {
         let abs = repo.absolute_path(Path::new(raw));
         let rel = repo
             .relative_path(&abs)
             .to_string_lossy()
             .replace('\\', "/");
-
-        if !repo.is_file_tracked(&abs)? {
-            out.push(FileStatus {
-                filename: raw.clone(),
-                commit: Commit::default(),
-            });
+        if !repo.is_file_tracked_in(&abs, head_tree.as_ref())? {
+            commits.push(Commit::default());
             continue;
         }
-
-        let from_store =
-            pick_latest_store_commit(&store_commits, &rel, &remote_url, track_uncommitted);
-        let commit = match from_store {
-            Some(c) => c.clone(),
-            None => last_commit_from_git(repo, &rel, &remote_url, &context)?.unwrap_or_default(),
-        };
-
-        let commit = enrich_branches(repo, commit)?;
-        out.push(FileStatus {
-            filename: raw.clone(),
-            commit,
-        });
+        match index.latest(&rel) {
+            Some(c) => commits.push(c.clone()),
+            None => {
+                pending.push((i, rel));
+                commits.push(Commit::default());
+            }
+        }
     }
-    Ok(out)
+
+    if !pending.is_empty() {
+        let rels: Vec<&str> = pending.iter().map(|(_, rel)| rel.as_str()).collect();
+        let found = last_commits_from_git(repo, &rels, &remote_url, &context)?;
+        for (i, rel) in &pending {
+            if let Some(c) = found.get(rel.as_str()) {
+                commits[*i] = c.clone();
+            }
+        }
+    }
+
+    let mut cache = BranchCache::default();
+    files
+        .iter()
+        .zip(commits)
+        .map(|(raw, commit)| {
+            Ok(FileStatus {
+                filename: raw.clone(),
+                commit: enrich_branches(repo, commit, &mut cache)?,
+            })
+        })
+        .collect()
 }
 
 /// Format a [`FileStatus`] the same way the Python CLI did:
@@ -119,90 +134,96 @@ fn read_store_commits(repo: &Repository) -> Result<Vec<Commit>> {
     store.read()
 }
 
-/// Pick the most recent store commit that mentions `rel_path` in its
-/// `changes`, restricted to this remote and (optionally) skipping uncommitted
-/// records when the config says we don't track them.
-fn pick_latest_store_commit<'a>(
-    commits: &'a [Commit],
-    rel_path: &str,
-    remote_url: &str,
-    track_uncommitted: bool,
-) -> Option<&'a Commit> {
-    commits
-        .iter()
-        .filter(|c| {
-            if !track_uncommitted && c.sha.is_none() {
-                return false;
-            }
-            c.remote.as_deref() == Some(remote_url) && c.changes.iter().any(|p| p == rel_path)
-        })
-        .max_by(|a, b| a.date.cmp(&b.date))
+/// The most recent store record per path, restricted to this remote and
+/// (optionally) skipping uncommitted records when the config says we don't
+/// track them. Built once so each lookup is a hash probe instead of a scan.
+pub(crate) struct StoreIndex<'a> {
+    latest: HashMap<&'a str, &'a Commit>,
 }
 
-/// Fall back to walking the git log for the file when nothing in the store
-/// applies. Mirrors the Python `git.log("--all", "--remotes", "--date-order", "--", file)`
-/// invocation, returning the most recent commit touching the file.
-fn last_commit_from_git(
+impl<'a> StoreIndex<'a> {
+    pub(crate) fn new(commits: &'a [Commit], remote_url: &str, track_uncommitted: bool) -> Self {
+        let mut latest: HashMap<&str, &Commit> = HashMap::new();
+        for c in commits {
+            if !track_uncommitted && c.sha.is_none() {
+                continue;
+            }
+            if c.remote.as_deref() != Some(remote_url) {
+                continue;
+            }
+            for path in &c.changes {
+                let newer = latest
+                    .get(path.as_str())
+                    .is_none_or(|prev| prev.date <= c.date);
+                if newer {
+                    latest.insert(path.as_str(), c);
+                }
+            }
+        }
+        Self { latest }
+    }
+
+    /// Latest record mentioning `rel_path`, or `None` when the store has nothing for it.
+    pub(crate) fn latest(&self, rel_path: &str) -> Option<&'a Commit> {
+        self.latest.get(rel_path).copied()
+    }
+}
+
+/// Fall back to the git log for every path the store knows nothing about,
+/// in a single walk. Mirrors the Python
+/// `git.log("--all", "--remotes", "--date-order", "--", file)` per file,
+/// returning the most recent commit touching each path that has one.
+fn last_commits_from_git(
     repo: &Repository,
-    rel_path: &str,
+    rel_paths: &[&str],
     remote_url: &str,
-    ctx: &crate::repository::Context,
-) -> Result<Option<Commit>> {
+    ctx: &Context,
+) -> Result<HashMap<String, Commit>> {
     let inner = repo.git();
     let mut walk = inner.revwalk()?;
     walk.set_sorting(git2::Sort::TIME)?;
     walk.push_glob("refs/heads/*")?;
     let _ = walk.push_glob("refs/remotes/*");
 
-    let target = std::path::Path::new(rel_path);
+    let mut pending: Vec<PathBuf> = rel_paths.iter().map(PathBuf::from).collect();
+    pending.sort();
+    pending.dedup();
+
+    let mut found = HashMap::new();
     for oid in walk {
-        let oid = oid?;
-        let git_commit = inner.find_commit(oid)?;
-        if commit_touches(inner, &git_commit, target)? {
-            return Ok(Some(crate::operations::update::commit_from_git_public(
-                repo,
-                &git_commit,
-                ctx,
-                remote_url,
-            )?));
+        if pending.is_empty() {
+            break;
+        }
+        let git_commit = inner.find_commit(oid?)?;
+        let tree = git_commit.tree()?;
+        let parent_tree = match git_commit.parent_count() {
+            0 => None,
+            _ => Some(git_commit.parent(0)?.tree()?),
+        };
+        let (hits, rest): (Vec<PathBuf>, Vec<PathBuf>) = pending.into_iter().partition(|path| {
+            entry_signature(&tree, path)
+                != parent_tree.as_ref().and_then(|t| entry_signature(t, path))
+        });
+        pending = rest;
+        if hits.is_empty() {
+            continue;
+        }
+        let commit =
+            crate::operations::update::commit_from_git_public(repo, &git_commit, ctx, remote_url)?;
+        for path in hits {
+            found.insert(path.to_string_lossy().replace('\\', "/"), commit.clone());
         }
     }
-    Ok(None)
+    Ok(found)
 }
 
-/// `true` when the diff between `c` and its first parent (or the empty tree)
-/// touches `target`.
-///
-/// We never return `false` from the callback even after finding a hit:
-/// git2 surfaces an early-exit as an EUSER error rather than a clean stop,
-/// so the simpler invariant is "always continue iterating, just record".
-/// Commit diffs are small enough that the extra scanning is free.
-fn commit_touches(repo: &git2::Repository, c: &git2::Commit<'_>, target: &Path) -> Result<bool> {
-    let new_tree = c.tree()?;
-    let old_tree = if c.parent_count() == 0 {
-        None
-    } else {
-        Some(c.parent(0)?.tree()?)
-    };
-    let diff = repo.diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), None)?;
-    let mut hit = false;
-    diff.foreach(
-        &mut |delta, _| {
-            for f in [delta.new_file().path(), delta.old_file().path()]
-                .into_iter()
-                .flatten()
-            {
-                if f == target {
-                    hit = true;
-                }
-            }
-            true
-        },
-        None,
-        None,
-        None,
-    )?;
-    Ok(hit)
+/// Blob id and mode of `path` in `tree`, or `None` when absent. A commit
+/// touches a path exactly when this differs from its first parent's, which
+/// is what a tree diff without rename detection reports.
+fn entry_signature(tree: &git2::Tree<'_>, path: &Path) -> Option<(git2::Oid, i32)> {
+    tree.get_path(path)
+        .ok()
+        .map(|entry| (entry.id(), entry.filemode()))
 }
 
 /// Populate `branches.local` and `branches.remote` for a commit that has a
@@ -216,23 +237,48 @@ fn commit_touches(repo: &git2::Repository, c: &git2::Commit<'_>, target: &Path) 
 /// A store record whose commit has since reached a remote branch is demoted
 /// to a plain remote commit. The issuing clone only rewrites its records on
 /// its next update, so the record lingers after a push.
-fn enrich_branches(repo: &Repository, mut commit: Commit) -> Result<Commit> {
+fn enrich_branches(
+    repo: &Repository,
+    mut commit: Commit,
+    cache: &mut BranchCache,
+) -> Result<Commit> {
     let Some(sha) = commit.sha.clone() else {
         return Ok(commit);
     };
-    if commit.user.is_some() && repo.is_remote_commit(&sha).unwrap_or(false) {
+    let here = cache.containing(repo, &sha);
+    if commit.user.is_some() && !here.remote.is_empty() {
         commit.host = None;
         commit.user = None;
         commit.clone = None;
         commit.branches = Branches::default();
     }
     if commit.branches.local.is_empty() {
-        commit.branches.local = repo.local_branches_containing(&sha).unwrap_or_default();
+        commit.branches.local = here.local.clone();
     }
     if commit.branches.remote.is_empty() {
-        commit.branches.remote = repo.remote_branches_containing(&sha).unwrap_or_default();
+        commit.branches.remote = here.remote.clone();
     }
     Ok(commit)
+}
+
+/// Branch containment per sha, so files sharing a last commit pay for the
+/// merge-base checks once.
+#[derive(Default)]
+struct BranchCache {
+    by_sha: HashMap<String, Branches>,
+}
+
+impl BranchCache {
+    /// Local and remote branches of this clone containing `sha`. Both empty
+    /// for a sha this clone has never seen.
+    fn containing(&mut self, repo: &Repository, sha: &str) -> &Branches {
+        self.by_sha
+            .entry(sha.to_string())
+            .or_insert_with(|| Branches {
+                local: repo.local_branches_containing(sha).unwrap_or_default(),
+                remote: repo.remote_branches_containing(sha).unwrap_or_default(),
+            })
+    }
 }
 
 #[cfg(test)]
@@ -304,6 +350,65 @@ mod tests {
         (store, origin, managed)
     }
 
+    fn record(date: &str, sha: Option<&str>, remote: &str, changes: &[&str]) -> Commit {
+        Commit {
+            sha: sha.map(str::to_string),
+            date: Some(date.to_string()),
+            remote: Some(remote.to_string()),
+            changes: changes.iter().map(|s| s.to_string()).collect(),
+            ..Commit::default()
+        }
+    }
+
+    #[test]
+    fn store_index_picks_latest_record_per_path() {
+        let commits = vec![
+            record(
+                "2026-01-01 00:00:00+00:00",
+                Some("old"),
+                "r",
+                &["a.txt", "b.txt"],
+            ),
+            record("2026-01-02 00:00:00+00:00", Some("new"), "r", &["a.txt"]),
+        ];
+        let index = StoreIndex::new(&commits, "r", true);
+        assert_eq!(
+            index.latest("a.txt").and_then(|c| c.sha.as_deref()),
+            Some("new")
+        );
+        assert_eq!(
+            index.latest("b.txt").and_then(|c| c.sha.as_deref()),
+            Some("old")
+        );
+        assert!(index.latest("c.txt").is_none());
+    }
+
+    #[test]
+    fn store_index_skips_other_remotes_and_untracked_uncommitted() {
+        let commits = vec![
+            record(
+                "2026-01-03 00:00:00+00:00",
+                Some("elsewhere"),
+                "other",
+                &["a.txt"],
+            ),
+            record("2026-01-02 00:00:00+00:00", None, "r", &["a.txt"]),
+            record(
+                "2026-01-01 00:00:00+00:00",
+                Some("committed"),
+                "r",
+                &["a.txt"],
+            ),
+        ];
+        let tracked = StoreIndex::new(&commits, "r", true);
+        assert!(tracked.latest("a.txt").unwrap().sha.is_none());
+        let untracked = StoreIndex::new(&commits, "r", false);
+        assert_eq!(
+            untracked.latest("a.txt").and_then(|c| c.sha.as_deref()),
+            Some("committed")
+        );
+    }
+
     #[test]
     fn unknown_file_yields_empty_commit() {
         let (_s, _o, m) = fixture(false);
@@ -323,6 +428,24 @@ mod tests {
         let commit = &result[0].commit;
         assert!(commit.sha.is_some());
         assert!(commit.branches.remote.iter().any(|b| b == "main"));
+    }
+
+    #[test]
+    fn files_from_different_commits_resolve_in_one_pass() {
+        let (_s, _o, m) = fixture(false);
+        std::fs::write(m.path().join("second.txt"), b"two").unwrap();
+        run(m.path(), &["add", "second.txt"]);
+        run(m.path(), &["commit", "-m", "second"]);
+
+        let repo = Repository::open(m.path()).unwrap();
+        let files = ["README", "second.txt", "missing.txt", "README"].map(String::from);
+        let result = last_commits(&repo, &files).unwrap();
+        assert_eq!(result.len(), 4);
+        assert!(result[0].commit.changes.iter().any(|p| p == "README"));
+        assert!(result[1].commit.changes.iter().any(|p| p == "second.txt"));
+        assert_ne!(result[0].commit.sha, result[1].commit.sha);
+        assert!(result[2].commit.sha.is_none());
+        assert_eq!(result[3].commit.sha, result[0].commit.sha);
     }
 
     #[test]
