@@ -30,13 +30,18 @@ whoami = "1.5"
 bitflags = { version = "2.6", features = ["serde"] }
 time = { version = "0.3", features = ["formatting", "macros"] }
 ureq = { version = "3.0", features = ["json", "rustls"], default-features = false }
+tempfile = { version = "3.10", optional = true }
 
 [features]
 # Statically link libgit2. Used for distribution builds (Homebrew releases) so
 # the binary doesn't depend on the user's system libgit2.
 vendored = ["git2/vendored-libgit2"]
+# Fixtures in `gitalong::testing` that stand up every store backend. The
+# crate's own dev-dependency below turns it on for `cargo test` only.
+test-support = ["dep:tempfile"]
 
 [dev-dependencies]
+gitalong = { path = ".", features = ["test-support"] }
 tempfile = "3.10"
 assert_cmd = "2.0"
 predicates = "3.1"
