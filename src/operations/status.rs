@@ -10,6 +10,7 @@
 //! now; with typical CLI invocations passing a handful of files, the latency
 //! difference doesn't show.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::commit::{Branches, Commit};
@@ -33,7 +34,7 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
     let store_commits = read_store_commits(repo)?;
     let context = repo.context();
     let remote_url = repo.remote_url()?.unwrap_or_default();
-    let track_uncommitted = repo.config().track_uncommitted;
+    let index = StoreIndex::new(&store_commits, &remote_url, repo.config().track_uncommitted);
 
     let mut out = Vec::with_capacity(files.len());
     for raw in files {
@@ -51,9 +52,7 @@ pub fn last_commits(repo: &Repository, files: &[String]) -> Result<Vec<FileStatu
             continue;
         }
 
-        let from_store =
-            pick_latest_store_commit(&store_commits, &rel, &remote_url, track_uncommitted);
-        let commit = match from_store {
+        let commit = match index.latest(&rel) {
             Some(c) => c.clone(),
             None => last_commit_from_git(repo, &rel, &remote_url, &context)?.unwrap_or_default(),
         };
@@ -119,24 +118,39 @@ fn read_store_commits(repo: &Repository) -> Result<Vec<Commit>> {
     store.read()
 }
 
-/// Pick the most recent store commit that mentions `rel_path` in its
-/// `changes`, restricted to this remote and (optionally) skipping uncommitted
-/// records when the config says we don't track them.
-fn pick_latest_store_commit<'a>(
-    commits: &'a [Commit],
-    rel_path: &str,
-    remote_url: &str,
-    track_uncommitted: bool,
-) -> Option<&'a Commit> {
-    commits
-        .iter()
-        .filter(|c| {
+/// The most recent store record per path, restricted to this remote and
+/// (optionally) skipping uncommitted records when the config says we don't
+/// track them. Built once so each lookup is a hash probe instead of a scan.
+pub(crate) struct StoreIndex<'a> {
+    latest: HashMap<&'a str, &'a Commit>,
+}
+
+impl<'a> StoreIndex<'a> {
+    pub(crate) fn new(commits: &'a [Commit], remote_url: &str, track_uncommitted: bool) -> Self {
+        let mut latest: HashMap<&str, &Commit> = HashMap::new();
+        for c in commits {
             if !track_uncommitted && c.sha.is_none() {
-                return false;
+                continue;
             }
-            c.remote.as_deref() == Some(remote_url) && c.changes.iter().any(|p| p == rel_path)
-        })
-        .max_by(|a, b| a.date.cmp(&b.date))
+            if c.remote.as_deref() != Some(remote_url) {
+                continue;
+            }
+            for path in &c.changes {
+                let newer = latest
+                    .get(path.as_str())
+                    .is_none_or(|prev| prev.date <= c.date);
+                if newer {
+                    latest.insert(path.as_str(), c);
+                }
+            }
+        }
+        Self { latest }
+    }
+
+    /// Latest record mentioning `rel_path`, or `None` when the store has nothing for it.
+    pub(crate) fn latest(&self, rel_path: &str) -> Option<&'a Commit> {
+        self.latest.get(rel_path).copied()
+    }
 }
 
 /// Fall back to walking the git log for the file when nothing in the store
@@ -302,6 +316,65 @@ mod tests {
         run(managed.path(), &["push", "-u", "origin", "main"]);
 
         (store, origin, managed)
+    }
+
+    fn record(date: &str, sha: Option<&str>, remote: &str, changes: &[&str]) -> Commit {
+        Commit {
+            sha: sha.map(str::to_string),
+            date: Some(date.to_string()),
+            remote: Some(remote.to_string()),
+            changes: changes.iter().map(|s| s.to_string()).collect(),
+            ..Commit::default()
+        }
+    }
+
+    #[test]
+    fn store_index_picks_latest_record_per_path() {
+        let commits = vec![
+            record(
+                "2026-01-01 00:00:00+00:00",
+                Some("old"),
+                "r",
+                &["a.txt", "b.txt"],
+            ),
+            record("2026-01-02 00:00:00+00:00", Some("new"), "r", &["a.txt"]),
+        ];
+        let index = StoreIndex::new(&commits, "r", true);
+        assert_eq!(
+            index.latest("a.txt").and_then(|c| c.sha.as_deref()),
+            Some("new")
+        );
+        assert_eq!(
+            index.latest("b.txt").and_then(|c| c.sha.as_deref()),
+            Some("old")
+        );
+        assert!(index.latest("c.txt").is_none());
+    }
+
+    #[test]
+    fn store_index_skips_other_remotes_and_untracked_uncommitted() {
+        let commits = vec![
+            record(
+                "2026-01-03 00:00:00+00:00",
+                Some("elsewhere"),
+                "other",
+                &["a.txt"],
+            ),
+            record("2026-01-02 00:00:00+00:00", None, "r", &["a.txt"]),
+            record(
+                "2026-01-01 00:00:00+00:00",
+                Some("committed"),
+                "r",
+                &["a.txt"],
+            ),
+        ];
+        let tracked = StoreIndex::new(&commits, "r", true);
+        assert!(tracked.latest("a.txt").unwrap().sha.is_none());
+        let untracked = StoreIndex::new(&commits, "r", false);
+        assert_eq!(
+            untracked.latest("a.txt").and_then(|c| c.sha.as_deref()),
+            Some("committed")
+        );
     }
 
     #[test]
