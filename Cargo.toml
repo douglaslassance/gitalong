@@ -2,7 +2,7 @@
 name = "gitalong"
 version = "1.1.0"
 edition = "2024"
-authors = ["Douglas Lassance <douglassance@gmail.com>"]
+authors = ["Douglas Lassance"]
 description = "Keep your team in sync on what's being worked on across Git clones."
 license = "MIT"
 repository = "https://github.com/douglaslassance/gitalong"
