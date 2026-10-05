@@ -20,6 +20,7 @@
 ### Versioning
 
 - Git tags and version strings are bare, no `v` prefix. `1.2.3`, not `v1.2.3`.
+- A patch bump (`1.2.3` to `1.2.4`) is for changes users cannot see. Anything they would notice (a new screen, copy, layout or behavior) bumps the minor.
 
 ### Pull requests
 
