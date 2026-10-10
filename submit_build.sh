@@ -30,7 +30,7 @@ a PR back to the tap's main.
 
 Required env (from .env):
   GITHUB_PERSONAL_ACCESS_TOKEN  GitHub PAT with \`repo\` scope on the tap
-  HOMEBREW_TAP_URL              e.g. https://github.com/douglaslassance/homebrew-tap.git
+  HOMEBREW_TAP_URL              e.g. https://github.com/douglaslassance/homebrew-douglaslassance-tap.git
 EOF
             exit 0
             ;;
