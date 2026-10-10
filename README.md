@@ -6,7 +6,7 @@ Gitalong is a CLI for Git repositories that seeks to prevent conflicts between f
 
 ```shell
 # Via Homebrew
-brew install douglaslassance/tap/gitalong
+brew install douglaslassance/douglaslassance-tap/gitalong
 
 # From source via Cargo
 cargo install gitalong
