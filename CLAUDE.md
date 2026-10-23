@@ -28,6 +28,7 @@
 - No narration of rejected approaches, no open questions, no pre-emptive self review. If a decision needs input, ask it as one plain line.
 - Describe only what the change contains. No "not in this PR" section, no future work, no list of what was deliberately left out. Anything out of scope belongs in an issue, not in the description.
 - No wall of generated text, no AI attribution.
+- When asked to merge, squash merge with the pull request's title as the one-line commit message, unless told otherwise.
 
 ### Writing
 
