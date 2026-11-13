@@ -1,4 +1,4 @@
-//! End-to-end tests for `gitalong version` and `gitalong --version`.
+//! End-to-end tests for `git-along version` and `git along --version`.
 
 mod common;
 
@@ -7,14 +7,14 @@ use predicates::prelude::*;
 
 #[test]
 fn version_subcommand_matches_python_format() {
-    common::gitalong()
+    common::git_along()
         .arg("version")
         .assert()
         .success()
-        .stdout(predicate::str::starts_with("gitalong version "));
+        .stdout(predicate::str::starts_with("git-along version "));
 }
 
 #[test]
 fn version_flag_is_supported() {
-    common::gitalong().arg("--version").assert().success();
+    common::git_along().arg("--version").assert().success();
 }

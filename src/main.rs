@@ -1,10 +1,10 @@
-//! Binary entry point. Parses the CLI and dispatches to [`gitalong::commands`].
+//! Binary entry point. Parses the CLI and dispatches to [`git_along::commands`].
 
 use anyhow::Result;
 use clap::Parser;
 
-use gitalong::cli::{Cli, Command};
-use gitalong::commands::{self, GlobalOpts};
+use git_along::cli::{Cli, Command};
+use git_along::commands::{self, GlobalOpts};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();

@@ -1,6 +1,6 @@
 //! Git-repository-backed [`Store`](super::Store).
 //!
-//! Clones the configured store URL into `<managed_repo>/.gitalong/`, then
+//! Clones the configured store URL into `.git/along/store`, then
 //! reads and writes `commits.json` as a regular file in that working tree.
 //! Network operations (`clone`, `pull`, `push`) shell out to `git` so they
 //! pick up the user's existing credential helpers and SSH agent.
@@ -18,8 +18,8 @@ use super::{check_status, run_git_in};
 /// Filename of the JSON document inside the store repository.
 const COMMITS_FILENAME: &str = "commits.json";
 
-/// Subdirectory of the managed repository where the store is cloned.
-const CLONE_DIRNAME: &str = ".gitalong";
+/// Subdirectory of the data dir where the store is cloned.
+const CLONE_DIRNAME: &str = "store";
 
 /// `Store` backed by a cloned git repository.
 pub struct GitStore {
@@ -30,10 +30,10 @@ pub struct GitStore {
 }
 
 impl GitStore {
-    /// Open the clone at `<managed>/.gitalong/`, cloning the configured store
+    /// Open the clone at `.git/along/store`, cloning the configured store
     /// URL on first use.
     pub fn open_or_clone(repo: &Repository) -> Result<Self> {
-        let clone_path = repo.working_dir().join(CLONE_DIRNAME);
+        let clone_path = repo.data_dir().join(CLONE_DIRNAME);
         let store_url = &repo.config().store_url;
 
         if !clone_path.join(".git").is_dir() {
@@ -148,10 +148,10 @@ fn ensure_commit_identity(dir: &Path) -> Result<()> {
     let mut cfg = repo.config()?;
     let snapshot = cfg.snapshot()?;
     if snapshot.get_string("user.name").is_err() {
-        cfg.set_str("user.name", "gitalong")?;
+        cfg.set_str("user.name", "git-along")?;
     }
     if snapshot.get_string("user.email").is_err() {
-        cfg.set_str("user.email", "gitalong@localhost")?;
+        cfg.set_str("user.email", "git-along@localhost")?;
     }
     Ok(())
 }
@@ -203,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn open_or_clone_creates_dot_gitalong_dir() {
+    fn open_or_clone_clones_into_the_data_dir() {
         let f = make_fixture();
         let store = GitStore::open_or_clone(&f.repo).unwrap();
         assert!(store.clone_path.join(".git").is_dir());

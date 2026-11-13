@@ -1,23 +1,23 @@
-//! Typed errors for the gitalong library.
+//! Typed errors for the Git Along library.
 //!
 //! The binary uses `anyhow::Result` for ergonomic error chaining at the CLI
-//! boundary; library code returns `gitalong::Result` so callers can match on
+//! boundary; library code returns `git_along::Result` so callers can match on
 //! the variants below.
 
 use std::path::PathBuf;
 
-/// Result type aliased for the gitalong library.
+/// Result type aliased for the Git Along library.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Errors surfaced by the gitalong library.
+/// Errors surfaced by the Git Along library.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// `.gitalong.json` was not found in the repository.
-    #[error("gitalong is not set up in {0:?} (no .gitalong.json found)")]
+    /// `.along.json` was not found in the repository.
+    #[error("Git Along is not set up in {0:?} (no .along.json found)")]
     NotSetup(PathBuf),
 
-    /// `.gitalong.json` could not be parsed or has an invalid value.
-    #[error("invalid gitalong configuration: {0}")]
+    /// `.along.json` could not be parsed or has an invalid value.
+    #[error("invalid Git Along configuration: {0}")]
     InvalidConfig(String),
 
     /// The store backend could not be reached.

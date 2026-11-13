@@ -1,9 +1,9 @@
 //! Pluggable storage for tracked commits.
 //!
-//! Three backends ship with gitalong: [`refs::RefStore`] (records pushed to
+//! Three backends ship with Git Along: [`refs::RefStore`] (records pushed to
 //! a hidden ref namespace on the managed repository's own remote, the
 //! default), [`git::GitStore`] (a separate git repository cloned to
-//! `<managed>/.gitalong/`) and [`jsonbin::JsonbinStore`] (a JSONBin.io bin).
+//! `.git/along/store`) and [`jsonbin::JsonbinStore`] (a JSONBin.io bin).
 //! Callers go through [`Store`], which dispatches to one of them.
 
 pub mod git;

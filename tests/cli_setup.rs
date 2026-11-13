@@ -1,4 +1,4 @@
-//! End-to-end tests for `gitalong setup`.
+//! End-to-end tests for `git along setup`.
 
 mod common;
 
@@ -18,13 +18,13 @@ fn writes_minimum_config() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["setup", "https://example.com/store.git"])
         .assert()
         .success();
 
-    let config_path = dir.path().join(".gitalong.json");
-    assert!(config_path.is_file(), ".gitalong.json was not created");
+    let config_path = dir.path().join(".along.json");
+    assert!(config_path.is_file(), ".along.json was not created");
     let body = fs::read_to_string(&config_path).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(parsed["store_url"], "https://example.com/store.git");
@@ -40,12 +40,12 @@ fn defaults_to_refs_store_when_url_is_omitted() {
     repo.remote("origin", "https://example.com/project.git")
         .unwrap();
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["setup"])
         .assert()
         .success();
 
-    let body = fs::read_to_string(dir.path().join(".gitalong.json")).unwrap();
+    let body = fs::read_to_string(dir.path().join(".along.json")).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(parsed["store_url"], "");
 }
@@ -55,13 +55,13 @@ fn rejects_omitted_url_without_a_remote() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["setup"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("no remote"));
 
-    assert!(!dir.path().join(".gitalong.json").exists());
+    assert!(!dir.path().join(".along.json").exists());
 }
 
 #[test]
@@ -69,21 +69,21 @@ fn rejects_unrecognized_store_url() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["setup", "ftp://nope/somewhere"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid store URL"));
 
     // Failed setup should not have left a config file behind.
-    assert!(!dir.path().join(".gitalong.json").exists());
+    assert!(!dir.path().join(".along.json").exists());
 }
 
 #[test]
 fn rejects_setup_outside_git_repo() {
     let dir = tempdir().unwrap();
     // No git init.
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["setup", "https://example.com/store.git"])
         .assert()
         .failure()
@@ -95,7 +95,7 @@ fn parses_store_headers_into_config() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args([
             "setup",
             "https://api.jsonbin.io/v3/b/abc",
@@ -107,7 +107,7 @@ fn parses_store_headers_into_config() {
         .assert()
         .success();
 
-    let body = fs::read_to_string(dir.path().join(".gitalong.json")).unwrap();
+    let body = fs::read_to_string(dir.path().join(".along.json")).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(parsed["store_headers"]["X-Access-Key"], "secret");
     assert_eq!(parsed["store_headers"]["X-Bin-Versioning"], "false");
@@ -118,7 +118,7 @@ fn malformed_store_header_is_rejected() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args([
             "setup",
             "https://example.com/store.git",
@@ -131,62 +131,11 @@ fn malformed_store_header_is_rejected() {
 }
 
 #[test]
-fn update_gitignore_appends_patch() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-
-    // Pre-existing content should be preserved.
-    fs::write(dir.path().join(".gitignore"), "build/\n").unwrap();
-
-    common::gitalong_in(dir.path())
-        .args([
-            "setup",
-            "https://example.com/store.git",
-            "--update-gitignore",
-        ])
-        .assert()
-        .success();
-
-    let body = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-    assert!(body.contains("build/"));
-    assert!(body.contains("/.gitalong/"));
-    assert!(body.contains("!/.gitalong.cfg"));
-}
-
-#[test]
-fn update_gitignore_is_idempotent() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-
-    common::gitalong_in(dir.path())
-        .args([
-            "setup",
-            "https://example.com/store.git",
-            "--update-gitignore",
-        ])
-        .assert()
-        .success();
-    let first = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-
-    // Re-run setup: gitignore content must be unchanged.
-    common::gitalong_in(dir.path())
-        .args([
-            "setup",
-            "https://example.com/store.git",
-            "--update-gitignore",
-        ])
-        .assert()
-        .success();
-    let second = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-    assert_eq!(first, second);
-}
-
-#[test]
 fn update_hooks_installs_each_hook() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["setup", "https://example.com/store.git", "--update-hooks"])
         .assert()
         .success();
@@ -202,8 +151,8 @@ fn update_hooks_installs_each_hook() {
         assert!(p.is_file(), "hook {name} was not installed");
         let body = fs::read_to_string(&p).unwrap();
         assert!(
-            body.contains("gitalong update"),
-            "hook {name} should call `gitalong update`"
+            body.contains("git along update"),
+            "hook {name} should call `git along update`"
         );
     }
 }
@@ -213,7 +162,7 @@ fn modify_permissions_disables_core_filemode() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
 
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args([
             "setup",
             "https://example.com/store.git",

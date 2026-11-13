@@ -367,6 +367,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "git-along"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "bitflags",
+ "clap",
+ "git-along",
+ "git2",
+ "predicates",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "time",
+ "ureq",
+ "whoami",
+]
+
+[[package]]
 name = "git2"
 version = "0.20.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -377,26 +397,6 @@ dependencies = [
  "libgit2-sys",
  "log",
  "url",
-]
-
-[[package]]
-name = "gitalong"
-version = "1.1.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "bitflags",
- "clap",
- "git2",
- "gitalong",
- "predicates",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "time",
- "ureq",
- "whoami",
 ]
 
 [[package]]

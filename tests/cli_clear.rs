@@ -1,10 +1,10 @@
-//! End-to-end tests for `gitalong clear`, run once per store backend.
+//! End-to-end tests for `git along clear`, run once per store backend.
 
 mod common;
 
 use assert_cmd::prelude::*;
-use gitalong::for_each_store;
-use gitalong::testing::Team;
+use git_along::for_each_store;
+use git_along::testing::Team;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
@@ -15,7 +15,7 @@ fn alice(team: &Team) -> TempDir {
 
 /// The spread `status` prints for README in `dir`.
 fn spread_of_readme(dir: &std::path::Path) -> String {
-    let out = common::gitalong_in(dir)
+    let out = common::git_along_in(dir)
         .args(["status", "README"])
         .output()
         .unwrap();
@@ -29,13 +29,13 @@ fn spread_of_readme(dir: &std::path::Path) -> String {
 for_each_store!(clear_drops_this_clones_records, |kind| {
     let team = Team::new(kind);
     let m = alice(&team);
-    common::gitalong_in(m.path())
+    common::git_along_in(m.path())
         .args(["claim", "README"])
         .assert()
         .success();
     assert_eq!(spread_of_readme(m.path()), "+-------");
 
-    common::gitalong_in(m.path())
+    common::git_along_in(m.path())
         .args(["clear"])
         .assert()
         .success();
@@ -47,12 +47,12 @@ for_each_store!(
     |kind| {
         let team = Team::new(kind);
         let m = alice(&team);
-        common::gitalong_in(m.path())
+        common::git_along_in(m.path())
             .args(["claim", "README"])
             .assert()
             .success();
 
-        common::gitalong_in(m.path())
+        common::git_along_in(m.path())
             .args(["clear", "--all"])
             .assert()
             .failure()
@@ -69,13 +69,13 @@ for_each_store!(clear_all_with_force_drops_every_clones_records, |kind| {
     let team = Team::new(kind);
     let alice = alice(&team);
     let bob = team.clone("Bob", |c| c.track_uncommitted = true);
-    common::gitalong_in(alice.path())
+    common::git_along_in(alice.path())
         .args(["claim", "README"])
         .assert()
         .success();
     assert_eq!(spread_of_readme(bob.path()), "-------+");
 
-    common::gitalong_in(bob.path())
+    common::git_along_in(bob.path())
         .args(["clear", "--all", "--force"])
         .assert()
         .success();

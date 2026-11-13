@@ -1,7 +1,7 @@
 //! Remote-ref-backed [`Store`](super::Store).
 //!
 //! Each clone publishes its records as one commit under
-//! `refs/gitalong/v1/<clone-id>` on the managed repository's own remote. The
+//! `refs/along/v1/<clone-id>` on the managed repository's own remote. The
 //! commit points at the empty tree and carries the JSON records in its
 //! message, so nothing but metadata leaves the clone. Reads fetch the
 //! namespace with the user's existing credentials. Writes force-push the
@@ -20,10 +20,7 @@ use super::{run_git_in, touch};
 
 /// Ref namespace shared by every clone. The version segment keeps a future
 /// payload change from mixing with these records.
-pub const NAMESPACE: &str = "refs/gitalong/v1";
-
-/// Directory inside the git dir holding the clone id and the fetch marker.
-const STATE_DIRNAME: &str = "gitalong";
+pub const NAMESPACE: &str = "refs/along/v1";
 
 /// `Store` backed by per-clone refs on the managed repository's remote.
 pub struct RefStore {
@@ -43,7 +40,7 @@ impl RefStore {
         let remote = repo.remote_name()?.ok_or_else(|| {
             Error::InvalidConfig("the refs store needs a remote to publish to".into())
         })?;
-        let state_dir = repo.git().path().join(STATE_DIRNAME);
+        let state_dir = repo.data_dir();
         std::fs::create_dir_all(&state_dir)?;
         let clone_id = load_or_mint_clone_id(&state_dir.join("clone-id"), &repo.context())?;
         Ok(Self {
@@ -79,7 +76,7 @@ impl RefStore {
         }
 
         let tree = repo.find_tree(repo.treebuilder(None)?.write()?)?;
-        let signature = git2::Signature::now("gitalong", "gitalong@localhost")?;
+        let signature = git2::Signature::now("git-along", "git-along@localhost")?;
         let oid = repo.commit(None, &signature, &signature, &body, &tree, &[])?;
         let refspec = format!("{oid}:{own_ref}");
         run_git_in(
@@ -93,7 +90,7 @@ impl RefStore {
                 &refspec,
             ],
         )?;
-        repo.reference(&own_ref, oid, true, "gitalong publish")?;
+        repo.reference(&own_ref, oid, true, "git-along publish")?;
         self.read_local()
     }
 
@@ -411,15 +408,15 @@ mod tests {
         open(f.managed.path()).publish(&[record("a")]).unwrap();
         open(bob.path()).publish(&[record("b")]).unwrap();
         assert_eq!(
-            git(f.origin.path(), &["for-each-ref", "refs/gitalong/v1/"])
+            git(f.origin.path(), &["for-each-ref", "refs/along/v1/"])
                 .lines()
                 .count(),
             2
         );
 
         open(f.managed.path()).clear_all().unwrap();
-        assert!(git(f.origin.path(), &["for-each-ref", "refs/gitalong/v1/"]).is_empty());
-        assert!(git(f.managed.path(), &["for-each-ref", "refs/gitalong/v1/"]).is_empty());
+        assert!(git(f.origin.path(), &["for-each-ref", "refs/along/v1/"]).is_empty());
+        assert!(git(f.managed.path(), &["for-each-ref", "refs/along/v1/"]).is_empty());
     }
 
     #[test]

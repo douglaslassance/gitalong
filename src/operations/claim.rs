@@ -1,4 +1,4 @@
-//! `gitalong claim` — try to mark files as in-flight for this clone.
+//! `git along claim` — try to mark files as in-flight for this clone.
 //!
 //! For each requested path, the workflow is:
 //!

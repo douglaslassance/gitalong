@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Renders Formula/gitalong.rb from the in-repo template, downloading each
+# Renders Formula/git-along.rb from the in-repo template, downloading each
 # target's .tar.gz from this repo's GitHub Release and hashing it locally,
 # then pushes a release branch to the Homebrew tap identified by
 # HOMEBREW_TAP_URL.
@@ -44,7 +44,7 @@ if [[ -f .env ]]; then
     source .env
 fi
 
-REPO_NAME="gitalong"
+REPO_NAME="git-along"
 GITHUB_REPO="douglaslassance/${REPO_NAME}"
 VERSION="${ARGS[0]:?version required}"
 
@@ -66,7 +66,7 @@ if [[ ! "$TAP_SLUG" =~ ^[^/]+/[^/]+$ ]]; then
 fi
 
 # Targets included in the Homebrew formula. brew is the macOS distribution
-# channel only — Linux users `cargo install gitalong` and Windows users
+# channel only — Linux users `cargo install --git` and Windows users
 # grab the zip from the GitHub Release. CD still builds and ships all five
 # targets, but the formula only references the macOS ones.
 TARGETS=(

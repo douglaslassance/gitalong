@@ -1,4 +1,4 @@
-//! Command-line surface for `gitalong`.
+//! Command-line surface for `git-along`.
 //!
 //! The CLI mirrors the Python 0.x contract: same subcommands and long option
 //! names. Short options follow standard clap conventions (single character)
@@ -11,7 +11,8 @@ use clap::{Parser, Subcommand};
 /// Top-level CLI parser.
 #[derive(Debug, Parser)]
 #[command(
-    name = "gitalong",
+    name = "git-along",
+    bin_name = "git along",
     version,
     about = "Keep your team in sync on what's being worked on across Git clones.",
     propagate_version = true
@@ -29,24 +30,24 @@ pub struct Cli {
     pub command: Command,
 }
 
-/// Subcommands recognized by `gitalong`.
+/// Subcommands recognized by `git-along`.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Print the gitalong version.
+    /// Print the Git Along version.
     Version,
 
-    /// Print the value of a configuration property from `.gitalong.json`.
+    /// Print the value of a configuration property from `.along.json`.
     Config {
         /// Property name (e.g. `store-url`, `track-binaries`). Hyphens map to underscores.
         property: String,
     },
 
-    /// Initialize gitalong in a repository.
+    /// Initialize Git Along in a repository.
     Setup(SetupArgs),
 
     /// Update the store with this clone's local changes.
     Update {
-        /// Write a `gitalong.prof` profile dump for analysis.
+        /// Write a `git-along.prof` profile dump for analysis.
         #[arg(short, long)]
         profile: bool,
     },
@@ -60,7 +61,7 @@ pub enum Command {
         #[arg(long)]
         json: bool,
 
-        /// Write a `gitalong.prof` profile dump for analysis.
+        /// Write a `git-along.prof` profile dump for analysis.
         #[arg(short, long)]
         profile: bool,
     },
@@ -74,7 +75,7 @@ pub enum Command {
         #[arg(long)]
         json: bool,
 
-        /// Write a `gitalong.prof` profile dump for analysis.
+        /// Write a `git-along.prof` profile dump for analysis.
         #[arg(short, long)]
         profile: bool,
     },
@@ -91,7 +92,7 @@ pub enum Command {
     },
 }
 
-/// Arguments for `gitalong setup`.
+/// Arguments for `git along setup`.
 #[derive(Debug, clap::Args)]
 pub struct SetupArgs {
     /// URL of a store repository (`.git` suffix) or a JSONBin.io bin. Omit to
@@ -134,11 +135,7 @@ pub struct SetupArgs {
     )]
     pub tracked_extensions: Vec<String>,
 
-    /// Append gitalong directives to `.gitignore`.
-    #[arg(short = 'g', long = "update-gitignore")]
-    pub update_gitignore: bool,
-
-    /// Install the gitalong git hooks (post-applypatch, post-checkout, post-commit, post-rewrite).
+    /// Install the Git Along git hooks (post-applypatch, post-checkout, post-commit, post-rewrite).
     #[arg(long = "update-hooks")]
     pub update_hooks: bool,
 }

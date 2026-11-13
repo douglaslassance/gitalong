@@ -1,6 +1,6 @@
-//! gitalong — keep your team in sync on what's being worked on across Git clones.
+//! Git Along keeps your team in sync on what's being worked on across Git clones.
 //!
-//! This crate exposes the gitalong library surface used by the `gitalong` binary
+//! This crate exposes the Git Along library surface used by the `git-along` binary
 //! and by integration tests. The CLI lives in [`cli`], typed errors in [`error`],
 //! and per-command implementations in [`commands`].
 

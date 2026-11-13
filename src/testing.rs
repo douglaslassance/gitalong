@@ -99,7 +99,7 @@ impl Team {
         self.origin.path()
     }
 
-    /// What `.gitalong.json` needs in `store_url`. Empty for the refs store.
+    /// What `.along.json` needs in `store_url`. Empty for the refs store.
     pub fn store_url(&self) -> String {
         match self.kind {
             StoreKind::Refs => String::new(),
@@ -117,7 +117,7 @@ impl Team {
         }
     }
 
-    /// Arguments for `gitalong setup` that select this team's store.
+    /// Arguments for `git along setup` that select this team's store.
     pub fn setup_args(&self) -> Vec<String> {
         let mut args = vec!["setup".to_string()];
         if self.kind != StoreKind::Refs {
@@ -134,7 +134,7 @@ impl Team {
     }
 
     /// Clone origin with `name` as the committer identity and the store
-    /// config plus the gitignore patch written but not committed.
+    /// config written but not committed.
     pub fn clone(&self, name: &str, configure: impl FnOnce(&mut Config)) -> TempDir {
         let url = self.origin.path().to_str().unwrap().to_string();
         self.clone_via(name, &url, configure)
@@ -154,16 +154,11 @@ impl Team {
         let mut config = self.config();
         configure(&mut config);
         config.save(&clone.path().join(CONFIG_BASENAME)).unwrap();
-        std::fs::write(
-            clone.path().join(".gitignore"),
-            crate::hooks::GITIGNORE_PATCH,
-        )
-        .unwrap();
         clone
     }
 
-    /// [`clone`](Self::clone), then commit the config, the gitignore patch
-    /// and `files` and push them as `main`, so later clones start from there.
+    /// [`clone`](Self::clone), then commit the config and `files` and push
+    /// them as `main`, so later clones start from there.
     pub fn seeded_clone(
         &self,
         name: &str,

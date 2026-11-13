@@ -33,7 +33,7 @@ bitflags! {
 
 impl CommitSpread {
     /// Render the spread as the eight-character `+`/`-` string used by
-    /// `gitalong status` and `gitalong claim`. Bit order matches the Python
+    /// `git along status` and `git along claim`. Bit order matches the Python
     /// 0.x output and must not change without a CLI version bump.
     pub fn to_status_string(self) -> String {
         const ORDERED: [CommitSpread; 8] = [

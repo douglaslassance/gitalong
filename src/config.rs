@@ -1,4 +1,4 @@
-//! `.gitalong.json` parsing, serialization, and property lookup.
+//! `.along.json` parsing, serialization, and property lookup.
 //!
 //! The schema mirrors the Python 0.x contract: the same field names with the
 //! same defaults, so a config file written by one implementation can be read
@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-/// Filename used for the gitalong config in the root of the managed repository.
-pub const CONFIG_BASENAME: &str = ".gitalong.json";
+/// Filename used for the Git Along config in the root of the managed repository.
+pub const CONFIG_BASENAME: &str = ".along.json";
 
-/// Parsed representation of `.gitalong.json`.
+/// Parsed representation of `.along.json`.
 ///
 /// Fields default to values that match the Python implementation so that an
 /// empty or partial config file behaves identically across versions.
@@ -32,7 +32,7 @@ pub struct Config {
     #[serde(default)]
     pub store_headers: BTreeMap<String, String>,
 
-    /// When true, gitalong manages file write permissions to enforce claims.
+    /// When true, Git Along manages file write permissions to enforce claims.
     #[serde(default)]
     pub modify_permissions: bool,
 
@@ -72,7 +72,7 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Read and parse a `.gitalong.json` from disk.
+    /// Read and parse a `.along.json` from disk.
     ///
     /// Returns [`Error::NotSetup`] if the file does not exist and
     /// [`Error::InvalidConfig`] if it exists but cannot be parsed.
@@ -218,6 +218,6 @@ mod tests {
     #[test]
     fn config_path_for_joins_basename() {
         let path = Config::path_for(Path::new("/tmp/repo"));
-        assert_eq!(path, Path::new("/tmp/repo/.gitalong.json"));
+        assert_eq!(path, Path::new("/tmp/repo/.along.json"));
     }
 }

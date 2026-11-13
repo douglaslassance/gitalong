@@ -15,7 +15,7 @@ pub struct Hook {
     pub body: &'static str,
 }
 
-/// Hooks installed by `gitalong setup --update-hooks`. The set mirrors the
+/// Hooks installed by `git along setup --update-hooks`. The set mirrors the
 /// Python 0.x install: post-applypatch, post-checkout, post-commit, post-rewrite.
 pub const HOOKS: &[Hook] = &[
     Hook {
@@ -35,9 +35,6 @@ pub const HOOKS: &[Hook] = &[
         body: include_str!("resources/hooks/post-rewrite"),
     },
 ];
-
-/// Snippet appended to `.gitignore` by `setup --update-gitignore`.
-pub const GITIGNORE_PATCH: &str = include_str!("resources/gitignore_patch");
 
 /// Write every [`HOOKS`] entry into `dir`, overwriting any pre-existing file.
 ///
@@ -81,22 +78,16 @@ mod tests {
             let p = dir.path().join(hook.name);
             assert!(p.is_file(), "hook {} was not written", hook.name);
             let body = fs::read_to_string(&p).unwrap();
-            assert!(body.contains("gitalong update"));
+            assert!(body.contains("git along update"));
         }
     }
 
     #[test]
     fn hooks_call_update_not_sync() {
         for hook in HOOKS {
-            assert!(!hook.body.contains("gitalong sync"));
-            assert!(hook.body.contains("gitalong update"));
+            assert!(!hook.body.contains("git along sync"));
+            assert!(hook.body.contains("git along update"));
         }
-    }
-
-    #[test]
-    fn gitignore_patch_has_expected_directives() {
-        assert!(GITIGNORE_PATCH.contains("/.gitalong/"));
-        assert!(GITIGNORE_PATCH.contains("!/.gitalong.cfg"));
     }
 
     #[cfg(unix)]

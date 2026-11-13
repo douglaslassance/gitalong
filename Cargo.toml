@@ -1,22 +1,22 @@
 [package]
-name = "gitalong"
-version = "1.1.0"
+name = "git-along"
+version = "1.0.0"
 edition = "2024"
 authors = ["Douglas Lassance"]
 description = "Keep your team in sync on what's being worked on across Git clones."
 license = "MIT"
-repository = "https://github.com/douglaslassance/gitalong"
-homepage = "https://github.com/douglaslassance/gitalong"
+repository = "https://github.com/douglaslassance/git-along"
+homepage = "https://github.com/douglaslassance/git-along"
 readme = "README.md"
 keywords = ["git", "vcs", "collaboration", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
-name = "gitalong"
+name = "git-along"
 path = "src/main.rs"
 
 [lib]
-name = "gitalong"
+name = "git_along"
 path = "src/lib.rs"
 
 [dependencies]
@@ -36,12 +36,12 @@ tempfile = { version = "3.10", optional = true }
 # Statically link libgit2. Used for distribution builds (Homebrew releases) so
 # the binary doesn't depend on the user's system libgit2.
 vendored = ["git2/vendored-libgit2"]
-# Fixtures in `gitalong::testing` that stand up every store backend. The
+# Fixtures in `git_along::testing` that stand up every store backend. The
 # crate's own dev-dependency below turns it on for `cargo test` only.
 test-support = ["dep:tempfile"]
 
 [dev-dependencies]
-gitalong = { path = ".", features = ["test-support"] }
+git-along = { path = ".", features = ["test-support"] }
 tempfile = "3.10"
 assert_cmd = "2.0"
 predicates = "3.1"

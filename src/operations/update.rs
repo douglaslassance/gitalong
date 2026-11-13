@@ -1,4 +1,4 @@
-//! `gitalong update` — recompute and push this clone's contribution to the store.
+//! `git along update` — recompute and push this clone's contribution to the store.
 //!
 //! Mirrors the Python `update_tracked_commits()`:
 //!
@@ -21,7 +21,7 @@ use crate::store::Store;
 /// Refresh the store with this clone's local view.
 ///
 /// `claims` are extra repo-relative paths to attach to the uncommitted-changes
-/// pseudo-commit (used by `gitalong claim` to mark files as in-flight without
+/// pseudo-commit (used by `git along claim` to mark files as in-flight without
 /// requiring the user to actually edit them yet).
 pub fn update_tracked_commits(repo: &Repository, claims: &[String]) -> Result<()> {
     let mut store = Store::for_repository(repo)?;

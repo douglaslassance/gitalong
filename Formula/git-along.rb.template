@@ -1,0 +1,36 @@
+class GitAlong < Formula
+  desc "Keep your team in sync on what's being worked on across Git clones"
+  homepage "https://github.com/douglaslassance/git-along"
+  # Top-level URL is the Apple Silicon binary — the default and the URL
+  # brew readall uses on every platform context (satisfying its
+  # "formula requires a URL" check). depends_on :macos prevents actual
+  # installation on Linux. on_macos > on_intel overrides for Intel macOS.
+  url "https://github.com/douglaslassance/git-along/releases/download/{{VERSION}}/git-along-{{VERSION}}-aarch64-apple-darwin.tar.gz"
+  sha256 "{{SHA256_AARCH64_APPLE_DARWIN}}"
+  license "MIT"
+  # Restarted at 1.0.0 when Gitalong became Git Along, so gitalong 1.1.0 still upgrades.
+  version_scheme 1
+
+  livecheck do
+    url :stable
+    strategy :github_latest
+  end
+
+  # macOS-only on Homebrew. Linux users install with `cargo install --git`.
+  depends_on :macos
+
+  on_macos do
+    on_intel do
+      url "https://github.com/douglaslassance/git-along/releases/download/{{VERSION}}/git-along-{{VERSION}}-x86_64-apple-darwin.tar.gz"
+      sha256 "{{SHA256_X86_64_APPLE_DARWIN}}"
+    end
+  end
+
+  def install
+    bin.install "git-along"
+  end
+
+  test do
+    assert_match "git-along version", shell_output("#{bin}/git-along version")
+  end
+end

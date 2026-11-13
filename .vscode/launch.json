@@ -2,12 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug gitalong",
+            "name": "Debug git-along",
             "type": "lldb",
             "request": "launch",
             "cargo": {
-                "args": ["build", "--bin=gitalong"],
-                "filter": { "name": "gitalong", "kind": "bin" }
+                "args": ["build", "--bin=git-along"],
+                "filter": { "name": "git-along", "kind": "bin" }
             },
             "cwd": "${workspaceFolder}",
             "args": ["${command:pickArgs}"]

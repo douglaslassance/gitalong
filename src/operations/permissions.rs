@@ -1,6 +1,6 @@
 //! Filesystem-level enforcement of claims via the read-only attribute.
 //!
-//! When a repository runs with `modify_permissions = true`, gitalong toggles
+//! When a repository runs with `modify_permissions = true`, Git Along toggles
 //! the user-write bit on each tracked file based on the [`CommitSpread`] of
 //! its latest store record:
 //!

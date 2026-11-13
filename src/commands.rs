@@ -41,13 +41,13 @@ impl GlobalOpts {
     }
 }
 
-/// Print `gitalong version X.Y.Z`. Matches the Python 0.x output format.
+/// Print `git-along version X.Y.Z`. Matches the Python 0.x output format.
 pub fn version(_opts: &GlobalOpts) -> Result<()> {
-    println!("gitalong version {VERSION}");
+    println!("git-along version {VERSION}");
     Ok(())
 }
 
-/// Print a single property from `.gitalong.json`.
+/// Print a single property from `.along.json`.
 ///
 /// If the path is not in a managed repository or the property is unknown,
 /// prints nothing and exits successfully — matching the Python behavior so
@@ -62,12 +62,12 @@ pub fn config(opts: &GlobalOpts, property: &str) -> Result<()> {
     Ok(())
 }
 
-/// Initialize gitalong in the repository: write config, clone the store, optionally install hooks.
+/// Initialize Git Along in the repository: write config, clone the store, optionally install hooks.
 ///
 /// The actual store clone (for git stores) or remote handshake (for
 /// JSONBin.io stores) is deferred to first use. Setup does the local-side work: validate
-/// the URL shape, write `.gitalong.json`, and apply the optional flags
-/// (`--update-hooks`, `--update-gitignore`, `--modify-permissions`).
+/// the URL shape, write `.along.json`, and apply the optional flags
+/// (`--update-hooks`, `--modify-permissions`).
 pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
     let store_url = args.store_url.unwrap_or_default();
     let kind = classify_store_url(&store_url)
@@ -98,10 +98,6 @@ pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
     if args.modify_permissions {
         repo.disable_file_mode_tracking()
             .context("failed to disable core.fileMode")?;
-    }
-    if args.update_gitignore {
-        repo.update_gitignore()
-            .context("failed to update .gitignore")?;
     }
     if args.update_hooks {
         repo.install_hooks().context("failed to install hooks")?;
@@ -158,7 +154,7 @@ fn parse_store_headers(raw: &[String]) -> Result<BTreeMap<String, String>> {
 /// yet. The flag is kept on the CLI so existing scripts don't break.
 pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .gitalong.json found)");
+        bail!("not in a managed repository (no .along.json found)");
     };
     crate::operations::update_tracked_commits(&repo, &[])?;
     Ok(())
@@ -167,7 +163,7 @@ pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
 /// Print the tracking status (commit spread) for each given file.
 pub fn status(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .gitalong.json found)");
+        bail!("not in a managed repository (no .along.json found)");
     };
     let str_files: Vec<String> = files
         .iter()
@@ -196,7 +192,7 @@ pub fn status(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) 
 /// Claim files for editing, returning a non-zero exit status when any are blocked.
 pub fn claim(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .gitalong.json found)");
+        bail!("not in a managed repository (no .along.json found)");
     };
     let str_files: Vec<String> = files
         .iter()
@@ -251,7 +247,7 @@ pub fn claim(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -
 /// script cannot wipe the team's records by accident.
 pub fn clear(opts: &GlobalOpts, all: bool, force: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .gitalong.json found)");
+        bail!("not in a managed repository (no .along.json found)");
     };
     let mut store = crate::store::Store::for_repository(&repo)?;
     if !all {

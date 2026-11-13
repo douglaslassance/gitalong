@@ -30,7 +30,7 @@ struct JsonbinResponse {
 pub struct JsonbinStore {
     url: String,
     headers: std::collections::BTreeMap<String, String>,
-    /// Local cache file at `<managed>/.gitalong/commits.json`.
+    /// Local cache file at `.git/along/commits.json`.
     cache_path: PathBuf,
     /// Touch-file used to gate re-pulls within the configured threshold.
     pull_marker: PathBuf,
@@ -42,7 +42,7 @@ impl JsonbinStore {
     /// reach the network; the first read/write triggers it.
     pub fn new(repo: &Repository) -> Result<Self> {
         let cfg = repo.config();
-        let cache_dir = repo.working_dir().join(".gitalong");
+        let cache_dir = repo.data_dir();
         std::fs::create_dir_all(&cache_dir)?;
         Ok(Self {
             url: cfg.store_url.clone(),
@@ -236,16 +236,15 @@ mod tests {
 
     #[test]
     fn read_falls_back_to_cached_commits_when_offline() {
-        let (m, repo) = fixture(BTreeMap::new());
+        let (_m, repo) = fixture(BTreeMap::new());
         let mut store = JsonbinStore::new(&repo).unwrap();
 
         let cached = vec![Commit {
             sha: Some("cached".into()),
             ..Commit::default()
         }];
-        std::fs::create_dir_all(m.path().join(".gitalong")).unwrap();
         std::fs::write(
-            m.path().join(".gitalong/commits.json"),
+            repo.data_dir().join("commits.json"),
             serde_json::to_vec(&cached).unwrap(),
         )
         .unwrap();
@@ -267,24 +266,24 @@ mod tests {
     fn expand_env_substitutes_known_variables() {
         // Use a unique name to avoid clashing with whatever the test runner has.
         unsafe {
-            std::env::set_var("GITALONG_TEST_VAR", "secret");
+            std::env::set_var("GIT_ALONG_TEST_VAR", "secret");
         }
-        assert_eq!(expand_env("Bearer $GITALONG_TEST_VAR"), "Bearer secret");
-        assert_eq!(expand_env("Bearer ${GITALONG_TEST_VAR}"), "Bearer secret");
+        assert_eq!(expand_env("Bearer $GIT_ALONG_TEST_VAR"), "Bearer secret");
+        assert_eq!(expand_env("Bearer ${GIT_ALONG_TEST_VAR}"), "Bearer secret");
     }
 
     #[test]
     fn expand_env_leaves_unknown_variables_literal() {
         unsafe {
-            std::env::remove_var("GITALONG_DOES_NOT_EXIST_XYZ");
+            std::env::remove_var("GIT_ALONG_DOES_NOT_EXIST_XYZ");
         }
         assert_eq!(
-            expand_env("Bearer $GITALONG_DOES_NOT_EXIST_XYZ"),
-            "Bearer $GITALONG_DOES_NOT_EXIST_XYZ"
+            expand_env("Bearer $GIT_ALONG_DOES_NOT_EXIST_XYZ"),
+            "Bearer $GIT_ALONG_DOES_NOT_EXIST_XYZ"
         );
         assert_eq!(
-            expand_env("Bearer ${GITALONG_DOES_NOT_EXIST_XYZ}"),
-            "Bearer ${GITALONG_DOES_NOT_EXIST_XYZ}"
+            expand_env("Bearer ${GIT_ALONG_DOES_NOT_EXIST_XYZ}"),
+            "Bearer ${GIT_ALONG_DOES_NOT_EXIST_XYZ}"
         );
     }
 

@@ -1,6 +1,6 @@
 //! The [`Repository`] aggregator.
 //!
-//! Wraps a `git2::Repository` together with the parsed gitalong [`Config`] and
+//! Wraps a `git2::Repository` together with the parsed Git Along [`Config`] and
 //! exposes the contextual helpers (working directory, path translation,
 //! identity context) the higher-level commands operate on.
 
@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use crate::config::{CONFIG_BASENAME, Config};
 use crate::error::{Error, Result};
 
-/// A git repository plus a loaded gitalong configuration.
+/// A git repository plus a loaded Git Along configuration.
 ///
 /// Construct one with [`Repository::open`] (errors if not set up) or
 /// [`Repository::discover`] (returns `None` when the path is outside any git
-/// repo or the repo has no `.gitalong.json`).
+/// repo or the repo has no `.along.json`).
 pub struct Repository {
     inner: git2::Repository,
     working_dir: PathBuf,
@@ -33,10 +33,10 @@ pub struct Context {
 }
 
 impl Repository {
-    /// Open the gitalong repository containing `path`.
+    /// Open the Git Along repository containing `path`.
     ///
     /// Walks upward from `path` looking for a git repository, then loads
-    /// `.gitalong.json` from its working tree. Returns
+    /// `.along.json` from its working tree. Returns
     /// [`Error::NotSetup`] when the repo exists but has no config, and any
     /// other git or I/O error otherwise.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -54,7 +54,7 @@ impl Repository {
     }
 
     /// Like [`Repository::open`] but returns `None` when the path is not in a
-    /// git repo, or when the repo has no gitalong config. Mirrors the Python
+    /// git repo, or when the repo has no Git Along config. Mirrors the Python
     /// `Repository.from_filename` semantics for callers that want to silently
     /// skip non-managed paths.
     pub fn discover(path: impl AsRef<Path>) -> Result<Option<Self>> {
@@ -73,14 +73,19 @@ impl Repository {
         }
     }
 
-    /// Absolute path of the working tree (the directory holding `.gitalong.json`).
+    /// Absolute path of the working tree (the directory holding `.along.json`).
     pub fn working_dir(&self) -> &Path {
         &self.working_dir
     }
 
-    /// Path to `.gitalong.json` for this repository.
+    /// Path to `.along.json` for this repository.
     pub fn config_path(&self) -> PathBuf {
         Config::path_for(&self.working_dir)
+    }
+
+    /// Clone-local state and caches, inside the git dir like `.git/lfs`.
+    pub fn data_dir(&self) -> PathBuf {
+        self.inner.path().join("along")
     }
 
     /// Read-only access to the parsed config.
@@ -150,36 +155,13 @@ impl Repository {
         Ok(self.inner.path().join("hooks"))
     }
 
-    /// Install the gitalong git hooks into [`hooks_path`](Self::hooks_path).
+    /// Install the Git Along git hooks into [`hooks_path`](Self::hooks_path).
     pub fn install_hooks(&self) -> Result<()> {
         crate::hooks::install(&self.hooks_path()?)
     }
 
-    /// Append the gitalong directives to `.gitignore` if they aren't already
-    /// present. Idempotent: running twice leaves the file unchanged the
-    /// second time.
-    pub fn update_gitignore(&self) -> Result<()> {
-        let path = self.working_dir.join(".gitignore");
-        let existing = match std::fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(e.into()),
-        };
-        if existing.contains(crate::hooks::GITIGNORE_PATCH) {
-            return Ok(());
-        }
-        let needs_separator = !existing.is_empty() && !existing.ends_with('\n');
-        let mut next = existing;
-        if needs_separator {
-            next.push('\n');
-        }
-        next.push_str(crate::hooks::GITIGNORE_PATCH);
-        std::fs::write(&path, next)?;
-        Ok(())
-    }
-
     /// Disable git's `core.fileMode` tracking so user-driven `chmod` calls
-    /// (which gitalong uses to enforce claims when `modify_permissions` is on)
+    /// (which Git Along uses to enforce claims when `modify_permissions` is on)
     /// don't show up as dirty diffs.
     pub fn disable_file_mode_tracking(&self) -> Result<()> {
         let mut cfg = self.inner.config()?;
@@ -315,7 +297,7 @@ impl Repository {
         Ok(files)
     }
 
-    /// `true` when `path` (absolute or repo-relative) is something gitalong
+    /// `true` when `path` (absolute or repo-relative) is something Git Along
     /// should track, given the configuration:
     ///
     /// - Always tracked when its extension is in `tracked_extensions`.
@@ -434,7 +416,7 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    /// Initialize a fresh git repo with a `.gitalong.json` so `Repository::open`
+    /// Initialize a fresh git repo with a `.along.json` so `Repository::open`
     /// can succeed.
     fn fixture(store_url: &str) -> tempfile::TempDir {
         let dir = tempdir().unwrap();

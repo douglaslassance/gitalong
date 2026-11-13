@@ -1,4 +1,4 @@
-//! End-to-end tests for `gitalong status`, `update` and `claim`, run once
+//! End-to-end tests for `git along status`, `update` and `claim`, run once
 //! per store backend.
 //!
 //! These exercise the binary against real origin, store and clone fixtures.
@@ -10,8 +10,8 @@ mod common;
 use std::fs;
 
 use assert_cmd::prelude::*;
-use gitalong::for_each_store;
-use gitalong::testing::{Team, git};
+use git_along::for_each_store;
+use git_along::testing::{Team, git};
 use predicates::prelude::*;
 use tempfile::{TempDir, tempdir};
 
@@ -22,7 +22,7 @@ fn alice(team: &Team) -> TempDir {
 
 /// Run the binary in `dir` and parse its stdout as JSON, asserting success.
 fn json_of(dir: &std::path::Path, args: &[&str]) -> serde_json::Value {
-    let out = common::gitalong_in(dir).args(args).output().unwrap();
+    let out = common::git_along_in(dir).args(args).output().unwrap();
     assert!(out.status.success(), "{args:?} failed");
     serde_json::from_slice(&out.stdout).unwrap()
 }
@@ -30,7 +30,7 @@ fn json_of(dir: &std::path::Path, args: &[&str]) -> serde_json::Value {
 for_each_store!(update_succeeds_in_a_managed_repo, |kind| {
     let team = Team::new(kind);
     let m = alice(&team);
-    common::gitalong_in(m.path())
+    common::git_along_in(m.path())
         .args(["update"])
         .assert()
         .success();
@@ -39,7 +39,7 @@ for_each_store!(update_succeeds_in_a_managed_repo, |kind| {
 #[test]
 fn update_fails_outside_a_managed_repo() {
     let dir = tempdir().unwrap();
-    common::gitalong_in(dir.path())
+    common::git_along_in(dir.path())
         .args(["update"])
         .assert()
         .failure()
@@ -49,7 +49,7 @@ fn update_fails_outside_a_managed_repo() {
 for_each_store!(status_renders_one_line_per_file, |kind| {
     let team = Team::new(kind);
     let m = alice(&team);
-    common::gitalong_in(m.path())
+    common::git_along_in(m.path())
         .args(["status", "README", "missing.txt"])
         .assert()
         .success()
@@ -105,7 +105,7 @@ for_each_store!(claim_json_reports_blocked_per_file, |kind| {
 for_each_store!(claim_on_unblocked_file_exits_zero, |kind| {
     let team = Team::new(kind);
     let m = alice(&team);
-    common::gitalong_in(m.path())
+    common::git_along_in(m.path())
         .args(["claim", "README"])
         .assert()
         .success();

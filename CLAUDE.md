@@ -1,4 +1,4 @@
-# Gitalong
+# Git Along
 
 ## Conventions
 
@@ -55,6 +55,6 @@ admitting something about it, and that is worth keeping however it reads.
 No comment that restates the signature. No banner blocks, no divider lines, no
 commented out code.
 
-The exception is the public API of the `gitalong` library crate. Those `///`
+The exception is the public API of the `git_along` library crate. Those `///`
 comments compile to docs.rs and are read by people who never open the source,
 so there they are the product rather than a note about it.

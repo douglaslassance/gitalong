@@ -1,8 +1,8 @@
-//! `gitalong status` — query the most recent tracked commit per file.
+//! `git along status` — query the most recent tracked commit per file.
 //!
 //! For each file the caller asks about we want to surface "what's the latest
 //! thing anyone has done that touches this file?" — covering both pushed
-//! commits visible to git and gitalong's own tracked store of unpushed and
+//! commits visible to git and Git Along's own tracked store of unpushed and
 //! uncommitted changes.
 //!
 //! The Python implementation lived in `batch.get_files_last_commits` and ran
