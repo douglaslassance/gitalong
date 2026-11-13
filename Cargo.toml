@@ -45,6 +45,7 @@ git-along = { path = ".", features = ["test-support"] }
 tempfile = "3.10"
 assert_cmd = "2.0"
 predicates = "3.1"
+clap_mangen = "0.3"
 
 [profile.release]
 lto = "thin"

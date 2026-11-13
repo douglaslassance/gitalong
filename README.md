@@ -249,6 +249,9 @@ cargo clippy --all-targets -- -D warnings
 
 # Run the CLI from a checkout
 cargo run -- --help
+
+# Write the man pages that releases ship
+cargo run --example man -- target/man
 ```
 
 ## Trademark
