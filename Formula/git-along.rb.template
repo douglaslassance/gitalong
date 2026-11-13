@@ -28,9 +28,11 @@ class GitAlong < Formula
 
   def install
     bin.install "git-along"
+    man1.install Dir["man/*.1"]
   end
 
   test do
     assert_match "git-along version", shell_output("#{bin}/git-along version")
+    assert_path_exists man1/"git-along.1"
   end
 end

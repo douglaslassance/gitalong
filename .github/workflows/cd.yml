@@ -128,9 +128,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
+          # Git turns `git along --help` into `man git-along`, so the pages ship beside the binary.
+          cargo run --release --features vendored --example man -- target/man
           ARTIFACT="${REPO_NAME}-${VERSION}-${TARGET}.tar.gz"
           tar -czf "dist/${ARTIFACT}" \
-            -C "target/${TARGET}/release" "${REPO_NAME}"
+            -C "target/${TARGET}/release" "${REPO_NAME}" \
+            -C "${GITHUB_WORKSPACE}/target" man
           ls -lh dist/
 
       - name: Package (Windows)
