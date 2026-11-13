@@ -185,6 +185,26 @@ confirmation, and `--force` skips the question. Without a terminal to ask on,
 it refuses unless `--force` is given, so a hook or a script can never wipe the
 team's records by accident.
 
+## Upgrading from Gitalong
+
+Git Along was called Gitalong until 1.0.0. The `gitalong` command is now
+`git along`, and an existing clone carries over on its own the next time any
+command runs. Its hooks are rewritten, and its state and caches move into
+`.git/along/`.
+
+Each clone also moves its records from `refs/gitalong/v1/` to
+`refs/along/v1/` the next time it publishes. Upgraded clones still read the
+old refs, but clones on Gitalong cannot see upgraded ones, so upgrade the
+whole team together.
+
+`.gitalong.json` keeps working. To finish the move, rename it once and
+delete the `# Gitalong` block from `.gitignore`.
+
+```shell
+git mv .gitalong.json .along.json
+git commit -m "Rename the Gitalong config"
+```
+
 ## Development
 
 ```shell

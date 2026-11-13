@@ -10,6 +10,7 @@ pub mod commit;
 pub mod config;
 pub mod error;
 pub mod hooks;
+pub mod migrate;
 pub mod operations;
 pub mod repository;
 pub mod spread;

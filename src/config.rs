@@ -89,6 +89,21 @@ impl Config {
         Ok(config)
     }
 
+    /// Load the config in `working_dir`, falling back to its pre-rename filename.
+    pub fn load_from(working_dir: &Path) -> Result<Self> {
+        let path = Self::path_for(working_dir);
+        match Self::load(&path) {
+            Err(Error::NotSetup(_)) => {
+                let legacy = working_dir.join(crate::migrate::LEGACY_CONFIG_BASENAME);
+                Self::load(&legacy).map_err(|e| match e {
+                    Error::NotSetup(_) => Error::NotSetup(path),
+                    e => e,
+                })
+            }
+            loaded => loaded,
+        }
+    }
+
     /// Write the config to disk with sorted keys and four-space indentation.
     pub fn save(&self, path: &Path) -> Result<()> {
         let pretty = serde_json::to_string_pretty(self)?;

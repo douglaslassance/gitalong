@@ -16,6 +16,7 @@ use anyhow::{Context as _, Result, bail};
 use crate::VERSION;
 use crate::cli::SetupArgs;
 use crate::config::{CONFIG_BASENAME, Config};
+use crate::migrate::LEGACY_CONFIG_BASENAME;
 use crate::repository::Repository;
 
 /// Resolved global flags shared across subcommands.
@@ -93,6 +94,10 @@ pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
         track_uncommitted: args.track_uncommitted,
     };
     config.save(&working_dir.join(CONFIG_BASENAME))?;
+    let legacy = working_dir.join(LEGACY_CONFIG_BASENAME);
+    if legacy.exists() {
+        std::fs::remove_file(&legacy)?;
+    }
 
     let repo = Repository::open(&working_dir)?;
     if args.modify_permissions {

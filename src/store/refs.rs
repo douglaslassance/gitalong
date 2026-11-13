@@ -14,6 +14,7 @@ use std::time::SystemTime;
 
 use crate::commit::Commit;
 use crate::error::{Error, Result};
+use crate::migrate::LEGACY_NAMESPACE;
 use crate::repository::{Context, Repository};
 
 use super::{run_git_in, touch};
@@ -21,6 +22,9 @@ use super::{run_git_in, touch};
 /// Ref namespace shared by every clone. The version segment keeps a future
 /// payload change from mixing with these records.
 pub const NAMESPACE: &str = "refs/along/v1";
+
+/// Namespaces read, so teammates not yet upgraded stay visible.
+const READ_NAMESPACES: [&str; 2] = [NAMESPACE, LEGACY_NAMESPACE];
 
 /// `Store` backed by per-clone refs on the managed repository's remote.
 pub struct RefStore {
@@ -57,6 +61,11 @@ impl RefStore {
         format!("{NAMESPACE}/{}", self.clone_id)
     }
 
+    /// The ref this clone published to before the rename.
+    fn own_legacy_ref(&self) -> String {
+        format!("{LEGACY_NAMESPACE}/{}", self.clone_id)
+    }
+
     /// Fetch the namespace (subject to the cache window) and return every
     /// clone's records. An unreachable remote falls back to the last fetch.
     pub fn read(&mut self) -> Result<Vec<Commit>> {
@@ -91,38 +100,54 @@ impl RefStore {
             ],
         )?;
         repo.reference(&own_ref, oid, true, "git-along publish")?;
+        self.retire_legacy_ref(&repo)?;
         self.read_local()
     }
 
     /// Delete this clone's ref on the remote and locally.
     pub fn clear_own(&mut self) -> Result<()> {
-        let own_ref = self.own_ref();
-        let present = self.remote_refs(&own_ref)?;
+        let own = [self.own_ref(), self.own_legacy_ref()];
+        let present = self.remote_refs(&own)?;
         self.delete_remote_refs(&present)?;
         let repo = git2::Repository::open(&self.working_dir)?;
-        if let Ok(mut reference) = repo.find_reference(&own_ref) {
-            reference.delete()?;
+        for name in &own {
+            if let Ok(mut reference) = repo.find_reference(name) {
+                reference.delete()?;
+            }
         }
         Ok(())
     }
 
     /// Delete every ref in the namespace on the remote and locally.
     pub fn clear_all(&mut self) -> Result<()> {
-        let present = self.remote_refs(&format!("{NAMESPACE}/*"))?;
+        let globs = READ_NAMESPACES.map(|namespace| format!("{namespace}/*"));
+        let present = self.remote_refs(&globs)?;
         self.delete_remote_refs(&present)?;
         let repo = git2::Repository::open(&self.working_dir)?;
-        for reference in repo.references_glob(&format!("{NAMESPACE}/*"))? {
-            reference?.delete()?;
+        for glob in &globs {
+            for reference in repo.references_glob(glob)? {
+                reference?.delete()?;
+            }
         }
         Ok(())
     }
 
-    /// Refs on the remote matching `pattern`, by full name.
-    fn remote_refs(&self, pattern: &str) -> Result<Vec<String>> {
-        let listing = run_git_in(
-            &self.working_dir,
-            &["ls-remote", "--refs", &self.remote, pattern],
-        )?;
+    /// Delete the ref this clone published before the rename, if it still has one.
+    fn retire_legacy_ref(&self, repo: &git2::Repository) -> Result<()> {
+        let legacy = self.own_legacy_ref();
+        let Ok(mut reference) = repo.find_reference(&legacy) else {
+            return Ok(());
+        };
+        self.delete_remote_refs(&[legacy])?;
+        reference.delete()?;
+        Ok(())
+    }
+
+    /// Refs on the remote matching any of `patterns`, by full name.
+    fn remote_refs(&self, patterns: &[String]) -> Result<Vec<String>> {
+        let mut args = vec!["ls-remote", "--refs", self.remote.as_str()];
+        args.extend(patterns.iter().map(String::as_str));
+        let listing = run_git_in(&self.working_dir, &args)?;
         Ok(String::from_utf8_lossy(&listing.stdout)
             .lines()
             .filter_map(|line| line.split_whitespace().nth(1))
@@ -152,18 +177,16 @@ impl RefStore {
         if self.fetched_within_threshold() {
             return Ok(());
         }
-        let refspec = format!("+{NAMESPACE}/*:{NAMESPACE}/*");
-        let fetched = run_git_in(
-            &self.working_dir,
-            &[
-                "fetch",
-                "--quiet",
-                "--no-tags",
-                "--prune",
-                &self.remote,
-                &refspec,
-            ],
-        );
+        let refspecs = READ_NAMESPACES.map(|namespace| format!("+{namespace}/*:{namespace}/*"));
+        let mut args = vec![
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            "--prune",
+            self.remote.as_str(),
+        ];
+        args.extend(refspecs.iter().map(String::as_str));
+        let fetched = run_git_in(&self.working_dir, &args);
         if fetched.is_ok() {
             touch(&self.fetch_marker())?;
         }
@@ -173,20 +196,27 @@ impl RefStore {
     /// Records from every ref in the namespace this clone has fetched, plus its own.
     fn read_local(&self) -> Result<Vec<Commit>> {
         let repo = git2::Repository::open(&self.working_dir)?;
+        let own_legacy = self.own_legacy_ref();
         let mut out = Vec::new();
-        for reference in repo.references_glob(&format!("{NAMESPACE}/*"))? {
-            let reference = reference?;
-            let name = reference.name().unwrap_or("?").to_string();
-            let Some(message) = reference
-                .peel_to_commit()
-                .ok()
-                .and_then(|c| c.message().map(str::to_string))
-            else {
-                continue;
-            };
-            let records: Vec<Commit> = serde_json::from_str(&message)
-                .map_err(|e| Error::InvalidConfig(format!("malformed records at {name}: {e}")))?;
-            out.extend(records);
+        for namespace in READ_NAMESPACES {
+            for reference in repo.references_glob(&format!("{namespace}/*"))? {
+                let reference = reference?;
+                let name = reference.name().unwrap_or("?").to_string();
+                if name == own_legacy {
+                    continue;
+                }
+                let Some(message) = reference
+                    .peel_to_commit()
+                    .ok()
+                    .and_then(|c| c.message().map(str::to_string))
+                else {
+                    continue;
+                };
+                let records: Vec<Commit> = serde_json::from_str(&message).map_err(|e| {
+                    Error::InvalidConfig(format!("malformed records at {name}: {e}"))
+                })?;
+                out.extend(records);
+            }
         }
         Ok(out)
     }
@@ -318,6 +348,50 @@ mod tests {
     fn read_on_empty_remote_is_empty() {
         let f = make_fixture();
         assert!(open(f.managed.path()).read().unwrap().is_empty());
+    }
+
+    /// Publish `sha` under `name` the way clones did before the rename.
+    fn publish_legacy(dir: &Path, name: &str, sha: &str) {
+        let repo = git2::Repository::open(dir).unwrap();
+        let tree = repo
+            .find_tree(repo.treebuilder(None).unwrap().write().unwrap())
+            .unwrap();
+        let signature = git2::Signature::now("gitalong", "gitalong@localhost").unwrap();
+        let body = serde_json::to_string(&vec![record(sha)]).unwrap();
+        let oid = repo
+            .commit(None, &signature, &signature, &body, &tree, &[])
+            .unwrap();
+        repo.reference(name, oid, true, "gitalong publish").unwrap();
+        git(
+            dir,
+            &["push", "--quiet", "origin", &format!("{name}:{name}")],
+        );
+    }
+
+    fn shas(records: Vec<Commit>) -> Vec<String> {
+        let mut shas: Vec<String> = records.into_iter().filter_map(|c| c.sha).collect();
+        shas.sort();
+        shas
+    }
+
+    #[test]
+    fn legacy_refs_stay_visible_until_their_clone_republishes() {
+        let f = make_fixture();
+        let mut store = open(f.managed.path());
+        let own_legacy = store.own_legacy_ref();
+        publish_legacy(f.managed.path(), &own_legacy, "old-mine");
+        publish_legacy(
+            f.managed.path(),
+            &format!("{LEGACY_NAMESPACE}/peer"),
+            "old-peer",
+        );
+
+        assert_eq!(shas(store.read().unwrap()), ["old-peer"]);
+        assert_eq!(
+            shas(store.publish(&[record("new-mine")]).unwrap()),
+            ["new-mine", "old-peer"]
+        );
+        assert!(git(f.origin.path(), &["for-each-ref", &own_legacy]).is_empty());
     }
 
     #[test]

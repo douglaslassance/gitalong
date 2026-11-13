@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::config::{CONFIG_BASENAME, Config};
+use crate::config::Config;
 use crate::error::{Error, Result};
 
 /// A git repository plus a loaded Git Along configuration.
@@ -45,12 +45,19 @@ impl Repository {
             .workdir()
             .ok_or_else(|| Error::InvalidConfig("bare repositories are not supported".into()))?
             .to_path_buf();
-        let config = Config::load(&working_dir.join(CONFIG_BASENAME))?;
-        Ok(Self {
+        let config = Config::load_from(&working_dir)?;
+        let repo = Self {
             inner,
             working_dir,
             config,
-        })
+        };
+        crate::migrate::local_state(
+            repo.inner.path(),
+            &repo.working_dir,
+            &repo.data_dir(),
+            &repo.hooks_path()?,
+        )?;
+        Ok(repo)
     }
 
     /// Like [`Repository::open`] but returns `None` when the path is not in a
@@ -413,6 +420,7 @@ fn canonicalize_lenient(p: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::CONFIG_BASENAME;
     use std::fs;
     use tempfile::tempdir;
 
