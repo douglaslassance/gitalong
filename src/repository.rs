@@ -45,7 +45,7 @@ impl Repository {
             .workdir()
             .ok_or_else(|| Error::InvalidConfig("bare repositories are not supported".into()))?
             .to_path_buf();
-        let config = Config::load_from(&working_dir)?;
+        let config = Config::load(&Config::path_for(&working_dir))?;
         let repo = Self {
             inner,
             working_dir,

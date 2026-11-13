@@ -188,22 +188,17 @@ team's records by accident.
 ## Upgrading from Gitalong
 
 Git Along was called Gitalong until 1.0.0. The `gitalong` command is now
-`git along`, and an existing clone carries over on its own the next time any
-command runs. Its hooks are rewritten, and its state and caches move into
-`.git/along/`.
+`git along`, and `.gitalong.json` is no longer read. Run `git along setup`
+again with the same options, commit the new config, and delete
+`.gitalong.json` along with the `# Gitalong` block in `.gitignore`.
+
+Every clone then carries over on its own the next time any command runs. Its
+hooks are rewritten, and its state and caches move into `.git/along/`.
 
 Each clone also moves its records from `refs/gitalong/v1/` to
 `refs/along/v1/` the next time it publishes. Upgraded clones still read the
 old refs, but clones on Gitalong cannot see upgraded ones, so upgrade the
 whole team together.
-
-`.gitalong.json` keeps working. To finish the move, rename it once and
-delete the `# Gitalong` block from `.gitignore`.
-
-```shell
-git mv .gitalong.json .along.json
-git commit -m "Rename the Gitalong config"
-```
 
 ## Development
 

@@ -34,21 +34,6 @@ fn writes_minimum_config() {
 }
 
 #[test]
-fn replaces_the_config_saved_before_the_rename() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-    fs::write(dir.path().join(".gitalong.json"), "{}").unwrap();
-
-    common::git_along_in(dir.path())
-        .args(["setup", "https://example.com/store.git"])
-        .assert()
-        .success();
-
-    assert!(dir.path().join(".along.json").is_file());
-    assert!(!dir.path().join(".gitalong.json").exists());
-}
-
-#[test]
 fn defaults_to_refs_store_when_url_is_omitted() {
     let dir = tempdir().unwrap();
     let repo = git2::Repository::init(dir.path()).unwrap();

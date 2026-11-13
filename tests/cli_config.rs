@@ -40,19 +40,6 @@ fn outputs_value_for_known_property() {
 }
 
 #[test]
-fn reads_the_config_saved_before_the_rename() {
-    let dir = tempdir().unwrap();
-    git2::Repository::init(dir.path()).unwrap();
-    fs::write(dir.path().join(".gitalong.json"), SAMPLE_CONFIG).unwrap();
-
-    common::git_along_in(dir.path())
-        .args(["config", "store-url"])
-        .assert()
-        .success()
-        .stdout("https://example.com/store.git\n");
-}
-
-#[test]
 fn renders_bool_as_lowercase() {
     let dir = tempdir().unwrap();
     init_managed_repo(dir.path());

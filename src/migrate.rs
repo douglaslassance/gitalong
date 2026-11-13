@@ -1,17 +1,10 @@
 //! Carries clones over from the names Git Along used when it was Gitalong.
-//!
-//! Only local, untracked state moves on its own. The tracked config keeps
-//! being read from its old name until someone renames it, so teammates who
-//! upgrade at different times never fight over the same file.
 
 use std::fs;
 use std::path::Path;
 
 use crate::error::Result;
 use crate::hooks;
-
-/// Config filename the repository may still carry from before the rename.
-pub const LEGACY_CONFIG_BASENAME: &str = ".gitalong.json";
 
 /// Ref namespace clones published to before the rename.
 pub const LEGACY_NAMESPACE: &str = "refs/gitalong/v1";
