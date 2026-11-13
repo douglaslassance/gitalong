@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 ///
 /// Construct one with [`Repository::open`] (errors if not set up) or
 /// [`Repository::discover`] (returns `None` when the path is outside any git
-/// repo or the repo has no `.along.json`).
+/// repo or the repo has no `.alongconfig`).
 pub struct Repository {
     inner: git2::Repository,
     working_dir: PathBuf,
@@ -36,7 +36,7 @@ impl Repository {
     /// Open the Git Along repository containing `path`.
     ///
     /// Walks upward from `path` looking for a git repository, then loads
-    /// `.along.json` from its working tree. Returns
+    /// `.alongconfig` from its working tree. Returns
     /// [`Error::NotSetup`] when the repo exists but has no config, and any
     /// other git or I/O error otherwise.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -45,7 +45,7 @@ impl Repository {
             .workdir()
             .ok_or_else(|| Error::InvalidConfig("bare repositories are not supported".into()))?
             .to_path_buf();
-        let config = Config::load(&Config::path_for(&working_dir))?;
+        let config = Config::load(&Config::path_for(&working_dir), Some(&inner.config()?))?;
         let repo = Self {
             inner,
             working_dir,
@@ -80,12 +80,12 @@ impl Repository {
         }
     }
 
-    /// Absolute path of the working tree (the directory holding `.along.json`).
+    /// Absolute path of the working tree (the directory holding `.alongconfig`).
     pub fn working_dir(&self) -> &Path {
         &self.working_dir
     }
 
-    /// Path to `.along.json` for this repository.
+    /// Path to `.alongconfig` for this repository.
     pub fn config_path(&self) -> PathBuf {
         Config::path_for(&self.working_dir)
     }
@@ -424,7 +424,7 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    /// Initialize a fresh git repo with a `.along.json` so `Repository::open`
+    /// Initialize a fresh git repo with a `.alongconfig` so `Repository::open`
     /// can succeed.
     fn fixture(store_url: &str) -> tempfile::TempDir {
         let dir = tempdir().unwrap();

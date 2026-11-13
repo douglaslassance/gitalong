@@ -47,7 +47,7 @@ pub fn version(_opts: &GlobalOpts) -> Result<()> {
     Ok(())
 }
 
-/// Print a single property from `.along.json`.
+/// Print a single property from `.alongconfig`.
 ///
 /// If the path is not in a managed repository or the property is unknown,
 /// prints nothing and exits successfully — matching the Python behavior so
@@ -66,7 +66,7 @@ pub fn config(opts: &GlobalOpts, property: &str) -> Result<()> {
 ///
 /// The actual store clone (for git stores) or remote handshake (for
 /// JSONBin.io stores) is deferred to first use. Setup does the local-side work: validate
-/// the URL shape, write `.along.json`, and apply the optional flags
+/// the URL shape, write `.alongconfig`, and apply the optional flags
 /// (`--update-hooks`, `--modify-permissions`).
 pub fn setup(opts: &GlobalOpts, args: SetupArgs) -> Result<()> {
     let store_url = args.store_url.unwrap_or_default();
@@ -154,7 +154,7 @@ fn parse_store_headers(raw: &[String]) -> Result<BTreeMap<String, String>> {
 /// yet. The flag is kept on the CLI so existing scripts don't break.
 pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .along.json found)");
+        bail!("not in a managed repository (no .alongconfig found)");
     };
     crate::operations::update_tracked_commits(&repo, &[])?;
     Ok(())
@@ -163,7 +163,7 @@ pub fn update(opts: &GlobalOpts, _profile: bool) -> Result<()> {
 /// Print the tracking status (commit spread) for each given file.
 pub fn status(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .along.json found)");
+        bail!("not in a managed repository (no .alongconfig found)");
     };
     let str_files: Vec<String> = files
         .iter()
@@ -192,7 +192,7 @@ pub fn status(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) 
 /// Claim files for editing, returning a non-zero exit status when any are blocked.
 pub fn claim(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .along.json found)");
+        bail!("not in a managed repository (no .alongconfig found)");
     };
     let str_files: Vec<String> = files
         .iter()
@@ -247,7 +247,7 @@ pub fn claim(opts: &GlobalOpts, files: &[PathBuf], json: bool, _profile: bool) -
 /// script cannot wipe the team's records by accident.
 pub fn clear(opts: &GlobalOpts, all: bool, force: bool) -> Result<()> {
     let Some(repo) = Repository::discover(&opts.repository)? else {
-        bail!("not in a managed repository (no .along.json found)");
+        bail!("not in a managed repository (no .alongconfig found)");
     };
     let mut store = crate::store::Store::for_repository(&repo)?;
     if !all {

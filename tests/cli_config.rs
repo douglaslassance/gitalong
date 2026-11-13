@@ -9,22 +9,21 @@ use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use tempfile::tempdir;
 
-const SAMPLE_CONFIG: &str = r#"{
-  "store_url": "https://example.com/store.git",
-  "store_headers": {},
-  "modify_permissions": true,
-  "track_binaries": false,
-  "tracked_extensions": [".jpg", ".png"],
-  "pull_threshold": 30.0,
-  "track_uncommitted": true
-}
-"#;
+const SAMPLE_CONFIG: &str = "[along]
+	storeUrl = https://example.com/store.git
+	modifyPermissions = true
+	trackBinaries = false
+	trackedExtensions = .jpg
+	trackedExtensions = .png
+	pullThreshold = 30
+	trackUncommitted = true
+";
 
 /// Initialize a git repo at `path` and drop the sample config into it. Tests
 /// that don't want a config call `git2::Repository::init` directly instead.
 fn init_managed_repo(path: &Path) {
     git2::Repository::init(path).unwrap();
-    fs::write(path.join(".along.json"), SAMPLE_CONFIG).unwrap();
+    fs::write(path.join(".alongconfig"), SAMPLE_CONFIG).unwrap();
 }
 
 #[test]
@@ -37,6 +36,23 @@ fn outputs_value_for_known_property() {
         .assert()
         .success()
         .stdout("https://example.com/store.git\n");
+}
+
+#[test]
+fn git_config_overrides_the_shared_file() {
+    let dir = tempdir().unwrap();
+    init_managed_repo(dir.path());
+    let repo = git2::Repository::open(dir.path()).unwrap();
+    repo.config()
+        .unwrap()
+        .set_str("along.pullThreshold", "5")
+        .unwrap();
+
+    common::git_along_in(dir.path())
+        .args(["config", "pull-threshold"])
+        .assert()
+        .success()
+        .stdout("5\n");
 }
 
 #[test]
@@ -71,7 +87,7 @@ fn unknown_property_prints_nothing() {
 
 #[test]
 fn no_config_file_exits_silently() {
-    // Git repo exists but no .along.json — like running on a repo that
+    // Git repo exists but no .alongconfig — like running on a repo that
     // hasn't been set up yet.
     let dir = tempdir().unwrap();
     git2::Repository::init(dir.path()).unwrap();
@@ -114,7 +130,7 @@ fn finds_config_in_parent_directory() {
 fn invalid_config_returns_error() {
     let dir = tempdir().unwrap();
     git2::Repository::init(dir.path()).unwrap();
-    fs::write(dir.path().join(".along.json"), b"{ broken").unwrap();
+    fs::write(dir.path().join(".alongconfig"), b"[along\n\tbroken").unwrap();
 
     common::git_along_in(dir.path())
         .args(["config", "store-url"])

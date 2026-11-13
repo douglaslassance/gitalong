@@ -117,6 +117,43 @@ the git identity (`author`) stays distinct from the OS identity (`user`). It is
 `null` when nothing applies, which the text form renders as all dashes.
 `claim --json` adds a `blocked` boolean per file and keeps the same exit code.
 
+## Configuration
+
+`git along setup` writes `.alongconfig` at the root of the repository. Commit
+it so every clone shares the same settings. It uses Git's config syntax, like
+`.lfsconfig`, so it can hold comments and `git config` can edit it.
+
+```ini
+# Unreal assets, shared as soon as someone starts changing them.
+[along]
+	trackedExtensions = .uasset
+	trackedExtensions = .umap
+	trackUncommitted = true
+```
+
+```shell
+git config -f .alongconfig along.trackBinaries true
+```
+
+| Key                 | Default | Meaning                                         |
+| ------------------- | ------- | ----------------------------------------------- |
+| `storeUrl`          |         | Store to publish to, see [Stores](#stores)      |
+| `trackedExtensions` |         | Extension to track, repeat the key for more     |
+| `trackBinaries`     | `false` | Track every binary file                         |
+| `trackUncommitted`  | `false` | Share uncommitted changes with the team         |
+| `modifyPermissions` | `false` | Keep files read-only until they are claimed     |
+| `pullThreshold`     | `60`    | Seconds to reuse the last store read            |
+
+HTTP headers for the store go in their own subsection, as in
+`[along "header"]`.
+
+The same keys in a clone's own Git config take precedence over the file, so
+one clone can differ without changing what the team shares.
+
+```shell
+git config along.pullThreshold 5
+```
+
 ## Stores
 
 The optional `<STORE_URL>` argument to `git along setup` selects how this clone

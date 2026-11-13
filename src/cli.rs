@@ -36,7 +36,7 @@ pub enum Command {
     /// Print the Git Along version.
     Version,
 
-    /// Print the value of a configuration property from `.along.json`.
+    /// Print the value of a configuration property from `.alongconfig`.
     Config {
         /// Property name (e.g. `store-url`, `track-binaries`). Hyphens map to underscores.
         property: String,

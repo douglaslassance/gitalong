@@ -12,11 +12,11 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// Errors surfaced by the Git Along library.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// `.along.json` was not found in the repository.
-    #[error("Git Along is not set up in {0:?} (no .along.json found)")]
+    /// `.alongconfig` was not found in the repository.
+    #[error("Git Along is not set up in {0:?} (no .alongconfig found)")]
     NotSetup(PathBuf),
 
-    /// `.along.json` could not be parsed or has an invalid value.
+    /// `.alongconfig` could not be parsed or has an invalid value.
     #[error("invalid Git Along configuration: {0}")]
     InvalidConfig(String),
 

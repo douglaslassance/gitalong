@@ -99,7 +99,7 @@ impl Team {
         self.origin.path()
     }
 
-    /// What `.along.json` needs in `store_url`. Empty for the refs store.
+    /// What `.alongconfig` needs in `store_url`. Empty for the refs store.
     pub fn store_url(&self) -> String {
         match self.kind {
             StoreKind::Refs => String::new(),

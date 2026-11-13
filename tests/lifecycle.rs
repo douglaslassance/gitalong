@@ -56,7 +56,7 @@ for_each_store!(full_lifecycle_two_clones, |kind| {
     // Commit the freshly-created config so Alice's clone
     // is in a clean baseline state.
     fs::write(alice.path().join("README"), b"hello").unwrap();
-    git(alice.path(), &["add", "README", ".along.json"]);
+    git(alice.path(), &["add", "README", ".alongconfig"]);
     git(alice.path(), &["commit", "-m", "init"]);
     git(alice.path(), &["push", "-u", "origin", "main"]);
 

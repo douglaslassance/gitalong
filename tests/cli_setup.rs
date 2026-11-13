@@ -23,14 +23,16 @@ fn writes_minimum_config() {
         .assert()
         .success();
 
-    let config_path = dir.path().join(".along.json");
-    assert!(config_path.is_file(), ".along.json was not created");
-    let body = fs::read_to_string(&config_path).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(parsed["store_url"], "https://example.com/store.git");
-    assert_eq!(parsed["modify_permissions"], false);
-    assert_eq!(parsed["track_uncommitted"], false);
-    assert_eq!(parsed["pull_threshold"], 60.0);
+    let config_path = dir.path().join(".alongconfig");
+    assert!(config_path.is_file(), ".alongconfig was not created");
+    let cfg = git2::Config::open(&config_path).unwrap();
+    assert_eq!(
+        cfg.get_string("along.storeUrl").unwrap(),
+        "https://example.com/store.git"
+    );
+    assert!(!cfg.get_bool("along.modifyPermissions").unwrap());
+    assert!(!cfg.get_bool("along.trackUncommitted").unwrap());
+    assert_eq!(cfg.get_string("along.pullThreshold").unwrap(), "60");
 }
 
 #[test]
@@ -45,9 +47,8 @@ fn defaults_to_refs_store_when_url_is_omitted() {
         .assert()
         .success();
 
-    let body = fs::read_to_string(dir.path().join(".along.json")).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(parsed["store_url"], "");
+    let cfg = git2::Config::open(&dir.path().join(".alongconfig")).unwrap();
+    assert!(cfg.get_string("along.storeUrl").is_err());
 }
 
 #[test]
@@ -61,7 +62,7 @@ fn rejects_omitted_url_without_a_remote() {
         .failure()
         .stderr(predicate::str::contains("no remote"));
 
-    assert!(!dir.path().join(".along.json").exists());
+    assert!(!dir.path().join(".alongconfig").exists());
 }
 
 #[test]
@@ -76,7 +77,7 @@ fn rejects_unrecognized_store_url() {
         .stderr(predicate::str::contains("invalid store URL"));
 
     // Failed setup should not have left a config file behind.
-    assert!(!dir.path().join(".along.json").exists());
+    assert!(!dir.path().join(".alongconfig").exists());
 }
 
 #[test]
@@ -107,10 +108,15 @@ fn parses_store_headers_into_config() {
         .assert()
         .success();
 
-    let body = fs::read_to_string(dir.path().join(".along.json")).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(parsed["store_headers"]["X-Access-Key"], "secret");
-    assert_eq!(parsed["store_headers"]["X-Bin-Versioning"], "false");
+    let cfg = git2::Config::open(&dir.path().join(".alongconfig")).unwrap();
+    assert_eq!(
+        cfg.get_string("along.header.X-Access-Key").unwrap(),
+        "secret"
+    );
+    assert_eq!(
+        cfg.get_string("along.header.X-Bin-Versioning").unwrap(),
+        "false"
+    );
 }
 
 #[test]
